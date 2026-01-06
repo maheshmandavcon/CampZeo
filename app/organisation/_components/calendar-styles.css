@@ -1,0 +1,175 @@
+/* FullCalendar Custom Styles */
+.fc {
+  font-family: inherit;
+}
+
+.fc .fc-toolbar-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #000;
+}
+
+.fc .fc-button {
+  background-color: transparent;
+  border: none;
+  color: #000;
+  padding: 0.5rem;
+  font-size: 1rem;
+}
+
+.fc .fc-button:hover {
+  background-color: #f3f4f6;
+}
+
+.fc .fc-button:focus {
+  box-shadow: none;
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  background-color: transparent;
+  border-color: transparent;
+}
+
+.fc-theme-standard .fc-scrollgrid {
+  border: none;
+}
+
+.fc .fc-col-header-cell {
+  background-color: #fff;
+  border: none;
+  padding: 0.75rem 0.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #000;
+}
+
+.fc .fc-daygrid-day {
+  border: 1px solid #e5e7eb;
+  min-height: 100px;
+}
+
+.fc .fc-daygrid-day:hover {
+  background-color: #f9fafb;
+}
+
+.fc .fc-daygrid-day-number {
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #000;
+}
+
+.fc .fc-day-today {
+  background-color: #fff !important;
+}
+
+.fc .fc-day-today .fc-daygrid-day-number {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.fc .fc-daygrid-day-top {
+  justify-content: flex-start;
+}
+
+.fc .fc-daygrid-event {
+  margin: 2px !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  overflow: visible !important;
+}
+
+.fc .fc-daygrid-event .fc-event-main {
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.fc .fc-daygrid-event:hover {
+  cursor: pointer;
+}
+
+.fc .fc-daygrid-day-events {
+  margin-top: 0.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.fc .fc-daygrid-more-link {
+  font-size: 0.7rem;
+  color: #6b7280;
+  margin: 2px;
+  padding: 2px 8px;
+  background-color: #f3f4f6;
+  border-radius: 9999px;
+  font-weight: 600;
+}
+
+.fc .fc-daygrid-more-link:hover {
+  background-color: #e5e7eb;
+  border-radius: 4px;
+}
+
+/* Time Grid Styles for Week/Day View */
+.fc .fc-timegrid-event {
+  border-radius: 6px;
+  padding: 0;
+  border: none !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.fc .fc-timegrid-event .fc-event-main {
+  padding: 0;
+  height: 100%;
+}
+
+.fc .fc-timegrid-event-harness {
+  margin-right: 2px;
+}
+
+.fc .fc-timegrid-event:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+  transition: all 0.2s;
+}
+
+/* Time grid slots */
+.fc .fc-timegrid-slot {
+  height: 3em;
+}
+
+.fc .fc-timegrid-slot-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+/* Day header in week view */
+.fc .fc-col-header-cell-cushion {
+  padding: 8px 4px;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+/* Outside month days */
+.fc .fc-day-other .fc-daygrid-day-number {
+  color: #d1d5db;
+}
+
+.fc .fc-day-other {
+  background-color: #fafafa;
+}
+
+/* Remove default borders */
+.fc-theme-standard td,
+.fc-theme-standard th {
+  border: 1px solid #e5e7eb;
+}
+
+.fc-theme-standard .fc-scrollgrid {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}

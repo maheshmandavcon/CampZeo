@@ -1,0 +1,13 @@
+{
+  "buildCommand": "next build",
+  "devCommand": "next dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "outputDirectory": ".next",
+  "crons": [
+    {
+      "path": "/api/scheduler/campaign-posts",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}

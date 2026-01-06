@@ -1,0 +1,17 @@
+                </main>
+            </div>
+
+            {/* AI Content Assistant */}
+            <AIContentAssistant
+                open={showAIAssistant}
+                onOpenChange={setShowAIAssistant}
+                onInsertContent={(content) => setMessage(content)}
+                onInsertImage={(url) => setMediaUrls(prev => [...prev, url])}
+                context={{
+                    platform: selectedPlatform || undefined,
+                    existingContent: message,
+                }}
+            />
+        </div>
+    );
+}

@@ -1,0 +1,398 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  clerkId                 String        @unique
+  email                   String        @unique
+  firstName               String?
+  lastName                String?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  facebookAccessToken     String?
+  facebookPageAccessToken String?
+  facebookPageId          String?
+  facebookTokenCreatedAt  DateTime?
+  facebookTokenExpiresIn  Int?
+  facebookTokenType       String?
+  facebookUserId          String?
+  instagramAccessToken    String?
+  instagramTokenCreatedAt DateTime?
+  instagramTokenExpiresIn Int?
+  instagramUserId         String?
+  isApproved              Boolean       @default(false)
+  isFirstLogin            Boolean       @default(true)
+  linkedInAccessToken     String?
+  linkedInAuthUrn         String?
+  mobile                  String?
+  organisationId          Int?
+  pinterestAccessToken    String?
+  pinterestAuthUrn        String?
+  youtubeAccessToken      String?
+  youtubeAuthUrn          String?
+  id                      Int           @id @default(autoincrement())
+  role                    UserRole      @default(ORGANISATION_USER)
+  organisation            Organisation? @relation(fields: [organisationId], references: [id])
+}
+
+model Organisation {
+  id                    Int                    @id @default(autoincrement())
+  name                  String
+  phone                 String?
+  email                 String?
+  address               String?
+  ownerName             String?
+  city                  String?
+  state                 String?
+  country               String?
+  postalCode            String?
+  enquiryText           String?
+  taxNumber             String?
+  isApproved            Boolean                @default(false)
+  isDeleted             Boolean                @default(false)
+  isTrial               Boolean                @default(false)
+  trialStartDate        DateTime?
+  trialEndDate          DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  analyticsSnapshots    AnalyticsSnapshot[]
+  campaigns             Campaign[]
+  chatHistories         ChatHistory[]
+  contacts              Contact[]
+  messageTemplates      MessageTemplate[]
+  MessageUsage          MessageUsage[]
+  notifications         Notification[]
+  organisationPlatforms OrganisationPlatform[]
+  payments              Payment[]
+  subscriptions         Subscription[]
+  users                 User[]
+}
+
+model OrganisationPlatform {
+  id             Int          @id @default(autoincrement())
+  organisationId Int
+  platform       PlatformType
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+}
+
+model Campaign {
+  id             Int            @id @default(autoincrement())
+  name           String
+  description    String?
+  startDate      DateTime
+  endDate        DateTime
+  isDeleted      Boolean        @default(false)
+  organisationId Int
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organisation   Organisation   @relation(fields: [organisationId], references: [id])
+  posts          CampaignPost[]
+  notifications  Notification[]
+  contacts       Contact[]      @relation("CampaignToContact")
+}
+
+model CampaignPost {
+  id                   Int          @id @default(autoincrement())
+  subject              String?
+  message              String?
+  senderEmail          String?
+  type                 PlatformType
+  isAttachedToCampaign Boolean      @default(false)
+  campaignId           Int?
+  videoUrl             String?
+  videoId              String?
+  scheduledPostTime    DateTime?
+  isPostSent           Boolean      @default(false)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  mediaUrls            String[]
+  metadata             Json?
+  isDeleted            Boolean      @default(false)
+  campaign             Campaign?    @relation(fields: [campaignId], references: [id])
+}
+
+model Contact {
+  id              Int          @id @default(autoincrement())
+  contactName     String?
+  contactEmail    String?
+  contactMobile   String?
+  contactWhatsApp String?
+  organisationId  Int
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  organisation    Organisation @relation(fields: [organisationId], references: [id])
+  campaigns       Campaign[]   @relation("CampaignToContact")
+}
+
+model Plan {
+  id            Int            @id @default(autoincrement())
+  name          String         @unique
+  description   String?
+  price         Decimal
+  billingCycle  String?
+  features      String?
+  usageLimits   String?
+  isActive      Boolean        @default(true)
+  autoRenew     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  isDeleted     Boolean?       @default(false)
+  smsLimit      Int?           @default(0)
+  whatsappLimit Int?           @default(0)
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id             Int          @id @default(autoincrement())
+  organisationId Int
+  planId         Int?
+  startDate      DateTime?
+  endDate        DateTime?
+  status         String?
+  renewalDate    DateTime?
+  usageDate      String?
+  autoRenew      Boolean      @default(false)
+  isTrial        Boolean      @default(false)
+  trialStartDate DateTime?
+  trialEndDate   DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  invoices       Invoice[]
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  plan           Plan?        @relation(fields: [planId], references: [id])
+}
+
+model Invoice {
+  id             Int          @id @default(autoincrement())
+  subscriptionId Int
+  invoiceDate    DateTime
+  dueDate        DateTime
+  paidDate       DateTime?
+  status         String
+  amount         Decimal
+  taxAmount      Decimal
+  discountAmount Decimal
+  balance        Decimal
+  currency       String?
+  description    String?
+  invoiceNumber  String
+  paymentMethod  String?
+  taxInformation String?
+  pdfBytes       Bytes?
+  createdBy      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+}
+
+model Enquiry {
+  name             String
+  email            String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  address          String?
+  city             String?
+  enquiryText      String?
+  postalCode       String?
+  state            String?
+  id               Int      @id @default(autoincrement())
+  mobile           String?
+  organisationName String?
+  country          String?
+  isConverted      Boolean  @default(false)
+  phone            String?
+  taxNumber        String?
+  password         String?
+}
+
+model Notification {
+  id             Int           @id @default(autoincrement())
+  message        String
+  isSuccess      Boolean       @default(false)
+  type           String?
+  platform       String?
+  isRead         Boolean       @default(false)
+  isDelete       Boolean       @default(false)
+  category       String?
+  campaignId     Int?
+  organisationId Int?
+  referenceId    Int?
+  createdAt      DateTime      @default(now())
+  campaign       Campaign?     @relation(fields: [campaignId], references: [id])
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  razorpayPaymentId String?
+  razorpayOrderId   String        @unique
+  razorpaySignature String?
+  amount            Decimal
+  currency          String
+  plan              String
+  receipt           String?
+  notes             Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  organisationId    Int?
+  status            String
+  organisation      Organisation? @relation(fields: [organisationId], references: [id])
+}
+
+model PostInsight {
+  id             Int      @id @default(autoincrement())
+  postId         String
+  likes          Int      @default(0)
+  comments       Int      @default(0)
+  reach          Int      @default(0)
+  impressions    Int      @default(0)
+  engagementRate Float    @default(0)
+  lastUpdated    DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  isDeleted      Boolean  @default(false)
+}
+
+model PostTransaction {
+  id                Int       @id @default(autoincrement())
+  refId             Int
+  platform          String
+  postId            String
+  accountId         String
+  message           String
+  mediaUrls         String?
+  postType          String
+  accessToken       String
+  isScheduled       Boolean   @default(false)
+  scheduledTime     DateTime?
+  published         Boolean   @default(false)
+  publishedAt       DateTime?
+  insightsFetched   Boolean   @default(false)
+  lastInsightsCheck DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model LogEvents {
+  id              Int       @id @default(autoincrement())
+  message         String?
+  messageTemplate String?
+  timeStamp       DateTime?
+  level           String?
+  exception       String?
+  properties      String?
+}
+
+model JobSetting {
+  id             Int       @id @default(autoincrement())
+  jobId          String?
+  cronExpression String?
+  isEnabled      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  lastRunAt      DateTime? @db.Timestamp(6)
+}
+
+model AdminPlatformConfiguration {
+  id        Int          @id @default(autoincrement())
+  key       String?
+  value     String?
+  platform  PlatformType
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+model MessageTemplate {
+  id             Int              @id @default(autoincrement())
+  name           String
+  description    String?
+  content        String
+  subject        String?
+  platform       PlatformType
+  category       TemplateCategory @default(CUSTOM)
+  variables      Json?
+  isActive       Boolean          @default(true)
+  organisationId Int
+  createdBy      String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  metadata       Json?
+  mediaUrls      String[]         @default([])
+  organisation   Organisation     @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@index([organisationId])
+  @@index([platform])
+  @@index([category])
+}
+
+model AnalyticsSnapshot {
+  id             Int          @id @default(autoincrement())
+  organisationId Int
+  data           Json
+  createdAt      DateTime     @default(now())
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+}
+
+model ChatHistory {
+  id             Int          @id @default(autoincrement())
+  organisationId Int
+  role           String
+  message        String
+  createdAt      DateTime     @default(now())
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+}
+
+model CommentSentiment {
+  id        Int      @id @default(autoincrement())
+  commentId String
+  sentiment String?
+  score     Float?
+  createdAt DateTime @default(now())
+}
+
+model MessageUsage {
+  id             String         @id
+  organisationId Int
+  channel        MessageChannel
+  count          Int            @default(0)
+  periodStart    DateTime
+  periodEnd      DateTime
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime
+  Organisation   Organisation   @relation(fields: [organisationId], references: [id])
+
+  @@unique([organisationId, channel, periodStart])
+}
+
+enum UserRole {
+  ADMIN_USER
+  ORGANISATION_USER
+}
+
+enum TemplateCategory {
+  MARKETING
+  TRANSACTIONAL
+  NOTIFICATION
+  CUSTOM
+}
+
+enum PlatformType {
+  EMAIL
+  SMS
+  WHATSAPP
+  RCS
+  FACEBOOK
+  INSTAGRAM
+  LINKEDIN
+  YOUTUBE
+  PINTEREST
+}
+
+enum MessageChannel {
+  SMS
+  WHATSAPP
+}
