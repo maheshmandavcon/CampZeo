@@ -242,7 +242,7 @@ export function AdminSchedulerView() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="frequency">Check Frequency</Label>
-                            <div className="border rounded-md">
+                            <div className=" rounded-md">
                                 <Select
                                     value={frequency}
                                     onValueChange={(value) => handleUpdateSettings({ frequency: value })}

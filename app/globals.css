@@ -81,6 +81,38 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+
+  ::placeholder {
+    color: var(--muted-foreground);
+    opacity: 0.4;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--muted-foreground);
+    opacity: 0.4;
+  }
+
+  [data-placeholder]>span,
+  [data-placeholder] * {
+    color: var(--muted-foreground) !important;
+    opacity: 0.4 !important;
+  }
+
+  input:focus::placeholder,
+  textarea:focus::placeholder {
+    color: #2563eb !important;
+    opacity: 0.6 !important;
+  }
+
+  input:focus,
+  textarea:focus,
+  [data-slot=select-trigger]:focus,
+  [data-state=open][data-slot=select-trigger] {
+    border-color: #2563eb !important;
+    outline: none !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25) !important;
+  }
 }
 
 /* Design system CSS variables */
@@ -108,7 +140,7 @@
   --switch-background: #e5e5e5;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #dc2626;
+  --ring: #2563eb;
   --chart-1: #dc2626;
   --chart-2: #ef4444;
   --chart-3: #f87171;
@@ -144,7 +176,7 @@
   --destructive-foreground: oklch(0.637 0.237 25.331);
   --border: oklch(0.269 0 0);
   --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
+  --ring: #2563eb;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
   --chart-1: oklch(0.488 0.243 264.376);

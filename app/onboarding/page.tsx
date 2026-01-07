@@ -591,7 +591,7 @@ export default function OnboardingPage() {
                   onValueChange={(v) => handleSelectChange("country", v)}
                   value={form.country}
                 >
-                  <SelectTrigger className="border border-gray-200 h-10">
+                  <SelectTrigger className="border border-gray-300 h-10">
                     <SelectValue placeholder="Select Country" />
                   </SelectTrigger>
                   <SelectContent>

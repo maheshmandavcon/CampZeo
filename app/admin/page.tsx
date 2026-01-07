@@ -1359,7 +1359,7 @@ export default function AdminDashboard() {
                             onChange={(e) => setSearchText(e.target.value)}
                           />
                         </div>
-                        <div className="hidden border border-1 rounded-md sm:block">
+                        <div className="hidden  rounded-md sm:block">
                           <Select value={statusFilter} onValueChange={setStatusFilter}>
                             <SelectTrigger className="w-[140px] bg-white border">
                               <SelectValue placeholder="All Status" />
@@ -2014,10 +2014,10 @@ export default function AdminDashboard() {
                               onChange={(e) => setPlansSearch(e.target.value)}
                             />
                           </div>
-                          <div className="border mx-2 border-1 rounded-md">
+                          <div className=" mx-2  rounded-md">
 
                             <Select value={plansStatusFilter} onValueChange={setPlansStatusFilter}>
-                              <SelectTrigger className="w-auto border rounded">
+                              <SelectTrigger className="w-auto  rounded-md">
                                 <SelectValue placeholder="Filter by status" />
                               </SelectTrigger>
                               <SelectContent>
@@ -2234,7 +2234,7 @@ export default function AdminDashboard() {
                             <Label htmlFor="planBillingCycle">
                               Billing Cycle <span className="text-red-500">*</span>
                             </Label>
-                            <div className="border border-1 rounded-md border-gray-300">
+                            <div className=" rounded-md border-gray-300">
 
                               <Select
 
@@ -2533,7 +2533,7 @@ export default function AdminDashboard() {
                     {/* Log Level Filter */}
                     <div className="space-y-2">
                       <Label htmlFor="logsLevel">Log Level</Label>
-                      <div className="border border-1 rounded-md">
+                      <div className=" rounded-md">
 
                         <Select value={logsLevel} onValueChange={(value) => {
                           setLogsLevel(value);
