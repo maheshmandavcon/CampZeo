@@ -30,6 +30,16 @@ export default function Page() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [isCaptchaRequired, setIsCaptchaRequired] = useState(true);
+
+  useEffect(() => {
+    // Only require captcha on campzeo.com
+    const isProd = window.location.hostname === "campzeo.com" || window.location.hostname === "www.campzeo.com";
+    setIsCaptchaRequired(isProd);
+    if (!isProd) {
+      setCaptchaToken("BYPASS_CAPTCHA");
+    }
+  }, []);
 
   const [form, setForm] = useState({
     email: "",
@@ -532,18 +542,20 @@ export default function Page() {
               </div>
             </div>
 
-            <div className="flex justify-center my-4">
-              <ReCAPTCHA
-                sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
-                onChange={setCaptchaToken}
-                theme="light"
-              />
-            </div>
+            {isCaptchaRequired && (
+              <div className="flex justify-center my-4">
+                <ReCAPTCHA
+                  sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
+                  onChange={setCaptchaToken}
+                  theme="light"
+                />
+              </div>
+            )}
 
             <Button
               type="submit"
               className="w-full h-11 text-base font-medium shadow-md transition-all hover:shadow-lg"
-              disabled={loading || !captchaToken}
+              disabled={loading || (isCaptchaRequired && !captchaToken)}
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">

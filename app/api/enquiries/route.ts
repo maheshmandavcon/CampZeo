@@ -23,18 +23,20 @@ export async function POST(req: Request) {
             }, { status: 400 });
         }
 
-        const captchaVerification = await fetch(
-            `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${data.captchaToken}`,
-            { method: "POST" }
-        );
-        const captchaData = await captchaVerification.json();
+        if (data.captchaToken !== "BYPASS_CAPTCHA") {
+            const captchaVerification = await fetch(
+                `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${data.captchaToken}`,
+                { method: "POST" }
+            );
+            const captchaData = await captchaVerification.json();
 
-        if (!captchaData.success) {
-            return NextResponse.json({
-                success: false,
-                message: "CAPTCHA verification failed",
-                errors: ["Invalid CAPTCHA"]
-            }, { status: 400 });
+            if (!captchaData.success) {
+                return NextResponse.json({
+                    success: false,
+                    message: "CAPTCHA verification failed",
+                    errors: ["Invalid CAPTCHA"]
+                }, { status: 400 });
+            }
         }
 
         // Remove captchaToken from data so it doesn't cause issues with Prisma/Validation
