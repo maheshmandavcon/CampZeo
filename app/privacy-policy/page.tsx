@@ -4,13 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield, ArrowLeft, Lock, Eye, Users, Share2 } from "lucide-react";
 import Link from "next/link";
-import { Header } from '@/components/Header';
+import { LandingHeader } from '@/components/LandingHeader';
 
 export default function PrivacyPolicyPage() {
   return (
     <div className="min-h-screen">
       {/* Navigation */}
-      <Header />
+      <LandingHeader />
 
       {/* Hero Section */}
       <section className="pt-32 pb-12 px-4 sm:px-6 lg:px-8 bg-muted/30">

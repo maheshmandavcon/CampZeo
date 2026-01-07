@@ -4,30 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { motion, useMotionTemplate, useMotionValue, useSpring } from "framer-motion";
 
 export const LandingGlowEffects = () => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const mouseX = useMotionValue(0);
-    const mouseY = useMotionValue(0);
-
-    // Smooth out the mouse movement
-    const springConfig = { damping: 20, stiffness: 200 };
-    const smoothX = useSpring(mouseX, springConfig);
-    const smoothY = useSpring(mouseY, springConfig);
-
-    useEffect(() => {
-        const handleMouseMove = (e: MouseEvent) => {
-            if (!containerRef.current) return;
-            const rect = containerRef.current.getBoundingClientRect();
-            mouseX.set(e.clientX - rect.left);
-            mouseY.set(e.clientY - rect.top);
-        };
-
-        window.addEventListener("mousemove", handleMouseMove);
-        return () => window.removeEventListener("mousemove", handleMouseMove);
-    }, [mouseX, mouseY]);
-
     return (
-        <div ref={containerRef} className="absolute inset-0 overflow-hidden pointer-events-none">
-
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
             <FloatingIcons />
         </div>
     );
@@ -125,7 +103,7 @@ const FloatingIcons = () => {
                     <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
                 </svg>
             ),
-            delay: 5,
+            delay: 1.5,
             duration: 55,
         },
         {
@@ -135,7 +113,7 @@ const FloatingIcons = () => {
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                 </svg>
             ),
-            delay: 6,
+            delay: 1.6,
             duration: 48,
         },
     ];

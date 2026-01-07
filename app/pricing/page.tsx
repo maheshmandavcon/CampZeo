@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge";
 import { Check, Star, ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { Header } from '@/components/Header';
+import { LandingHeader } from '@/components/LandingHeader';
 import { usePlans, Plan } from "@/hooks/use-plans";
 import { formatPrice } from "@/lib/plans";
 import { useRouter } from "next/navigation";
@@ -20,10 +20,10 @@ export default function PricingPage() {
     return (
         <div className="min-h-screen bg-background text-foreground">
             {/* Header/Nav would typically be included here or via layout */}
-            <Header />
+            <LandingHeader />
 
             <main className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
-                 <LandingGlowEffects />
+                <LandingGlowEffects />
                 <div className="max-w-7xl mx-auto">
                     <div className="text-center mb-16">
                         <h1 className="text-4xl font-bold mb-4">Simple, Transparent Pricing</h1>

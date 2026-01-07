@@ -43,7 +43,7 @@ export const AnimatedTestimonials = ({
 
 
     return (
-        <div className="max-w-sm md:max-w-7xl mx-auto antialiased font-sans px-4 md:px-8 lg:px-12 py-20">
+        <div className="antialiased font-sans">
             <div className="relative grid grid-cols-1 md:grid-cols-2 gap-20">
                 <div>
                     <div className="relative h-80 w-full">
@@ -90,7 +90,7 @@ export const AnimatedTestimonials = ({
                         </AnimatePresence>
                     </div>
                 </div>
-                <div className="flex justify-between flex-col py-4">
+                <div className="flex flex-col justify-center py-4 bg-background/50 backdrop-blur-sm p-8 rounded-3xl border border-muted/20">
                     <motion.div
                         key={active}
                         initial={{
@@ -110,50 +110,55 @@ export const AnimatedTestimonials = ({
                             ease: "easeInOut",
                         }}
                     >
-                        <h3 className="text-2xl font-bold dark:text-white text-black">
+                        <h3 className="text-3xl font-bold dark:text-white text-black mb-1">
                             {testimonials[active].name}
                         </h3>
-                        <p className="text-sm text-gray-500 dark:text-neutral-500">
+                        <p className="text-base text-primary font-medium mb-6">
                             {testimonials[active].designation}
                         </p>
-                        <motion.p className="text-lg text-gray-500 mt-8 dark:text-neutral-300">
-                            {testimonials[active].quote.split(" ").map((word, index) => (
-                                <motion.span
-                                    key={index}
-                                    initial={{
-                                        filter: "blur(10px)",
-                                        opacity: 0,
-                                        y: 5,
-                                    }}
-                                    animate={{
-                                        filter: "blur(0px)",
-                                        opacity: 1,
-                                        y: 0,
-                                    }}
-                                    transition={{
-                                        duration: 0.2,
-                                        ease: "easeInOut",
-                                        delay: 0.02 * index,
-                                    }}
-                                    className="inline-block"
-                                >
-                                    {word}&nbsp;
-                                </motion.span>
-                            ))}
-                        </motion.p>
+                        <motion.div className="relative">
+                            <svg className="absolute -left-6 -top-6 h-8 w-8 text-primary/20" fill="currentColor" viewBox="0 0 32 32" aria-hidden="true">
+                                <path d="M9.352 4C4.456 7.456 1 13.12 1 19.36c0 5.088 3.072 8.064 6.624 8.064 3.36 0 5.856-2.688 5.856-5.856 0-3.168-2.208-5.472-5.088-5.472-.576 0-1.344.096-1.536.192.48-3.264 3.552-7.104 6.624-9.024L9.352 4zm16.512 0c-4.8 3.456-8.256 9.12-8.256 15.36 0 5.088 3.072 8.064 6.624 8.064 3.264 0 5.856-2.688 5.856-5.856 0-3.168-2.304-5.472-5.184-5.472-.576 0-1.248.096-1.44.192.48-3.264 3.456-7.104 6.528-9.024L25.864 4z" />
+                            </svg>
+                            <motion.p className="text-xl md:text-2xl text-muted-foreground italic leading-relaxed pl-4">
+                                {testimonials[active].quote.split(" ").map((word, index) => (
+                                    <motion.span
+                                        key={index}
+                                        initial={{
+                                            filter: "blur(10px)",
+                                            opacity: 0,
+                                            y: 5,
+                                        }}
+                                        animate={{
+                                            filter: "blur(0px)",
+                                            opacity: 1,
+                                            y: 0,
+                                        }}
+                                        transition={{
+                                            duration: 0.2,
+                                            ease: "easeInOut",
+                                            delay: 0.02 * index,
+                                        }}
+                                        className="inline-block"
+                                    >
+                                        {word}&nbsp;
+                                    </motion.span>
+                                ))}
+                            </motion.p>
+                        </motion.div>
                     </motion.div>
-                    <div className="flex gap-4 pt-12 md:pt-0">
+                    <div className="flex gap-4 pt-12">
                         <button
                             onClick={handlePrev}
-                            className="h-7 w-7 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center group/button"
+                            className="h-10 w-10 rounded-full bg-white/10 dark:bg-neutral-800 border border-muted/20 flex items-center justify-center group/button hover:bg-primary/10 transition-colors"
                         >
-                            <ArrowLeft className="h-5 w-5 text-black dark:text-neutral-400 group-hover/button:rotate-12 transition-transform duration-300" />
+                            <ArrowLeft className="h-5 w-5 text-black dark:text-neutral-400 group-hover/button:-translate-x-1 transition-transform duration-300" />
                         </button>
                         <button
                             onClick={handleNext}
-                            className="h-7 w-7 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center group/button"
+                            className="h-10 w-10 rounded-full bg-white/10 dark:bg-neutral-800 border border-muted/20 flex items-center justify-center group/button hover:bg-primary/10 transition-colors"
                         >
-                            <ArrowRight className="h-5 w-5 text-black dark:text-neutral-400 group-hover/button:-rotate-12 transition-transform duration-300" />
+                            <ArrowRight className="h-5 w-5 text-black dark:text-neutral-400 group-hover/button:translate-x-1 transition-transform duration-300" />
                         </button>
                     </div>
                 </div>
