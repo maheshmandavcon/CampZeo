@@ -1,12 +1,12 @@
 "use client";
 
 import { SignIn } from "@clerk/nextjs";
-import { Header } from "@/components/Header";
+import { LandingHeader } from "@/components/LandingHeader";
 
 export default function Page() {
   return (
     <div className="min-h-screen bg-muted/30 flex flex-col">
-      <Header />
+      <LandingHeader />
 
       <main className="flex-1 flex items-center justify-center p-4">
         <SignIn

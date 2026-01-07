@@ -1123,7 +1123,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                         }
                                                     }}
                                                 >
-                                                    <SelectTrigger className='border border-gray200'>
+                                                    <SelectTrigger className=''>
                                                         <SelectValue placeholder="Select a page to post to" />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -1313,7 +1313,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                 </div>
                                                 <div className="space-y-2">
                                                     <Label htmlFor="youtubePrivacy">Privacy Status</Label>
-                                                    <div className="border rounded-md">
+                                                    <div className=" rounded-md">
                                                         <Select value={youtubePrivacy} onValueChange={setYoutubePrivacy}>
                                                             <SelectTrigger id="youtubePrivacy">
                                                                 <SelectValue />
@@ -1383,7 +1383,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                         </div>
                                                     ) : (
                                                         <>
-                                                            <div className="border border-1 rounded-md">
+                                                            <div className=" rounded-md">
                                                                 <Select
                                                                     value={pinterestBoardId}
                                                                     onValueChange={(val) => {

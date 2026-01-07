@@ -626,7 +626,7 @@ export default function EditPostPage() {
 
                             {/* Template Selection */}
                             {type && !loadingTemplates && templates.length > 0 && (
-                                <div className="space-y-2 p-4 bg-muted/20 rounded-lg border border-dashed">
+                                <div className="space-y-2 p-4 bg-muted/20 rounded-lg  border-dashed">
                                     <Label htmlFor="template" className="text-xs font-semibold uppercase text-muted-foreground">Quick Start with Template</Label>
                                     <Select value={selectedTemplateId || "none"} onValueChange={handleTemplateSelect}>
                                         <SelectTrigger id="template" className="bg-background border border-2 border-gray-200">

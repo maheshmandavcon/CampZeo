@@ -511,7 +511,7 @@ export default function CampaignPostsPage() {
                                     })()}
                                 </div>
                                 <div className="flex items-center justify-end ">
-                                    <div className="flex items-center gap-4 border  rounded-md">
+                                    <div className="flex items-center gap-4   rounded-md">
                                         <Select value={filterStatus} onValueChange={setFilterStatus}>
                                             <SelectTrigger className="w-[180px]">
                                                 <SelectValue placeholder="All Status" />

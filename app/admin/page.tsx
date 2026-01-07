@@ -1359,7 +1359,7 @@ export default function AdminDashboard() {
                             onChange={(e) => setSearchText(e.target.value)}
                           />
                         </div>
-                        <div className="hidden border border-1 rounded-md sm:block">
+                        <div className="hidden  rounded-md sm:block">
                           <Select value={statusFilter} onValueChange={setStatusFilter}>
                             <SelectTrigger className="w-[140px] bg-white border">
                               <SelectValue placeholder="All Status" />
@@ -1434,8 +1434,8 @@ export default function AdminDashboard() {
                                     {org.isDeleted && <Badge variant="destructive" className="rounded-md font-normal">Suspended</Badge>}
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-right">
-                                  <div className="flex items-center justify-end gap-2 ">
+                                <TableCell className="text-center">
+                                  <div className="flex items-center justify-start gap-2 ">
                                     {!org.isApproved && (
                                       <Button size="sm" className="h-8 px-2 cursor-pointer bg-green-600 hover:bg-green-700" onClick={() => handleApproveClick(org)}>Approve</Button>
                                     )}
@@ -1699,7 +1699,7 @@ export default function AdminDashboard() {
                                       View Details
                                     </Button>
                                   </DialogTrigger>
-                                  <DialogContent className="max-w-3xl">
+                                  <DialogContent className="sm:max-w-[600px] md:max-w-3xl max-h-[90vh] overflow-y-auto">
                                     <DialogHeader>
                                       <div className="flex items-center gap-2 mb-2">
                                         <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">
@@ -1714,7 +1714,7 @@ export default function AdminDashboard() {
                                     </DialogHeader>
 
                                     <div className="grid gap-6 py-4">
-                                      <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                                         <div className="space-y-1">
                                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Contact Person</p>
                                           <p className="font-medium text-lg">{enq.name || 'N/A'}</p>
@@ -2014,10 +2014,10 @@ export default function AdminDashboard() {
                               onChange={(e) => setPlansSearch(e.target.value)}
                             />
                           </div>
-                          <div className="border mx-2 border-1 rounded-md">
+                          <div className=" mx-2  rounded-md">
 
                             <Select value={plansStatusFilter} onValueChange={setPlansStatusFilter}>
-                              <SelectTrigger className="w-auto border rounded">
+                              <SelectTrigger className="w-auto  rounded-md">
                                 <SelectValue placeholder="Filter by status" />
                               </SelectTrigger>
                               <SelectContent>
@@ -2234,7 +2234,7 @@ export default function AdminDashboard() {
                             <Label htmlFor="planBillingCycle">
                               Billing Cycle <span className="text-red-500">*</span>
                             </Label>
-                            <div className="border border-1 rounded-md border-gray-300">
+                            <div className=" rounded-md border-gray-300">
 
                               <Select
 
@@ -2533,7 +2533,7 @@ export default function AdminDashboard() {
                     {/* Log Level Filter */}
                     <div className="space-y-2">
                       <Label htmlFor="logsLevel">Log Level</Label>
-                      <div className="border border-1 rounded-md">
+                      <div className=" rounded-md">
 
                         <Select value={logsLevel} onValueChange={(value) => {
                           setLogsLevel(value);

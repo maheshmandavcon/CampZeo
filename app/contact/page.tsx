@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 import ReCAPTCHA from "react-google-recaptcha";
 import { LandingGlowEffects } from "@/components/ui/landing glow effects";
+import { LandingHeader } from "@/components/LandingHeader";
 
 export default function ContactPage() {
     const [loading, setLoading] = useState(false);
@@ -65,38 +66,7 @@ export default function ContactPage() {
                 <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[120px]" />
             </div>
 
-            {/* Navigation */}
-            <header className="fixed top-0 w-full bg-white/70 dark:bg-black/70 backdrop-blur-xl border-b border-gray-100 dark:border-white/5 z-50">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center h-20">
-                        <motion.div
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.5 }}
-                        >
-                            <Link href="/" className="flex items-center gap-2 group">
-                                <div className="relative">
-                                    <img src="/logo-1.png" alt="Campzeo" className="h-9 transition-transform duration-300 group-hover:scale-110" />
-                                    <div className="absolute -inset-1 bg-primary/20 rounded-full blur opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </div>
-                            </Link>
-                        </motion.div>
-
-                        <motion.div
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.5 }}
-                        >
-                            <Link href="/">
-                                <Button variant="ghost" size="sm" className="rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-all">
-                                    <ArrowLeft className="size-4 mr-2" />
-                                    Back to Home
-                                </Button>
-                            </Link>
-                        </motion.div>
-                    </div>
-                </div>
-            </header>
+            <LandingHeader />
 
             <main className="pt-32 pb-24 px-4 sm:px-6 lg:px-8 relative">
                 <LandingGlowEffects />
