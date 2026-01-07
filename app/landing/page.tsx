@@ -222,9 +222,9 @@ export default function LandingPage() {
 
       <section id="testimonials" className="py-24 px-4 sm:px-6 lg:px-8 bg-background">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-8">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight !text-black">Trusted by Industry Leaders</h2>
-            <p className="max-w-2xl mx-auto text-lg md:text-xl !text-black">
+          <div className="text-center mb-8 relative z-50">
+            <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight !text-black" style={{ color: 'black' }}>Trusted by Industry Leaders</h2>
+            <p className="max-w-2xl mx-auto text-lg md:text-xl !text-black" style={{ color: 'black' }}>
               See what our customers have to say about their experience
             </p>
           </div>
