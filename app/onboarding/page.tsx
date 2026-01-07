@@ -34,6 +34,16 @@ export default function OnboardingPage() {
   const [accountType, setAccountType] = useState<"business" | "individual">("business");
   const [isDetecting, setIsDetecting] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [isCaptchaRequired, setIsCaptchaRequired] = useState(true);
+
+  useEffect(() => {
+    // Only require captcha on campzeo.com
+    const isProd = window.location.hostname === "campzeo.com" || window.location.hostname === "www.campzeo.com";
+    setIsCaptchaRequired(isProd);
+    if (!isProd) {
+      setCaptchaToken("BYPASS_CAPTCHA");
+    }
+  }, []);
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [showPayment, setShowPayment] = useState(false);
 
@@ -644,18 +654,20 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            <div className="flex justify-center my-4">
-              <ReCAPTCHA
-                sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
-                onChange={setCaptchaToken}
-                theme="light"
-              />
-            </div>
+            {isCaptchaRequired && (
+              <div className="flex justify-center my-4">
+                <ReCAPTCHA
+                  sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
+                  onChange={setCaptchaToken}
+                  theme="light"
+                />
+              </div>
+            )}
 
             <Button
               type="submit"
               className="w-full h-11 text-base font-medium shadow-md transition-all hover:shadow-lg"
-              disabled={loading || !captchaToken}
+              disabled={loading || (isCaptchaRequired && !captchaToken)}
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">

@@ -245,7 +245,7 @@ export default function CampaignsPage() {
                                                 <TableHead>Duration</TableHead>
                                                 <TableHead>Contacts</TableHead>
                                                 <TableHead>Posts</TableHead>
-                                                        <TableHead >Actions</TableHead>
+                                                <TableHead >Actions</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -254,10 +254,12 @@ export default function CampaignsPage() {
                                                 return (
                                                     <TableRow key={campaign.id}>
                                                         <TableCell>
-                                                            <div>
-                                                                <p className="font-medium">{campaign.name}</p>
+                                                            <div className="max-w-[200px] md:max-w-[300px]">
+                                                                <p className="font-medium truncate" title={campaign.name}>
+                                                                    {campaign.name}
+                                                                </p>
                                                                 {campaign.description && (
-                                                                    <p className="text-sm text-muted-foreground line-clamp-1">
+                                                                    <p className="text-sm text-muted-foreground truncate" title={campaign.description}>
                                                                         {campaign.description}
                                                                     </p>
                                                                 )}
@@ -288,37 +290,37 @@ export default function CampaignsPage() {
                                                                 <span>{campaign._count.posts}</span>
                                                             </div>
                                                         </TableCell>
-                                                                <TableCell>
-                                                                    <div className="flex items-center  gap-2">
-                                                                        <Button
-                                                                            className='cursor-pointer'
-                                                                            size="sm"
-                                                                            variant="outline"
-                                                                            onClick={() => handleManagePosts(campaign)}
-                                                                        >
-                                                                            {campaign._count.posts === 0 ? 'Add Post' : 'Posts'}
-                                                                        </Button>
-                                                                        <Button
-                                                                        className='cursor-pointer'
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            onClick={() => handleEditCampaign(campaign)}
-                                                                        >
-                                                                            <Edit className="size-4" />
-                                                                        </Button>
-                                                                        <Button
-                                                                        className='cursor-pointer'
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            onClick={() => {
-                                                                                setDeleteCampaignId(campaign.id);
-                                                                                setShowDeleteDialog(true);
-                                                                            }}
-                                                                        >
-                                                                            <Trash2 className="size-4 text-destructive" />
-                                                                        </Button>
-                                                                    </div>
-                                                                </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center  gap-2">
+                                                                <Button
+                                                                    className='cursor-pointer'
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => handleManagePosts(campaign)}
+                                                                >
+                                                                    {campaign._count.posts === 0 ? 'Add Post' : 'Posts'}
+                                                                </Button>
+                                                                <Button
+                                                                    className='cursor-pointer'
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    onClick={() => handleEditCampaign(campaign)}
+                                                                >
+                                                                    <Edit className="size-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    className='cursor-pointer'
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    onClick={() => {
+                                                                        setDeleteCampaignId(campaign.id);
+                                                                        setShowDeleteDialog(true);
+                                                                    }}
+                                                                >
+                                                                    <Trash2 className="size-4 text-destructive" />
+                                                                </Button>
+                                                            </div>
+                                                        </TableCell>
                                                     </TableRow>
                                                 );
                                             })}

@@ -58,7 +58,7 @@ export async function sendOrganisationInvite(params: OrganisationInviteParams): 
                     </div>
                     <p>Please login and change your password immediately.</p>
                     <p>
-                        <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/sign-in" 
+                        <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/" 
                            style="background-color: #0070f3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
                            Login to Dashboard
                         </a>
@@ -152,7 +152,7 @@ export async function sendOrganisationApproved(params: OrganisationApprovedParam
                     <p>Great news! Your organisation "${organisationName}" has been approved by the administrator.</p>
                     <p>You can now access your dashboard and start using all features.</p>
                     <p>
-                        <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/sign-in" 
+                        <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/" 
                            style="background-color: #0070f3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
                            Go to Dashboard
                         </a>

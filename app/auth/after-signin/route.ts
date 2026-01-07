@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     }
 
     if (dbUser.organisation) {
-      return NextResponse.redirect(new URL('/organisations', req.url));
+      return NextResponse.redirect(new URL('/organisation', req.url));
     }
 
     return NextResponse.redirect(new URL('/onboarding', req.url));
