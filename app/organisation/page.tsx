@@ -245,7 +245,7 @@ export default function OrganisationDashboard() {
 
               <Card
                 className="cursor-pointer hover:bg-orange-50/50 transition-colors"
-                onClick={() => router.push("/organisation/contacts")}
+                onClick={() => router.push("/contacts")}
               >
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">Total Contacts</CardTitle>
