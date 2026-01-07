@@ -53,7 +53,8 @@ import {
     Share2,
     Check,
     Paperclip,
-    Globe
+    Globe,
+    Search
 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
@@ -125,6 +126,7 @@ export default function CampaignPostsPage() {
     const [sharePost, setSharePost] = useState<Post | null>(null);
     const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
     const [sendingShare, setSendingShare] = useState(false);
+    const [contactSearchQuery, setContactSearchQuery] = useState('');
 
     // Fetch organisation platforms
     useEffect(() => {
@@ -294,14 +296,29 @@ export default function CampaignPostsPage() {
         );
     };
 
-    // Select all contacts
+    // Filtered contacts for the share dialog
+    const filteredShareContacts = campaign?.contacts?.filter((contact: any) => {
+        const query = contactSearchQuery.toLowerCase();
+        return (
+            contact.contactName?.toLowerCase().includes(query) ||
+            contact.contactEmail?.toLowerCase().includes(query) ||
+            contact.contactMobile?.toLowerCase().includes(query)
+        );
+    }) || [];
+
+    // Select all contacts (filtered)
     const toggleAllContacts = () => {
         if (!campaign?.contacts) return;
 
-        if (selectedContacts.length === campaign.contacts.length) {
-            setSelectedContacts([]);
+        const visibleIds = filteredShareContacts.map((c: any) => c.id);
+        const allVisibleSelected = visibleIds.every(id => selectedContacts.includes(id));
+
+        if (allVisibleSelected) {
+            // Unselect visible
+            setSelectedContacts(prev => prev.filter(id => !visibleIds.includes(id)));
         } else {
-            setSelectedContacts(campaign.contacts.map((c: any) => c.id));
+            // Select all visible (preserving existing)
+            setSelectedContacts(prev => Array.from(new Set([...prev, ...visibleIds])));
         }
     };
 
@@ -429,16 +446,19 @@ export default function CampaignPostsPage() {
                             </Button>
                         </div>
 
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h1 className="text-3xl font-bold tracking-tight">{campaign?.name}</h1>
-                                <p className="text-muted-foreground mt-1">
+                        <div className="flex items-center justify-between gap-8 w-full overflow-hidden">
+                            <div className="flex-1 ">
+                                <h1 className="text-2xl md:text-3xl font-bold tracking-tight truncate w-4xl" title={campaign?.name || ''}>
+                                    {campaign?.name}
+                                </h1>
+                                <p className="text-muted-foreground mt-1 line-clamp-2 text-sm w-7xl md:text-base" title={campaign?.description || ''}>
                                     {campaign?.description || 'Manage posts for this campaign'}
                                 </p>
                             </div>
-                            <Button className='cursor-pointer' onClick={() => router.push(`/organisation/campaigns/${campaignId}/posts/new`)}>
+                            <Button className='cursor-pointer shrink-0' onClick={() => router.push(`/organisation/campaigns/${campaignId}/posts/new`)}>
                                 <Plus className="size-4 mr-2" />
-                                Add Post
+                                <span className="hidden sm:inline">Add Post</span>
+                                <span className="sm:hidden">Add</span>
                             </Button>
                         </div>
 
@@ -558,10 +578,10 @@ export default function CampaignPostsPage() {
                                                         </span>
                                                     </div>
                                                     {post.subject && (
-                                                        <h4 className="font-medium">{post.subject}</h4>
+                                                        <h4 className="font-medium truncate" title={post.subject}>{post.subject}</h4>
                                                     )}
                                                     {post.message && (
-                                                        <p className="text-sm text-muted-foreground line-clamp-2">
+                                                        <p className="text-sm text-muted-foreground line-clamp-2" title={post.message}>
                                                             {post.message}
                                                         </p>
                                                     )}
@@ -752,7 +772,12 @@ export default function CampaignPostsPage() {
             </Dialog>
 
             {/* Share/Send Dialog */}
-            <Dialog open={!!sharePost} onOpenChange={(open) => !open && setSharePost(null)}>
+            <Dialog open={!!sharePost} onOpenChange={(open) => {
+                if (!open) {
+                    setSharePost(null);
+                    setContactSearchQuery('');
+                }
+            }}>
                 <DialogContent className="max-w-3xl">
                     <DialogHeader>
                         <DialogTitle>{isSocialPlatform ? 'Publish Post' : 'Share Post'}</DialogTitle>
@@ -766,37 +791,58 @@ export default function CampaignPostsPage() {
                     <div className="space-y-4">
                         {!isSocialPlatform && (
                             <>
-                                <div className="flex items-center justify-between">
-                                    <h4 className="text-sm font-medium">Select Contacts</h4>
-                                    <Button className='cursor-pointer' variant="outline" size="sm" onClick={toggleAllContacts}>
-                                        {selectedContacts.length === (campaign?.contacts?.length || 0) ? 'Deselect All' : 'Select All'}
-                                    </Button>
-                                </div>
-                                <div className="border rounded-lg max-h-[200px] overflow-y-auto p-2 space-y-1">
-                                    {campaign?.contacts && campaign.contacts.length > 0 ? (
-                                        campaign.contacts.map((contact: any) => (
-                                            <div
-                                                key={contact.id}
-                                                className="flex items-center gap-3 p-2 hover:bg-muted/50 rounded cursor-pointer"
-                                                onClick={() => toggleContact(contact.id)}
-                                            >
-                                                <div className={`size-4 rounded border flex items-center justify-center ${selectedContacts.includes(contact.id) ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground'}`}>
-                                                    {selectedContacts.includes(contact.id) && <Check className="size-3" />}
-                                                </div>
-                                                <div className="flex-1">
-                                                    <p className="text-sm font-medium">{contact.contactName}</p>
-                                                    <p className="text-xs text-muted-foreground">{contact.contactEmail || contact.contactMobile}</p>
-                                                </div>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="p-4 text-center text-muted-foreground text-sm">
-                                            No contacts found in this campaign.
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div className="relative flex-1">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                                            <Input
+                                                placeholder="Search contacts..."
+                                                value={contactSearchQuery}
+                                                onChange={(e) => setContactSearchQuery(e.target.value)}
+                                                className="pl-9 h-9"
+                                            />
                                         </div>
-                                    )}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                    Selected: {selectedContacts.length} contacts
+                                        <Button
+                                            className='cursor-pointer'
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={toggleAllContacts}
+                                        >
+                                            {filteredShareContacts.length > 0 && filteredShareContacts.every((c: any) => selectedContacts.includes(c.id))
+                                                ? 'Deselect Visible'
+                                                : 'Select Visible'}
+                                        </Button>
+                                    </div>
+
+                                    <div className="border rounded-lg max-h-[200px] overflow-y-auto p-2 space-y-1">
+                                        {filteredShareContacts.length > 0 ? (
+                                            filteredShareContacts.map((contact: any) => (
+                                                <div
+                                                    key={contact.id}
+                                                    className="flex items-center gap-3 p-2 hover:bg-muted/50 rounded cursor-pointer"
+                                                    onClick={() => toggleContact(contact.id)}
+                                                >
+                                                    <div className={`size-4 rounded border flex items-center justify-center ${selectedContacts.includes(contact.id) ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground'}`}>
+                                                        {selectedContacts.includes(contact.id) && <Check className="size-3" />}
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="text-sm font-medium">{contact.contactName}</p>
+                                                        <p className="text-xs text-muted-foreground">{contact.contactEmail || contact.contactMobile}</p>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="p-4 text-center text-muted-foreground text-sm">
+                                                {contactSearchQuery ? 'No contacts found matching your search' : 'No contacts found in this campaign'}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                        <span>Selected: {selectedContacts.length} contacts</span>
+                                        {contactSearchQuery && (
+                                            <span>Matches: {filteredShareContacts.length} contacts</span>
+                                        )}
+                                    </div>
                                 </div>
                             </>
                         )}

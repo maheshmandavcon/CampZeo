@@ -15,9 +15,10 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { ArrowLeft, Loader2, Save, Search } from 'lucide-react';
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Loader2, Save, Search, Users } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
+import { useDebounce } from '@/hooks/use-debounce';
 
 interface Contact {
     id: number;
@@ -52,7 +53,15 @@ export default function EditCampaignPage() {
     const [loadingContacts, setLoadingContacts] = useState(true);
     const [loadingCampaign, setLoadingCampaign] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const debouncedSearch = useDebounce(searchQuery, 500);
+
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalContacts, setTotalContacts] = useState(0);
+
     const [saving, setSaving] = useState(false);
+    const [selectingAll, setSelectingAll] = useState(false);
 
     // Fetch campaign data
     useEffect(() => {
@@ -110,11 +119,19 @@ export default function EditCampaignPage() {
         const fetchContacts = async () => {
             try {
                 setLoadingContacts(true);
-                const response = await fetch('/api/contacts?limit=1000');
+                const params = new URLSearchParams({
+                    page: currentPage.toString(),
+                    limit: itemsPerPage.toString(),
+                    ...(debouncedSearch && { search: debouncedSearch }),
+                });
+
+                const response = await fetch(`/api/contacts?${params}`);
                 if (!response.ok) throw new Error('Failed to fetch contacts');
 
                 const data = await response.json();
                 setContacts(data.contacts);
+                setTotalPages(data.pagination.totalPages);
+                setTotalContacts(data.pagination.total);
             } catch (error) {
                 console.error('Error fetching contacts:', error);
                 toast.error('Failed to fetch contacts');
@@ -124,7 +141,13 @@ export default function EditCampaignPage() {
         };
 
         fetchContacts();
-    }, []);
+    }, [currentPage, itemsPerPage, debouncedSearch]);
+
+    // Handle search input change
+    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setSearchQuery(e.target.value);
+        setCurrentPage(1); // Reset to first page on search
+    };
 
     // Format date for datetime-local input
     const formatDateTimeLocal = (date: Date) => {
@@ -136,22 +159,19 @@ export default function EditCampaignPage() {
         return `${year}-${month}-${day}T${hours}:${minutes}`;
     };
 
-    // Filter contacts based on search
-    const filteredContacts = contacts.filter((contact) => {
-        const searchLower = searchQuery.toLowerCase();
-        return (
-            contact.contactName?.toLowerCase().includes(searchLower) ||
-            contact.contactEmail?.toLowerCase().includes(searchLower) ||
-            contact.contactMobile?.includes(searchQuery)
-        );
-    });
-
-    // Handle select all
+    // Handle select all (current page)
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
-            setSelectedContacts(filteredContacts.map((c) => c.id));
+            const newSelection = [...selectedContacts];
+            contacts.forEach(contact => {
+                if (!newSelection.includes(contact.id)) {
+                    newSelection.push(contact.id);
+                }
+            });
+            setSelectedContacts(newSelection);
         } else {
-            setSelectedContacts([]);
+            const currentPageIds = contacts.map(c => c.id);
+            setSelectedContacts(selectedContacts.filter(id => !currentPageIds.includes(id)));
         }
     };
 
@@ -161,6 +181,24 @@ export default function EditCampaignPage() {
             setSelectedContacts([...selectedContacts, contactId]);
         } else {
             setSelectedContacts(selectedContacts.filter((id) => id !== contactId));
+        }
+    };
+
+    // Handle select all contacts (across all pages)
+    const handleSelectAllTotal = async () => {
+        try {
+            setSelectingAll(true);
+            const response = await fetch('/api/contacts?limit=10000'); // Fetch all IDs
+            if (!response.ok) throw new Error('Failed to fetch all contacts');
+            const data = await response.json();
+            const allIds = data.contacts.map((c: any) => c.id);
+            setSelectedContacts(allIds);
+            toast.success(`Selected all ${allIds.length} contacts`);
+        } catch (error) {
+            console.error('Error selecting all contacts:', error);
+            toast.error('Failed to select all contacts');
+        } finally {
+            setSelectingAll(false);
         }
     };
 
@@ -176,6 +214,13 @@ export default function EditCampaignPage() {
 
         if (!startDate || !endDate) {
             toast.error('Please select start and end dates');
+            return;
+        }
+
+        const now = new Date();
+
+        if (new Date(endDate) < now) {
+            toast.error('End date cannot be in the past');
             return;
         }
 
@@ -214,15 +259,17 @@ export default function EditCampaignPage() {
         }
     };
 
-    const allSelected = filteredContacts.length > 0 && selectedContacts.length === filteredContacts.length;
-    const someSelected = selectedContacts.length > 0 && selectedContacts.length < filteredContacts.length;
+    const allOnPageSelected = contacts.length > 0 && contacts.every((c) => selectedContacts.includes(c.id));
+    const someOnPageSelected = contacts.some((c) => selectedContacts.includes(c.id)) && !allOnPageSelected;
+
+    const minDate = new Date().toISOString().slice(0, 16);
 
     if (loadingCampaign) {
         return (
             <div className="min-h-screen bg-background">
-              
+
                 <div className="flex">
-              
+
                     <main className="flex-1 p-6">
                         <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
                             <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -235,15 +282,15 @@ export default function EditCampaignPage() {
 
     return (
         <div className="min-h-screen bg-background">
-     
+
             <div className="flex">
-          
+
                 <main className="flex-1 p-6">
                     <div className=" mx-auto space-y-6">
                         {/* Header */}
                         <div className="flex items-center gap-4">
                             <Button
-                            className='cursor-pointer'
+                                className='cursor-pointer'
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => router.back()}
@@ -283,12 +330,11 @@ export default function EditCampaignPage() {
                                     <div className="space-y-2">
                                         <Label htmlFor="description">Description</Label>
                                         <Textarea
-                                        className='border rounded-md border-gray-300'
+                                            className='border rounded-md border-gray-300 h-32 resize-none'
                                             id="description"
                                             placeholder="Enter campaign description (optional)"
                                             value={description}
                                             onChange={(e) => setDescription(e.target.value)}
-                                            rows={3}
                                         />
                                     </div>
 
@@ -311,6 +357,7 @@ export default function EditCampaignPage() {
                                                 type="datetime-local"
                                                 value={endDate}
                                                 onChange={(e) => setEndDate(e.target.value)}
+                                                min={startDate || minDate}
                                                 required
                                             />
                                         </div>
@@ -327,15 +374,31 @@ export default function EditCampaignPage() {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    {/* Search */}
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                                        <Input
-                                            placeholder="Search contacts..."
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="pl-9"
-                                        />
+                                    <div className="flex flex-col sm:flex-row gap-4">
+                                        <div className="relative flex-1">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                                            <Input
+                                                placeholder="Search contacts by name, email, or mobile..."
+                                                value={searchQuery}
+                                                onChange={handleSearchChange}
+                                                className="pl-9"
+                                            />
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="sm:w-auto h-10"
+                                            onClick={handleSelectAllTotal}
+                                            disabled={selectingAll || loadingContacts}
+                                        >
+                                            {selectingAll ? (
+                                                <Loader2 className="size-4 mr-2 animate-spin" />
+                                            ) : (
+                                                <Users className="size-4 mr-2" />
+                                            )}
+                                            Select All Contacts
+                                        </Button>
                                     </div>
 
                                     {/* Contacts Table */}
@@ -343,51 +406,85 @@ export default function EditCampaignPage() {
                                         <div className="flex items-center justify-center py-12">
                                             <Loader2 className="size-8 animate-spin text-muted-foreground" />
                                         </div>
-                                    ) : filteredContacts.length === 0 ? (
+                                    ) : contacts.length === 0 ? (
                                         <div className="text-center py-12">
                                             <p className="text-muted-foreground">
                                                 {searchQuery ? 'No contacts found matching your search' : 'No contacts available'}
                                             </p>
                                         </div>
                                     ) : (
-                                        <div className="rounded-md border max-h-[400px] overflow-auto">
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead className="w-[50px]">
-                                                            <Checkbox
-                                                                checked={allSelected}
-                                                                onCheckedChange={handleSelectAll}
-                                                                aria-label="Select all"
-                                                                className={someSelected ? 'data-[state=checked]:bg-muted' : ''}
-                                                            />
-                                                        </TableHead>
-                                                        <TableHead>Name</TableHead>
-                                                        <TableHead>Email</TableHead>
-                                                        <TableHead>Mobile</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {filteredContacts.map((contact) => (
-                                                        <TableRow key={contact.id}>
-                                                            <TableCell>
+                                        <div className="space-y-4">
+                                            <div className="rounded-md border">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow>
+                                                            <TableHead className="w-[50px]">
                                                                 <Checkbox
-                                                                    checked={selectedContacts.includes(contact.id)}
-                                                                    onCheckedChange={(checked) =>
-                                                                        handleSelectContact(contact.id, checked as boolean)
-                                                                    }
-                                                                    aria-label={`Select ${contact.contactName}`}
+                                                                    checked={allOnPageSelected}
+                                                                    onCheckedChange={handleSelectAll}
+                                                                    aria-label="Select all"
+                                                                    className={someOnPageSelected ? 'data-[state=checked]:bg-muted' : ''}
                                                                 />
-                                                            </TableCell>
-                                                            <TableCell className="font-medium">
-                                                                {contact.contactName || '-'}
-                                                            </TableCell>
-                                                            <TableCell>{contact.contactEmail || '-'}</TableCell>
-                                                            <TableCell>{contact.contactMobile || '-'}</TableCell>
+                                                            </TableHead>
+                                                            <TableHead>Name</TableHead>
+                                                            <TableHead>Email</TableHead>
+                                                            <TableHead>Mobile</TableHead>
                                                         </TableRow>
-                                                    ))}
-                                                </TableBody>
-                                            </Table>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {contacts.map((contact) => (
+                                                            <TableRow key={contact.id}>
+                                                                <TableCell>
+                                                                    <Checkbox
+                                                                        checked={selectedContacts.includes(contact.id)}
+                                                                        onCheckedChange={(checked) =>
+                                                                            handleSelectContact(contact.id, checked as boolean)
+                                                                        }
+                                                                        aria-label={`Select ${contact.contactName}`}
+                                                                    />
+                                                                </TableCell>
+                                                                <TableCell className="font-medium">
+                                                                    {contact.contactName || '-'}
+                                                                </TableCell>
+                                                                <TableCell>{contact.contactEmail || '-'}</TableCell>
+                                                                <TableCell>{contact.contactMobile || '-'}</TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+
+                                            {/* Pagination */}
+                                            <div className="flex items-center justify-between mt-4">
+                                                <div className="text-sm text-muted-foreground">
+                                                    Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalContacts)} of {totalContacts} contacts
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm text-muted-foreground">
+                                                        Page {currentPage} of {totalPages}
+                                                    </span>
+                                                    <div className="flex gap-1">
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                                                            disabled={currentPage === 1}
+                                                        >
+                                                            <ChevronLeft className="size-4" />
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                                                            disabled={currentPage === totalPages}
+                                                        >
+                                                            <ChevronRight className="size-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     )}
                                 </CardContent>
@@ -396,7 +493,7 @@ export default function EditCampaignPage() {
                             {/* Actions */}
                             <div className="flex justify-end gap-4">
                                 <Button
-                                className='cursor-pointer'
+                                    className='cursor-pointer'
                                     type="button"
                                     variant="outline"
                                     onClick={() => router.back()}

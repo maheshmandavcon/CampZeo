@@ -431,7 +431,7 @@ export default function ContactListPage() {
                                                         <div className="flex flex-wrap gap-1">
                                                             {contact.campaigns.length > 0 ? (
                                                                 contact.campaigns.slice(0, 2).map((campaign) => (
-                                                                    <Badge key={campaign.id} variant="secondary" className="text-xs">
+                                                                    <Badge key={campaign.id} variant="secondary" className="text-xs max-w-[150px] truncate" title={campaign.name}>
                                                                         {campaign.name}
                                                                     </Badge>
                                                                 ))
