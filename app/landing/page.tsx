@@ -224,7 +224,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-8">
             <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight !text-black">Trusted by Industry Leaders</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto text-lg md:text-xl !text-black">
+            <p className="max-w-2xl mx-auto text-lg md:text-xl !text-black">
               See what our customers have to say about their experience
             </p>
           </div>
