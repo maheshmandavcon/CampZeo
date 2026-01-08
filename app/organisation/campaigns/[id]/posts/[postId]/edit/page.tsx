@@ -606,10 +606,10 @@ export default function EditPostPage() {
                                                     <button
                                                         key={platform}
                                                         type="button"
-                                                        onClick={() => setType(platform)}
+                                                        disabled={true}
                                                         className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] ${isSelected
                                                             ? 'border-primary bg-primary/10 shadow-sm'
-                                                            : 'border-border hover:border-primary/50 hover:bg-muted/50 cursor-pointer'
+                                                            : 'border-border opacity-50 cursor-not-allowed'
                                                             }`}
                                                     >
                                                         <Icon className={`size-6 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
@@ -620,6 +620,9 @@ export default function EditPostPage() {
                                                 );
                                             })}
                                         </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            Platform cannot be changed during edit.
+                                        </p>
                                     </>
                                 )}
                             </div>
@@ -731,11 +734,14 @@ export default function EditPostPage() {
                             )}
 
                             {/* Media Upload */}
-                            {['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(type) && (
+                            {['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST', 'EMAIL', 'WHATSAPP'].includes(type) && (
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between mb-1">
                                         <Label className="text-xs">
-                                            {type === 'YOUTUBE' ? 'Video *' : 'Media (Photo/Video)'}
+                                            {type === 'YOUTUBE' ? 'Video *' :
+                                                type === 'EMAIL' ? 'Attachments (Docs, Images, etc.)' :
+                                                    type === 'WHATSAPP' ? 'Media (Images, Video, PDF)' :
+                                                        'Media (Photo/Video)'}
                                             {['INSTAGRAM', 'PINTEREST'].includes(type) && ' *'}
                                         </Label>
                                         <span className="text-[10px] text-muted-foreground">{mediaUrls.length}/10</span>
@@ -747,6 +753,10 @@ export default function EditPostPage() {
                                                 {isVideoUrl(url) ? (
                                                     <div className="flex items-center justify-center h-full bg-black/10">
                                                         <Video className="size-6 text-muted-foreground" />
+                                                    </div>
+                                                ) : url.match(/\.(pdf|doc|docx|xls|xlsx|txt|csv)$/i) ? (
+                                                    <div className="flex items-center justify-center h-full">
+                                                        <FileText className="size-6 text-muted-foreground" />
                                                     </div>
                                                 ) : (
                                                     <img
@@ -784,7 +794,12 @@ export default function EditPostPage() {
                                                         id="media-upload"
                                                         type="file"
                                                         className="hidden"
-                                                        accept={type === 'YOUTUBE' ? 'video/*' : 'image/*,video/*'}
+                                                        accept={
+                                                            type === 'YOUTUBE' ? 'video/*' :
+                                                                type === 'EMAIL' ? '*/*' :
+                                                                    type === 'WHATSAPP' ? 'image/*,video/*,application/pdf' :
+                                                                        'image/*,video/*'
+                                                        }
                                                         onChange={handleFileUpload}
                                                         disabled={uploadingMedia}
                                                         multiple
