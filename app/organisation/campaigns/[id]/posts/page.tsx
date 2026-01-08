@@ -448,10 +448,10 @@ export default function CampaignPostsPage() {
 
                         <div className="flex items-center justify-between gap-8 w-full overflow-hidden">
                             <div className="flex-1 ">
-                                <h1 className="text-2xl md:text-3xl font-bold tracking-tight truncate w-4xl" title={campaign?.name || ''}>
+                                <h1 className="text-2xl md:text-3xl font-bold tracking-tight truncate w-3xl" title={campaign?.name || ''}>
                                     {campaign?.name}
                                 </h1>
-                                <p className="text-muted-foreground mt-1 line-clamp-2 text-sm w-7xl md:text-base" title={campaign?.description || ''}>
+                                <p className="text-muted-foreground mt-1 line-clamp-2 text-sm w-[50%]  md:text-base" title={campaign?.description || ''}>
                                     {campaign?.description || 'Manage posts for this campaign'}
                                 </p>
                             </div>
