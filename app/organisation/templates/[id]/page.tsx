@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Loader2, FileEdit, Mail, MessageSquare, Facebook, Instagram, Linkedin, Youtube, Twitter, Image as ImageIcon, Send, Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, ThumbsUp, Repeat2, Upload, X, Pin, Phone } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { upload } from '@vercel/blob/client';
 
 const ALL_PLATFORMS = [
     { value: "EMAIL", label: "Email", icon: Mail },
@@ -41,6 +42,7 @@ export default function EditTemplatePage() {
     const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
     const [isSaving, setIsSaving] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
 
     useEffect(() => {
         fetchConnectedPlatforms();
@@ -109,22 +111,22 @@ export default function EditTemplatePage() {
         if (!files || files.length === 0) return;
 
         setIsUploading(true);
+        setUploadProgress(0);
         try {
             const uploadedUrls: string[] = [];
 
             for (const file of Array.from(files)) {
-                const formDataUpload = new FormData();
-                formDataUpload.append('file', file);
-
-                // Use the same endpoint as NewTemplatePage for consistency
-                const response = await fetch('/api/socialmedia/upload-media-file', {
-                    method: 'POST',
-                    body: formDataUpload,
+                // Use client-side upload to avoid Vercel 4.5MB serverless limit
+                const newBlob = await upload(file.name, file, {
+                    access: 'public',
+                    handleUploadUrl: '/api/upload',
+                    onUploadProgress: (progress) => {
+                        setUploadProgress(progress.percentage);
+                    }
                 });
 
-                const data = await response.json();
-                if (data.url) {
-                    uploadedUrls.push(data.url);
+                if (newBlob.url) {
+                    uploadedUrls.push(newBlob.url);
                 }
             }
 
@@ -139,6 +141,7 @@ export default function EditTemplatePage() {
             toast.error('Failed to upload images');
         } finally {
             setIsUploading(false);
+            setUploadProgress(0);
             e.target.value = ''; // Reset file input to allow re-uploading same file
         }
     };
@@ -152,21 +155,23 @@ export default function EditTemplatePage() {
         if (!files || files.length === 0) return;
 
         setIsUploading(true);
+        setUploadProgress(0);
         try {
             const file = files[0];
-            const formData = new FormData();
-            formData.append('file', file);
 
-            const response = await fetch('/api/socialmedia/upload-media-file', {
-                method: 'POST',
-                body: formData,
+            // Use client-side upload
+            const newBlob = await upload(file.name, file, {
+                access: 'public',
+                handleUploadUrl: '/api/upload',
+                onUploadProgress: (progress) => {
+                    setUploadProgress(progress.percentage);
+                }
             });
 
-            const data = await response.json();
-            if (data.url) {
+            if (newBlob.url) {
                 setFormData(prev => ({
                     ...prev,
-                    metadata: { ...prev.metadata, thumbnailUrl: data.url }
+                    metadata: { ...prev.metadata, thumbnailUrl: newBlob.url }
                 }));
                 toast.success('Thumbnail uploaded successfully');
             }
@@ -175,6 +180,7 @@ export default function EditTemplatePage() {
             toast.error('Failed to upload thumbnail');
         } finally {
             setIsUploading(false);
+            setUploadProgress(0);
             e.target.value = ''; // Reset file input to allow re-uploading same file
         }
     };
@@ -1094,7 +1100,7 @@ export default function EditTemplatePage() {
                                             disabled={isUploading}
                                             className="gap-2 w-full"
                                         >
-                                            {isUploading ? "Uploading..." : "Upload Thumbnail"}
+                                            {isUploading ? `Uploading... ${uploadProgress > 0 ? `${uploadProgress.toFixed(0)}%` : ''}` : "Upload Thumbnail"}
                                         </Button>
                                         <input
                                             id="thumbnail-upload"
@@ -1155,7 +1161,7 @@ export default function EditTemplatePage() {
                                             disabled={isUploading}
                                             className="gap-2 w-full"
                                         >
-                                            {isUploading ? "Uploading..." : "Upload Cover"}
+                                            {isUploading ? `Uploading... ${uploadProgress > 0 ? `${uploadProgress.toFixed(0)}%` : ''}` : "Upload Cover"}
                                         </Button>
                                         <input
                                             id="cover-upload"
@@ -1227,7 +1233,7 @@ export default function EditTemplatePage() {
                                     {isUploading ? (
                                         <>
                                             <div className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                                            Uploading...
+                                            Uploading... {uploadProgress > 0 ? `${uploadProgress.toFixed(0)}%` : ''}
                                         </>
                                     ) : (
                                         <>
