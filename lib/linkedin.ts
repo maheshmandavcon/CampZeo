@@ -233,6 +233,7 @@ export async function getLinkedInPostInsights(
             headers: {
                 "Authorization": `Bearer ${accessToken}`,
                 "X-Restli-Protocol-Version": "2.0.0",
+                "LinkedIn-Version": "202401",
             }
         });
 
@@ -249,6 +250,7 @@ export async function getLinkedInPostInsights(
             });
             if (postResponse.ok) {
                 postData = await postResponse.json();
+                console.log(`[LinkedIn] Post Metadata for ${urn}:`, JSON.stringify(postData, null, 2));
             }
         } catch (e) {
             console.warn(`[LinkedIn] Could not fetch post metadata for ${urn}`, e);
@@ -273,9 +275,35 @@ export async function getLinkedInPostInsights(
         }
 
         const data = await response.json();
+        console.log(`[LinkedIn] Social Actions Response for ${urn}:`, JSON.stringify(data, null, 2));
 
-        const likes = data.likesSummary?.totalLikes || 0;
-        const comments = data.commentsSummary?.totalComments || 0;
+        let likes = data.likesSummary?.totalLikes || data.likesSummary?.aggregatedTotalLikes || 0;
+        let comments = data.commentsSummary?.totalComments || data.commentsSummary?.aggregatedTotalComments || data.commentsSummary?.totalFirstLevelComments || 0;
+
+        // Fallback: If comments are 0, try activity URN if this is a share/ugcPost
+        if (comments === 0 && (urn.includes(':share:') || urn.includes(':ugcPost:'))) {
+            const activityUrn = urn.replace(':share:', ':activity:').replace(':ugcPost:', ':activity:');
+            console.log(`[LinkedIn] Comments are 0, trying with activity URN: ${activityUrn}`);
+            try {
+                const altResponse = await fetch(`https://api.linkedin.com/v2/socialActions/${encodeURIComponent(activityUrn)}`, {
+                    headers: {
+                        "Authorization": `Bearer ${accessToken}`,
+                        "X-Restli-Protocol-Version": "2.0.0",
+                        "LinkedIn-Version": "202401",
+                    }
+                });
+                if (altResponse.ok) {
+                    const altData = await altResponse.json();
+                    console.log(`[LinkedIn] Alt Social Actions Response:`, JSON.stringify(altData, null, 2));
+                    likes = altData.likesSummary?.totalLikes || altData.likesSummary?.aggregatedTotalLikes || likes;
+                    comments = altData.commentsSummary?.totalComments || altData.commentsSummary?.aggregatedTotalComments || altData.commentsSummary?.totalFirstLevelComments || comments;
+                }
+            } catch (e) {
+                console.warn(`[LinkedIn] Failed to fetch alt social actions`, e);
+            }
+        }
+
+        console.log(`[LinkedIn] Final Parsed - Likes: ${likes}, Comments: ${comments}`);
 
         // Fetch reach/impressions (statistics)
         let impressions = 0;
@@ -297,6 +325,7 @@ export async function getLinkedInPostInsights(
                 headers: {
                     "Authorization": `Bearer ${accessToken}`,
                     "X-Restli-Protocol-Version": "2.0.0",
+                    "LinkedIn-Version": "202401",
                 }
             });
 

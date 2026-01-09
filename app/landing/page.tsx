@@ -257,8 +257,8 @@ export default function LandingPage() {
         </div>
       </section>
       {/* Red CTA Section (Replaces Pricing Grid on Landing Page) */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-5xl mx-auto">
+      <section className="pt-20">
+        <div className="max-w-full mx-auto">
           <div className="bg-[#DC2626] rounded-xl text-white p-12 md:p-16 text-center shadow-lg">
             <h2 className="text-3xl md:text-5xl font-bold mb-6">
               Ready to streamline your workflow?
@@ -291,16 +291,18 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="py-12 px-4 sm:px-6 lg:px-8 border-t bg-background">
         <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-4 gap-8 mb-12">
+          <div className="grid  md:grid-cols-2 gap-8 mb-12">
             {/* Brand Section */}
             <div className="col-span-1 md:col-span-1">
               <div className="flex items-center gap-2 mb-4">
                 <img src="/logo-1.png" alt="Campzeo" className="h-8" />
               </div>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                The all-in-one platform for modern social media management and analytics.
+                The all-in-one platform for modern social media management and analytics. Helping users to measur the impact of their social media campaigns and make data-driven decisions to improve their audience engagement strategy.
               </p>
             </div>
+<div className="grid grid-cols-3 md:grid-cols-3">
+
 
             {/* Product */}
             <div>
@@ -333,7 +335,7 @@ export default function LandingPage() {
               </ul>
             </div>
           </div>
-
+</div>
           {/* Bottom Bar */}
           <div className="pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
             <p>© 2025 Campzeo. All rights reserved.</p>

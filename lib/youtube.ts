@@ -73,6 +73,7 @@ export async function postToYouTube(
         console.log(`[YouTube] Video size: ${videoSize} bytes`);
 
         // Step 2: Initialize resumable upload session
+        console.log(`[YouTube] Sending tags to API:`, metadata?.tags || []);
         const initResponse = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
             method: 'POST',
             headers: {
@@ -206,6 +207,12 @@ async function uploadYouTubeThumbnail(
 
         if (!response.ok) {
             const error = await response.text();
+
+            // Check for common permission errors
+            if (error.includes('forbidden') || error.includes('permissionDenied')) {
+                throw new Error(`YouTube channel does not have permission for custom thumbnails. Please ensure your channel is verified for "Advanced Features" (via phone verification) in YouTube Studio.`);
+            }
+
             throw new Error(`Thumbnail upload failed: ${error}`);
         }
 

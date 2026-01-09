@@ -491,6 +491,12 @@ export default function EditPostPage() {
             return;
         }
 
+        // Pinterest board validation
+        if (type === 'PINTEREST' && !pinterestBoardId) {
+            toast.error('Please select a Pinterest board');
+            return;
+        }
+
         // Prepare metadata
         let metadata: any = {};
         if (type === 'YOUTUBE') {

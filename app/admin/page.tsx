@@ -54,7 +54,7 @@ import {
 import { SecretInput } from "@/components/ui/secret-input";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { toast } from "sonner";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { constants } from "buffer";
 import { JSX } from "react/jsx-runtime";
@@ -1049,7 +1049,10 @@ export default function AdminDashboard() {
               </Button>
             </SheetTrigger> */}
             <SheetContent side="left" className="p-0 w-72 bg-[#0f172a] text-white border-r-slate-800">
-              {/* Mobile Menu Content */}
+              <SheetTitle className="sr-only">Admin Navigation Menu</SheetTitle>
+              <SheetDescription className="sr-only">
+                Access organizations, enquiries, platform configurations, and system logs.
+              </SheetDescription>
               <div className="p-6">
                 <div className="flex items-center gap-2 font-bold text-xl tracking-wide text-white mb-8">
                   <div className="size-8 rounded-full bg-primary/20 flex items-center justify-center">

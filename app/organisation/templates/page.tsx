@@ -275,7 +275,7 @@ export default function TemplatesPage() {
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredTemplates.map((template) => (
-              <Card key={template.id} className="hover:shadow-lg transition-shadow overflow-hidden">
+              <Card key={template.id} className="hover:shadow-lg transition-shadow h-fit overflow-hidden">
                 {/* Template Title Header */}
                 <div className="p-4 border-b bg-gray-50/50">
                   <div className="flex items-center justify-between mb-2">
