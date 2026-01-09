@@ -497,6 +497,12 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 toast.error('Please select a Facebook Page');
                 return;
             }
+
+            // Pinterest board validation
+            if (selectedPlatform === 'PINTEREST' && !pinterestBoardId) {
+                toast.error('Please select a Pinterest board');
+                return;
+            }
         }
 
         try {

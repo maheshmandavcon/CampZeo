@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ChevronLeft, Sparkles, Mail, MessageSquare, Facebook, Instagram, Linkedin, Youtube, Twitter, Image as ImageIcon, Send, Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, ThumbsUp, Repeat2, Upload, X, Phone, Pin, MoreVertical } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, Mail, MessageSquare, Facebook, Instagram, Linkedin, Youtube, Twitter, Image as ImageIcon, Send, Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, ThumbsUp, Repeat2, Upload, X, Phone, Pin, MoreVertical } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { upload } from '@vercel/blob/client';
 
 const ALL_PLATFORMS = [
     { value: "EMAIL", label: "Email", icon: Mail },
@@ -36,8 +37,10 @@ export default function NewTemplatePage() {
         mediaUrls: [] as string[],
         metadata: {} as any,
     });
+    const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
     const [isSaving, setIsSaving] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
 
     useEffect(() => {
         fetchConnectedPlatforms();
@@ -69,12 +72,14 @@ export default function NewTemplatePage() {
     const PLATFORMS = ALL_PLATFORMS.filter(p => connectedPlatforms.includes(p.value));
 
     const handlePlatformChange = (newPlatform: string) => {
-        // Reset subject and content when platform changes
+        // Reset subject, content, mediaUrls and metadata when platform changes
         setFormData({
             ...formData,
             platform: newPlatform,
             subject: "",
             content: "",
+            mediaUrls: [],
+            metadata: {},
         });
     };
 
@@ -83,21 +88,22 @@ export default function NewTemplatePage() {
         if (!files || files.length === 0) return;
 
         setIsUploading(true);
+        setUploadProgress(0);
         try {
             const uploadedUrls: string[] = [];
 
             for (const file of Array.from(files)) {
-                const formData = new FormData();
-                formData.append('file', file);
-
-                const response = await fetch('/api/socialmedia/upload-media-file', {
-                    method: 'POST',
-                    body: formData,
+                // Use client-side upload to avoid Vercel 4.5MB serverless limit
+                const newBlob = await upload(file.name, file, {
+                    access: 'public',
+                    handleUploadUrl: '/api/upload',
+                    onUploadProgress: (progress) => {
+                        setUploadProgress(progress.percentage);
+                    }
                 });
 
-                const data = await response.json();
-                if (data.url) {
-                    uploadedUrls.push(data.url);
+                if (newBlob.url) {
+                    uploadedUrls.push(newBlob.url);
                 }
             }
 
@@ -112,6 +118,8 @@ export default function NewTemplatePage() {
             toast.error('Failed to upload files');
         } finally {
             setIsUploading(false);
+            setUploadProgress(0);
+            e.target.value = ''; // Reset file input to allow re-uploading same file
         }
     };
 
@@ -120,21 +128,23 @@ export default function NewTemplatePage() {
         if (!files || files.length === 0) return;
 
         setIsUploading(true);
+        setUploadProgress(0);
         try {
             const file = files[0];
-            const formData = new FormData();
-            formData.append('file', file);
 
-            const response = await fetch('/api/socialmedia/upload-media-file', {
-                method: 'POST',
-                body: formData,
+            // Use client-side upload
+            const newBlob = await upload(file.name, file, {
+                access: 'public',
+                handleUploadUrl: '/api/upload',
+                onUploadProgress: (progress) => {
+                    setUploadProgress(progress.percentage);
+                }
             });
 
-            const data = await response.json();
-            if (data.url) {
+            if (newBlob.url) {
                 setFormData(prev => ({
                     ...prev,
-                    metadata: { ...prev.metadata, thumbnailUrl: data.url }
+                    metadata: { ...prev.metadata, thumbnailUrl: newBlob.url }
                 }));
                 toast.success('Thumbnail uploaded successfully');
             }
@@ -143,6 +153,8 @@ export default function NewTemplatePage() {
             toast.error('Failed to upload thumbnail');
         } finally {
             setIsUploading(false);
+            setUploadProgress(0);
+            e.target.value = ''; // Reset file input to allow re-uploading same file
         }
     };
 
@@ -151,6 +163,10 @@ export default function NewTemplatePage() {
             ...prev,
             mediaUrls: prev.mediaUrls.filter((_, i) => i !== index)
         }));
+    };
+
+    const isVideo = (url: string) => {
+        return url.match(/\.(mp4|webm|ogg|mov)$/i);
     };
 
     const handleCreate = async () => {
@@ -225,21 +241,61 @@ export default function NewTemplatePage() {
                                 style={{ whiteSpace: 'pre-wrap', minHeight: '100px', padding: "10px" }}
                             />
 
-                            {/* Image Preview */}
+                            {/* Media Preview Carousel */}
                             {formData.mediaUrls.length > 0 ? (
-                                <div className="mb-3">
+                                <div className="mb-3 relative group">
                                     <div className="relative aspect-video w-full overflow-hidden rounded-lg border bg-gray-100">
-                                        <Image
-                                            src={formData.mediaUrls[0]}
-                                            alt="Preview"
-                                            fill
-                                            className="object-cover"
-                                            unoptimized
-                                        />
+                                        {isVideo(formData.mediaUrls[currentMediaIndex]) ? (
+                                            <video
+                                                src={formData.mediaUrls[currentMediaIndex]}
+                                                className="size-full object-cover"
+                                                controls
+                                                autoPlay={isPlayingVideo}
+                                                muted
+                                                playsInline
+                                            />
+                                        ) : (
+                                            <Image
+                                                src={formData.mediaUrls[currentMediaIndex]}
+                                                alt="Preview"
+                                                fill
+                                                className="object-cover"
+                                                unoptimized
+                                            />
+                                        )}
+
+                                        {/* Carousel Controls */}
+                                        {formData.mediaUrls.length > 1 && (
+                                            <>
+                                                <button
+                                                    onClick={() => setCurrentMediaIndex(prev => (prev > 0 ? prev - 1 : formData.mediaUrls.length - 1))}
+                                                    className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                                >
+                                                    <ChevronLeft className="size-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => setCurrentMediaIndex(prev => (prev < formData.mediaUrls.length - 1 ? prev + 1 : 0))}
+                                                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                                >
+                                                    <ChevronRight className="size-4" />
+                                                </button>
+                                                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                                                    {formData.mediaUrls.map((_, i) => (
+                                                        <div
+                                                            key={i}
+                                                            className={cn(
+                                                                "size-1.5 rounded-full transition-all",
+                                                                i === currentMediaIndex ? "bg-white w-3" : "bg-white/50"
+                                                            )}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                     {formData.mediaUrls.length > 1 && (
-                                        <div className="mt-1 text-xs text-gray-500">
-                                            +{formData.mediaUrls.length - 1} more photos
+                                        <div className="mt-1 text-xs text-gray-500 text-center">
+                                            {currentMediaIndex + 1} of {formData.mediaUrls.length}
                                         </div>
                                     )}
                                 </div>
@@ -284,20 +340,58 @@ export default function NewTemplatePage() {
                             </div>
                         </div>
 
-                        {/* Image Preview */}
+                        {/* Media Preview Carousel */}
                         {formData.mediaUrls.length > 0 ? (
-                            <div className="relative flex aspect-square w-full items-center justify-center bg-black">
-                                <Image
-                                    src={formData.mediaUrls[0]}
-                                    alt="Preview"
-                                    fill
-                                    className="object-cover"
-                                    unoptimized
-                                />
+                            <div className="relative flex aspect-square w-full items-center justify-center bg-black group overflow-hidden">
+                                {isVideo(formData.mediaUrls[currentMediaIndex]) ? (
+                                    <video
+                                        src={formData.mediaUrls[currentMediaIndex]}
+                                        className="size-full object-cover"
+                                        controls
+                                        autoPlay={isPlayingVideo}
+                                        muted
+                                        playsInline
+                                    />
+                                ) : (
+                                    <Image
+                                        src={formData.mediaUrls[currentMediaIndex]}
+                                        alt="Preview"
+                                        fill
+                                        className="object-cover"
+                                        unoptimized
+                                    />
+                                )}
+
+                                {/* Carousel Controls */}
                                 {formData.mediaUrls.length > 1 && (
-                                    <div className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-1 text-xs text-white">
-                                        1/{formData.mediaUrls.length}
-                                    </div>
+                                    <>
+                                        <button
+                                            onClick={() => setCurrentMediaIndex(prev => (prev > 0 ? prev - 1 : formData.mediaUrls.length - 1))}
+                                            className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 z-10"
+                                        >
+                                            <ChevronLeft className="size-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => setCurrentMediaIndex(prev => (prev < formData.mediaUrls.length - 1 ? prev + 1 : 0))}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 z-10"
+                                        >
+                                            <ChevronRight className="size-4" />
+                                        </button>
+                                        <div className="absolute top-2 right-2 rounded-full bg-black/50 px-2 py-1 text-[10px] text-white z-10">
+                                            {currentMediaIndex + 1}/{formData.mediaUrls.length}
+                                        </div>
+                                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 z-10">
+                                            {formData.mediaUrls.map((_, i) => (
+                                                <div
+                                                    key={i}
+                                                    className={cn(
+                                                        "size-1.5 rounded-full transition-all",
+                                                        i === currentMediaIndex ? "bg-white w-3" : "bg-white/50"
+                                                    )}
+                                                />
+                                            ))}
+                                        </div>
+                                    </>
                                 )}
                             </div>
                         ) : (
@@ -361,18 +455,63 @@ export default function NewTemplatePage() {
                                 style={{ whiteSpace: 'pre-wrap', minHeight: '100px', padding: "10px" }}
                             />
 
-                            {/* Image Preview */}
+                            {/* Media Preview Carousel */}
                             {formData.mediaUrls.length > 0 ? (
-                                <div className="mb-3">
+                                <div className="mb-3 relative group">
                                     <div className="relative aspect-video w-full overflow-hidden rounded border bg-gray-100">
-                                        <Image
-                                            src={formData.mediaUrls[0]}
-                                            alt="Preview"
-                                            fill
-                                            className="object-cover"
-                                            unoptimized
-                                        />
+                                        {isVideo(formData.mediaUrls[currentMediaIndex]) ? (
+                                            <video
+                                                src={formData.mediaUrls[currentMediaIndex]}
+                                                className="size-full object-cover"
+                                                controls
+                                                autoPlay={isPlayingVideo}
+                                                muted
+                                                playsInline
+                                            />
+                                        ) : (
+                                            <Image
+                                                src={formData.mediaUrls[currentMediaIndex]}
+                                                alt="Preview"
+                                                fill
+                                                className="object-cover"
+                                                unoptimized
+                                            />
+                                        )}
+
+                                        {/* Carousel Controls */}
+                                        {formData.mediaUrls.length > 1 && (
+                                            <>
+                                                <button
+                                                    onClick={() => setCurrentMediaIndex(prev => (prev > 0 ? prev - 1 : formData.mediaUrls.length - 1))}
+                                                    className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                                >
+                                                    <ChevronLeft className="size-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => setCurrentMediaIndex(prev => (prev < formData.mediaUrls.length - 1 ? prev + 1 : 0))}
+                                                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                                >
+                                                    <ChevronRight className="size-4" />
+                                                </button>
+                                                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                                                    {formData.mediaUrls.map((_, i) => (
+                                                        <div
+                                                            key={i}
+                                                            className={cn(
+                                                                "size-1.5 rounded-full transition-all",
+                                                                i === currentMediaIndex ? "bg-white w-3" : "bg-white/50"
+                                                            )}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
+                                    {formData.mediaUrls.length > 1 && (
+                                        <div className="mt-1 text-xs text-gray-500 text-center">
+                                            {currentMediaIndex + 1} of {formData.mediaUrls.length}
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="mb-3 flex items-center justify-center rounded border border-gray-300 bg-gray-50 p-12">
@@ -400,15 +539,15 @@ export default function NewTemplatePage() {
             case "YOUTUBE":
                 return (
                     <div className="rounded-lg border bg-white shadow-sm">
-                        {/* Video Thumbnail Preview */}
+                        {/* Media Preview Carousel */}
                         <div className={cn(
-                            "relative flex items-center justify-center bg-black overflow-hidden",
+                            "relative flex items-center justify-center bg-black overflow-hidden group",
                             formData.metadata?.postType === 'SHORT' ? "aspect-[9/16] mx-auto w-1/2" : "aspect-video"
                         )}>
-                            {isPlayingVideo && formData.mediaUrls.length > 0 && formData.mediaUrls[0].match(/\.(mp4|webm|ogg|mov)$/i) ? (
+                            {isPlayingVideo && formData.mediaUrls.length > 0 && isVideo(formData.mediaUrls[currentMediaIndex]) ? (
                                 // Show video player when playing
                                 <video
-                                    src={formData.mediaUrls[0]}
+                                    src={formData.mediaUrls[currentMediaIndex]}
                                     className="size-full object-cover"
                                     controls
                                     autoPlay
@@ -416,7 +555,7 @@ export default function NewTemplatePage() {
                                 />
                             ) : (
                                 <>
-                                    {formData.metadata?.thumbnailUrl ? (
+                                    {formData.metadata?.thumbnailUrl && currentMediaIndex === 0 ? (
                                         <Image
                                             src={formData.metadata.thumbnailUrl}
                                             alt="Thumbnail"
@@ -425,15 +564,15 @@ export default function NewTemplatePage() {
                                             unoptimized
                                         />
                                     ) : formData.mediaUrls.length > 0 ? (
-                                        formData.mediaUrls[0].match(/\.(mp4|webm|ogg|mov)$/i) ? (
+                                        isVideo(formData.mediaUrls[currentMediaIndex]) ? (
                                             <video
-                                                src={formData.mediaUrls[0]}
+                                                src={formData.mediaUrls[currentMediaIndex]}
                                                 className="size-full object-cover opacity-80"
                                                 preload="metadata"
                                             />
                                         ) : (
                                             <Image
-                                                src={formData.mediaUrls[0]}
+                                                src={formData.mediaUrls[currentMediaIndex]}
                                                 alt="Preview"
                                                 fill
                                                 className="object-cover opacity-80"
@@ -448,18 +587,40 @@ export default function NewTemplatePage() {
                                     )}
 
                                     {/* Play Button Overlay */}
-                                    <button
-                                        onClick={() => setIsPlayingVideo(true)}
-                                        disabled={!formData.mediaUrls.length || !formData.mediaUrls[0].match(/\.(mp4|webm|ogg|mov)$/i)}
-                                        className="absolute inset-0 flex items-center justify-center disabled:cursor-not-allowed"
-                                    >
-                                        <div className="flex size-16 items-center justify-center rounded-full bg-red-600/90 shadow-lg backdrop-blur-sm transition-transform hover:scale-110 disabled:opacity-50">
-                                            <div className="ml-1 size-0 border-y-8 border-l-12 border-y-transparent border-l-white"></div>
-                                        </div>
-                                    </button>
+                                    {formData.mediaUrls.length > 0 && isVideo(formData.mediaUrls[currentMediaIndex]) && (
+                                        <button
+                                            onClick={() => setIsPlayingVideo(true)}
+                                            className="absolute inset-0 flex items-center justify-center z-20"
+                                        >
+                                            <div className="flex size-16 items-center justify-center rounded-full bg-red-600/90 shadow-lg backdrop-blur-sm transition-transform hover:scale-110">
+                                                <div className="ml-1 size-0 border-y-8 border-l-12 border-y-transparent border-l-white"></div>
+                                            </div>
+                                        </button>
+                                    )}
+
+                                    {/* Carousel Controls */}
+                                    {formData.mediaUrls.length > 1 && (
+                                        <>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setCurrentMediaIndex(prev => (prev > 0 ? prev - 1 : formData.mediaUrls.length - 1)); setIsPlayingVideo(false); }}
+                                                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 z-30"
+                                            >
+                                                <ChevronLeft className="size-4" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setCurrentMediaIndex(prev => (prev < formData.mediaUrls.length - 1 ? prev + 1 : 0)); setIsPlayingVideo(false); }}
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 z-30"
+                                            >
+                                                <ChevronRight className="size-4" />
+                                            </button>
+                                            <div className="absolute top-2 right-2 rounded-full bg-black/50 px-2 py-1 text-[10px] text-white z-30">
+                                                {currentMediaIndex + 1}/{formData.mediaUrls.length}
+                                            </div>
+                                        </>
+                                    )}
 
                                     {formData.metadata?.postType === 'SHORT' && (
-                                        <div className="absolute bottom-4 right-4 animate-bounce">
+                                        <div className="absolute bottom-4 right-4 animate-bounce z-10">
                                             <div className="rounded-full bg-white/20 p-2 backdrop-blur-md">
                                                 <span className="text-white text-xs font-bold">Shorts</span>
                                             </div>
@@ -534,18 +695,63 @@ export default function NewTemplatePage() {
                                 style={{ whiteSpace: 'pre-wrap', minHeight: '200px' }}
                             />
 
-                            {/* Image Preview */}
+                            {/* Media Preview Carousel */}
                             {formData.mediaUrls.length > 0 ? (
-                                <div className="mt-4">
+                                <div className="mt-4 relative group">
                                     <div className="relative aspect-video w-full overflow-hidden rounded border bg-gray-100">
-                                        <Image
-                                            src={formData.mediaUrls[0]}
-                                            alt="Preview"
-                                            fill
-                                            className="object-cover"
-                                            unoptimized
-                                        />
+                                        {isVideo(formData.mediaUrls[currentMediaIndex]) ? (
+                                            <video
+                                                src={formData.mediaUrls[currentMediaIndex]}
+                                                className="size-full object-cover"
+                                                controls
+                                                autoPlay={isPlayingVideo}
+                                                muted
+                                                playsInline
+                                            />
+                                        ) : (
+                                            <Image
+                                                src={formData.mediaUrls[currentMediaIndex]}
+                                                alt="Preview"
+                                                fill
+                                                className="object-cover"
+                                                unoptimized
+                                            />
+                                        )}
+
+                                        {/* Carousel Controls */}
+                                        {formData.mediaUrls.length > 1 && (
+                                            <>
+                                                <button
+                                                    onClick={() => setCurrentMediaIndex(prev => (prev > 0 ? prev - 1 : formData.mediaUrls.length - 1))}
+                                                    className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                                >
+                                                    <ChevronLeft className="size-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => setCurrentMediaIndex(prev => (prev < formData.mediaUrls.length - 1 ? prev + 1 : 0))}
+                                                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                                >
+                                                    <ChevronRight className="size-4" />
+                                                </button>
+                                                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                                                    {formData.mediaUrls.map((_, i) => (
+                                                        <div
+                                                            key={i}
+                                                            className={cn(
+                                                                "size-1.5 rounded-full transition-all",
+                                                                i === currentMediaIndex ? "bg-white w-3" : "bg-white/50"
+                                                            )}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
+                                    {formData.mediaUrls.length > 1 && (
+                                        <div className="mt-1 text-xs text-gray-500 text-center">
+                                            {currentMediaIndex + 1} of {formData.mediaUrls.length}
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="mt-4 flex items-center justify-center rounded border-2 border-dashed border-gray-300 bg-gray-50 p-12">
@@ -567,16 +773,45 @@ export default function NewTemplatePage() {
                                 <div className="self-start rounded-lg bg-white p-3 shadow-sm rounded-tl-none">
                                     <p className="text-xs font-bold text-red-500 mb-1">Your Business</p>
 
-                                    {/* Image Preview */}
+                                    {/* Media Preview Carousel */}
                                     {formData.mediaUrls.length > 0 && (
-                                        <div className="mb-2 relative aspect-video w-full max-w-[240px] overflow-hidden rounded-lg">
-                                            <Image
-                                                src={formData.mediaUrls[0]}
-                                                alt="Preview"
-                                                fill
-                                                className="object-cover"
-                                                unoptimized
-                                            />
+                                        <div className="mb-2 relative aspect-video w-full max-w-[240px] overflow-hidden rounded-lg group">
+                                            {isVideo(formData.mediaUrls[currentMediaIndex]) ? (
+                                                <video
+                                                    src={formData.mediaUrls[currentMediaIndex]}
+                                                    className="size-full object-cover"
+                                                    controls
+                                                    autoPlay={isPlayingVideo}
+                                                    muted
+                                                    playsInline
+                                                />
+                                            ) : (
+                                                <Image
+                                                    src={formData.mediaUrls[currentMediaIndex]}
+                                                    alt="Preview"
+                                                    fill
+                                                    className="object-cover"
+                                                    unoptimized
+                                                />
+                                            )}
+
+                                            {/* Carousel Controls */}
+                                            {formData.mediaUrls.length > 1 && (
+                                                <>
+                                                    <button
+                                                        onClick={() => setCurrentMediaIndex(prev => (prev > 0 ? prev - 1 : formData.mediaUrls.length - 1))}
+                                                        className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                                    >
+                                                        <ChevronLeft className="size-3" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setCurrentMediaIndex(prev => (prev < formData.mediaUrls.length - 1 ? prev + 1 : 0))}
+                                                        className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                                    >
+                                                        <ChevronRight className="size-3" />
+                                                    </button>
+                                                </>
+                                            )}
                                         </div>
                                     )}
 
@@ -600,20 +835,51 @@ export default function NewTemplatePage() {
                 return (
                     <div className="mx-auto max-w-sm">
                         <div className="rounded-2xl bg-white shadow-md overflow-hidden" style={{ width: '236px' }}> {/* Typical Pinterest column width */}
-                            {/* Image Preview - Pinterest is image first */}
-                            <div className="relative w-full bg-gray-100" style={{ minHeight: '300px' }}>
+                            {/* Media Preview Carousel */}
+                            <div className="relative w-full bg-gray-100 group" style={{ minHeight: '300px' }}>
                                 {formData.mediaUrls.length > 0 ? (
-                                    <Image
-                                        src={formData.mediaUrls[0]}
-                                        alt="Pin Preview"
-                                        fill
-                                        className="object-cover"
-                                        unoptimized
-                                    />
+                                    <>
+                                        {isVideo(formData.mediaUrls[currentMediaIndex]) ? (
+                                            <video
+                                                src={formData.mediaUrls[currentMediaIndex]}
+                                                className="size-full object-cover"
+                                                controls
+                                                autoPlay={isPlayingVideo}
+                                                muted
+                                                playsInline
+                                            />
+                                        ) : (
+                                            <Image
+                                                src={formData.mediaUrls[currentMediaIndex]}
+                                                alt="Pin Preview"
+                                                fill
+                                                className="object-cover"
+                                                unoptimized
+                                            />
+                                        )}
+
+                                        {/* Carousel Controls */}
+                                        {formData.mediaUrls.length > 1 && (
+                                            <>
+                                                <button
+                                                    onClick={(e) => { e.preventDefault(); setCurrentMediaIndex(prev => (prev > 0 ? prev - 1 : formData.mediaUrls.length - 1)); }}
+                                                    className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-1 text-gray-800 opacity-0 transition-opacity group-hover:opacity-100 shadow-sm"
+                                                >
+                                                    <ChevronLeft className="size-4" />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.preventDefault(); setCurrentMediaIndex(prev => (prev < formData.mediaUrls.length - 1 ? prev + 1 : 0)); }}
+                                                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-1 text-gray-800 opacity-0 transition-opacity group-hover:opacity-100 shadow-sm"
+                                                >
+                                                    <ChevronRight className="size-4" />
+                                                </button>
+                                            </>
+                                        )}
+                                    </>
                                 ) : (
-                                    <div className="flex h-full w-full flex-col items-center justify-center p-8 text-center">
+                                    <div className="flex h-full w-full flex-col items-center justify-center p-8 text-center" style={{ minHeight: '300px' }}>
                                         <Pin className="mb-2 size-8 text-red-600" />
-                                        <p className="text-xs text-gray-400">Upload an image to see preview</p>
+                                        <p className="text-xs text-gray-400">Media preview</p>
                                     </div>
                                 )}
                                 <div className="absolute right-2 top-2 rounded-full bg-white p-2 shadow-sm opacity-0 hover:opacity-100 transition-opacity">
@@ -794,16 +1060,16 @@ export default function NewTemplatePage() {
                             <div className="grid grid-cols-2 gap-4 pt-2">
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium">Privacy Status</label>
-                                 <div className="border rounded-md">
-                                    <select
-                                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                                        value={formData.metadata.youtubePrivacy || 'public'}
-                                        onChange={(e) => setFormData({ ...formData, metadata: { ...formData.metadata, youtubePrivacy: e.target.value } })}
-                                    >
-                                        <option value="public">Public</option>
-                                        <option value="unlisted">Unlisted</option>
-                                        <option value="private">Private</option>
-                                    </select></div>
+                                    <div className="border rounded-md">
+                                        <select
+                                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                            value={formData.metadata.youtubePrivacy || 'public'}
+                                            onChange={(e) => setFormData({ ...formData, metadata: { ...formData.metadata, youtubePrivacy: e.target.value } })}
+                                        >
+                                            <option value="public">Public</option>
+                                            <option value="unlisted">Unlisted</option>
+                                            <option value="private">Private</option>
+                                        </select></div>
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium">Tags (comma separated)</label>
@@ -823,7 +1089,7 @@ export default function NewTemplatePage() {
                                             disabled={isUploading}
                                             className="gap-2 w-full"
                                         >
-                                            {isUploading ? "Uploading..." : "Upload Thumbnail"}
+                                            {isUploading ? `Uploading... ${uploadProgress > 0 ? `${uploadProgress.toFixed(0)}%` : ''}` : "Upload Thumbnail"}
                                         </Button>
                                         <input
                                             id="thumbnail-upload"
@@ -884,7 +1150,7 @@ export default function NewTemplatePage() {
                                             disabled={isUploading}
                                             className="gap-2 w-full"
                                         >
-                                            {isUploading ? "Uploading..." : "Upload Cover"}
+                                            {isUploading ? `Uploading... ${uploadProgress > 0 ? `${uploadProgress.toFixed(0)}%` : ''}` : "Upload Cover"}
                                         </Button>
                                         <input
                                             id="cover-upload"
@@ -956,7 +1222,7 @@ export default function NewTemplatePage() {
                                     {isUploading ? (
                                         <>
                                             <div className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                                            Uploading...
+                                            Uploading... {uploadProgress > 0 ? `${uploadProgress.toFixed(0)}%` : ''}
                                         </>
                                     ) : (
                                         <>
@@ -980,16 +1246,15 @@ export default function NewTemplatePage() {
 
                             {/* Media Previews */}
                             {formData.mediaUrls.length > 0 && (
-                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                                <div className="flex flex-wrap gap-2">
                                     {formData.mediaUrls.map((url, index) => {
-                                        const isVideo = url.match(/\.(mp4|webm|ogg|mov)$/i);
+                                        const isVideoUrl = isVideo(url);
                                         return (
-                                            <div key={index} className="group relative aspect-square overflow-hidden rounded-lg border bg-muted">
-                                                {isVideo ? (
+                                            <div key={index} className="group relative size-20 overflow-hidden rounded-md border bg-muted">
+                                                {isVideoUrl ? (
                                                     <video
                                                         src={url}
                                                         className="size-full object-cover"
-                                                        controls
                                                         preload="metadata"
                                                     />
                                                 ) : (
@@ -1003,7 +1268,7 @@ export default function NewTemplatePage() {
                                                 )}
                                                 <button
                                                     onClick={() => removeImage(index)}
-                                                    className="absolute right-1 top-1 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                                                    className="absolute right-0.5 top-0.5 rounded-full bg-black/50 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
                                                 >
                                                     <X className="size-3" />
                                                 </button>

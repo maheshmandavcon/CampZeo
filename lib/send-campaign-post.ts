@@ -207,6 +207,22 @@ export async function sendCampaignPost(
                 }
 
                 const metadata = post.metadata as any;
+                const tags = metadata?.tags || [];
+                let finalMessage = post.message || "";
+
+                // Transform tags to hashtags and append to message
+                if (tags.length > 0) {
+                    const hashtags = tags.map((tag: string) => {
+                        // Remove special characters and spaces, then add #
+                        const normalizedTag = tag.trim().replace(/[^a-zA-Z0-9]/g, '');
+                        return normalizedTag ? `#${normalizedTag}` : '';
+                    }).filter(Boolean).join(' ');
+
+                    if (hashtags) {
+                        finalMessage = finalMessage ? `${finalMessage}\n\n${hashtags}` : hashtags;
+                    }
+                }
+
                 const media = post.mediaUrls.length > 0 ? post.mediaUrls[0] : post.videoUrl;
                 let platformResponse;
 
@@ -217,10 +233,10 @@ export async function sendCampaignPost(
                     platformResponse = await postToYouTube(
                         { accessToken: dbUser.youtubeAccessToken },
                         post.subject || 'Video Post',
-                        post.message || "",
+                        finalMessage,
                         media,
                         {
-                            tags: metadata?.tags || [],
+                            tags: tags,
                             privacy: metadata?.privacy || 'public',
                             isShort: isShort,
                             thumbnailUrl: metadata?.thumbnailUrl || undefined,
@@ -264,7 +280,7 @@ export async function sendCampaignPost(
                 } else {
                     platformResponse = await postYouTubeCommunity(
                         { accessToken: dbUser.youtubeAccessToken },
-                        post.message || post.subject || "",
+                        finalMessage || post.subject || "",
                         media || undefined
                     );
                 }

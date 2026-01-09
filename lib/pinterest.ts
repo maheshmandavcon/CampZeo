@@ -325,7 +325,7 @@ export async function getPinterestPostInsights(
 
             // Try different nested metric objects (Pinterest API v5 variations)
             const pm = pinMetadata.pin_metrics || pinMetadata.all_pin_metrics || {};
-            const lt = pm.lifetime || pm.all_time || {};
+            const lt = pm.lifetime_metrics || pm.lifetime || pm.all_time || {};
 
             // Pinterest v5 fields for interactions
             // Attempt to get from top level (sometimes available for real-time) or from lifetime metrics

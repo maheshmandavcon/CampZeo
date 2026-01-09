@@ -59,7 +59,7 @@ export default function ContactPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#fafafa] dark:bg-black text-foreground selection:bg-primary/10 overflow-x-hidden">
+        <div className="min-h-screen bg-[#fafafa]  text-foreground selection:bg-primary/10 overflow-x-hidden">
             {/* Dynamic Background Elements */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
                 <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px]" />
@@ -139,7 +139,7 @@ export default function ContactPage() {
                             </div>
 
                             {/* Social or Badge Area */}
-                            <div className="pt-6 border-t border-gray-100 dark:border-white/5 mt-8">
+                            <div className="pt-6 border-t border-gray-100 ">
                                 <div className="flex items-center gap-4">
                                     <img src="/logo-1.png" alt="Trusted" className="h-6 grayscale opacity-50" />
                                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-widest">Global Support for Modern Brands</span>
@@ -154,7 +154,7 @@ export default function ContactPage() {
                             transition={{ duration: 0.7, delay: 0.4 }}
                             className="lg:col-span-3"
                         >
-                            <Card className="border relative z-10 border-gray-100 dark:border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.05)] dark:shadow-none bg-white/50 dark:bg-zinc-900/50 backdrop-blur-xl overflow-hidden rounded-3xl">
+                            <Card className="border relative z-10 border-gray-100  shadow-[0_20px_50px_rgba(0,0,0,0.05)]  backdrop-blur-xl overflow-hidden rounded-3xl">
                                 <CardContent className="p-8 md:p-10">
                                     <div className="mb-10">
                                         <h3 className="text-2xl font-bold flex items-center gap-3">
@@ -173,7 +173,7 @@ export default function ContactPage() {
                                                     required
                                                     value={formData.name}
                                                     onChange={handleChange}
-                                                    className="h-12 bg-white dark:bg-black/20 border-gray-100 dark:border-white/10 rounded-xl focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                                                    className="h-12 bg-white   border-gray-100   rounded-xl focus:ring-primary/20 focus:border-primary transition-all text-sm"
                                                 />
                                             </div>
                                             <div className="space-y-2">
@@ -185,7 +185,7 @@ export default function ContactPage() {
                                                     required
                                                     value={formData.email}
                                                     onChange={handleChange}
-                                                    className="h-12 bg-white dark:bg-black/20 border-gray-100 dark:border-white/10 rounded-xl focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                                                    className="h-12 bg-white   border-gray-100   rounded-xl focus:ring-primary/20 focus:border-primary transition-all text-sm"
                                                 />
                                             </div>
                                         </div>
@@ -198,7 +198,7 @@ export default function ContactPage() {
                                                 required
                                                 value={formData.subject}
                                                 onChange={handleChange}
-                                                className="h-12 bg-white dark:bg-black/20 border-gray-100 dark:border-white/10 rounded-xl focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                                                className="h-12 bg-white    border-gray-100   rounded-xl focus:ring-primary/20 focus:border-primary transition-all text-sm"
                                             />
                                         </div>
 
@@ -207,7 +207,7 @@ export default function ContactPage() {
                                             <Textarea
                                                 name="message"
                                                 placeholder="Tell us what you're thinking..."
-                                                className="min-h-[160px] bg-white dark:bg-black/20 border-gray-100 dark:border-white/10 rounded-2xl focus:ring-primary/20 focus:border-primary transition-all py-4 resize-none text-sm"
+                                                className="min-h-[160px] bg-white   border-gray-100  rounded-2xl focus:ring-primary/20 focus:border-primary transition-all py-4 resize-none text-sm"
                                                 required
                                                 value={formData.message}
                                                 onChange={handleChange}
@@ -244,7 +244,7 @@ export default function ContactPage() {
                 </div>
             </main>
 
-            <footer className="py-12 border-t border-gray-100 dark:border-white/5 bg-white/30 dark:bg-zinc-900/30">
+            <footer className="py-12 border-t border-gray-100   bg-white/30  ">
                 <div className="max-w-7xl mx-auto px-4 text-center">
                     <p className="text-sm font-medium text-muted-foreground">© 2025 Campzeo. Crafted for modern creators.</p>
                 </div>
@@ -262,7 +262,7 @@ function ContactCard({ icon: Icon, title, value, description, delay }: any) {
             transition={{ duration: 0.5, delay }}
             className="group"
         >
-            <Card className="border border-gray-100 dark:border-white/5 bg-white dark:bg-zinc-900/20 hover:border-primary/20 transition-all duration-300 rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-primary/5">
+            <Card className="border border-gray-100  bg-white hover:border-primary/20 transition-all duration-300 rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-primary/5">
                 <CardContent className="p-6">
                     <div className="flex gap-4">
                         <div className="size-12 rounded-xl bg-primary/5 flex items-center justify-center shrink-0 group-hover:bg-primary group-hover:text-white transition-colors duration-300">

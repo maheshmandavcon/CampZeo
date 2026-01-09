@@ -431,7 +431,7 @@ export default function PostDetailsPage({ params }: { params: Promise<{ id: stri
                                                         <>
                                                             <Area
                                                                 type="monotone"
-                                                                dataKey="reach"
+                                                                dataKey={isEmailPlatform ? "reach" : "likes"}
                                                                 name={isEmailPlatform ? "Sent" : "Likes"}
                                                                 stroke="#3b82f6"
                                                                 strokeWidth={3}

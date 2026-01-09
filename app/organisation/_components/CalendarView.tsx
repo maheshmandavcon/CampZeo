@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Calendar as CalendarIcon, Mail, MessageSquare, Facebook, Instagram, Linkedin, Youtube, ChevronLeft, ChevronRight, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
@@ -513,7 +513,7 @@ export default function CalendarView({ posts }: CalendarViewProps) {
                                     {getPlatformIcon(selectedPost.type, "w-5 h-5")}
                                 </div>
                             )}
-                            <h2 className="text-xl font-bold">Post Details</h2>
+                            <SheetTitle className="text-xl font-bold">Post Details</SheetTitle>
                         </div>
                     </div>
 
