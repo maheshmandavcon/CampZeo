@@ -246,8 +246,8 @@ export default function AnalyticsPage() {
                 return Youtube;
             case 'PINTEREST':
                 return () => (
-                    <div className="p-0.5 bg-red-600 rounded-full size-6 flex items-center justify-center">
-                        <span className="text-white text-[10px] font-bold">P</span>
+                    <div className="p-0.5  rounded-full size-6 flex items-center justify-center">
+                        <span className="text-black text-[22px] font-semibold">P</span>
                     </div>
                 );
             default:

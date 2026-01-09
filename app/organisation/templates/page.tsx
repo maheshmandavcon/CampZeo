@@ -208,7 +208,7 @@ export default function TemplatesPage() {
         {/* Filters */}
         <Card>
           <CardContent className="pt-6">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="relative">
                 <Search className="absolute  size-4 text-muted-foreground" style={{ top: "10px", left: "10px" }} />
                 <Input
@@ -218,7 +218,7 @@ export default function TemplatesPage() {
                   className="pl-9"
                 />
               </div>
-<div className=" rounded-md">
+<div className="w-[200px] ms-auto  rounded-md">
               <Select value={platformFilter} onValueChange={setPlatformFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="Filter by platform" />
@@ -236,7 +236,7 @@ export default function TemplatesPage() {
                 </SelectContent>
               </Select>
 </div>
-<div className=" rounded-md">
+{/* <div className=" rounded-md">
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="Filter by category" />
@@ -248,7 +248,7 @@ export default function TemplatesPage() {
                   <SelectItem value="NOTIFICATION">Notification</SelectItem>
                   <SelectItem value="CUSTOM">Custom</SelectItem>
                 </SelectContent>
-              </Select></div>
+              </Select></div> */}
             </div>
           </CardContent>
         </Card>
