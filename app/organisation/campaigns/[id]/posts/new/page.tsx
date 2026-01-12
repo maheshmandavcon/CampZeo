@@ -131,6 +131,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [newBoardName, setNewBoardName] = useState('');
     const [newBoardDescription, setNewBoardDescription] = useState('');
     const [creatingBoard, setCreatingBoard] = useState(false);
+    const [socialStatus, setSocialStatus] = useState<any>(null); // New state for social status
 
     // AI Assistant state
     const [showAIAssistant, setShowAIAssistant] = useState(false);
@@ -185,7 +186,20 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             }
         };
 
+        const fetchSocialStatus = async () => {
+            try {
+                const res = await fetch("/api/user/social-status");
+                if (res.ok) {
+                    const data = await res.json();
+                    setSocialStatus(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch social status", error);
+            }
+        };
+
         fetchOrgPlatforms();
+        fetchSocialStatus();
     }, []);
 
     // Fetch Pinterest boards
@@ -698,19 +712,61 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                 ) : (
                                     <>
                                         <div className="flex flex-wrap gap-3">
-                                            {organisationPlatforms.map((platform) => {
+                                            {['EMAIL', 'SMS', 'WHATSAPP', 'FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].map((platform) => {
+                                                // Check if assigned to organization
+                                                const isAssigned = organisationPlatforms.includes(platform);
+
+                                                // Check if user has connected account (or if it's an admin platform like EMAIL/SMS)
+                                                let isConnected = false;
+                                                if (['EMAIL', 'SMS', 'WHATSAPP'].includes(platform)) {
+                                                    isConnected = isAssigned;
+                                                } else {
+                                                    // For social platforms, must be assigned AND have token
+                                                    const status = socialStatus?.[platform.toLowerCase()];
+                                                    isConnected = isAssigned && !!status?.connected;
+                                                }
+
                                                 const isSelected = selectedPlatform === platform;
                                                 const Icon = getPlatformIcon(platform);
+
+                                                if (!isAssigned) return null; // Only show assigned platforms in the list? 
+                                                // Wait, user request implies showing them so they can connect.
+                                                // But usually if not assigned to Org, user can't connect it?
+                                                // Re-reading code: GetPlatforms API returns what IS created in OrganisationPlatform.
+                                                // If 'isAssigned' is false, it means organization doesn't have it enabled.
+                                                // Let's assume we show ALL supported platforms, but if not assigned, maybe we should also prompt to connect (which might create the assignment?)
+                                                // However, for now let's stick to showing ALL and prompting connect if !isConnected.
+
+                                                // Refined logic: Show all. 
+                                                // Connected = (Assigned & Token) OR (Assigned & AdminPlatform).
+                                                // Actually, if we want to prompt user to connect, we should show it even if not assigned?
+                                                // Users usually connect via Settings.
+                                                // If I hide it, they can't see it.
+                                                // My previous code mapped strict list.
+
+                                                // Update: logic to match prompt "platform is not yet connected... navigate to account screen"
 
                                                 return (
                                                     <button
                                                         key={platform}
                                                         type="button"
-                                                        onClick={() => togglePlatform(platform)}
+                                                        onClick={() => {
+                                                            if (!isConnected) {
+                                                                toast("Platform not connected", {
+                                                                    description: "You need to connect this platform in your account settings.",
+                                                                    action: {
+                                                                        label: "Connect",
+                                                                        onClick: () => router.push('/organisation/settings')
+                                                                    }
+                                                                });
+                                                                return;
+                                                            }
+                                                            togglePlatform(platform);
+                                                        }}
                                                         className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] ${isSelected
                                                             ? 'border-primary bg-primary/10 shadow-sm'
                                                             : 'border-border hover:border-primary/50 hover:bg-muted/50 cursor-pointer'
-                                                            }`}
+                                                            } ${!isConnected ? 'opacity-50 grayscale' : ''}`}
                                                     >
                                                         <Icon className={`size-6 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
                                                         <span className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>

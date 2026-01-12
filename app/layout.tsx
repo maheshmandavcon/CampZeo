@@ -9,6 +9,7 @@ import { CookieConsent } from "@/components/CookieConsent";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://campzeo.com'),
   title: "CampZeo - Social Media Management Platform",
   description: "Social Media Management Platform - Streamline your social media with powerful tools and insights. Manage Facebook, Instagram, LinkedIn, Twitter, YouTube, and TikTok all in one place.",
   keywords: ["social media management", "content scheduling", "social media analytics", "multi-platform posting", "campzeo"],
