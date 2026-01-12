@@ -92,6 +92,40 @@ export async function GET(request: NextRequest) {
 
         console.log(`[Scheduler] Found ${scheduledPosts.length} posts from active campaigns to process`);
 
+        // DIAGNOSTIC: If no posts found, check if any were filtered out by campaign/org status
+        if (scheduledPosts.length === 0) {
+            const potentialPosts = await prisma.campaignPost.findMany({
+                where: {
+                    isPostSent: false,
+                    scheduledPostTime: { lte: now },
+                    isAttachedToCampaign: true,
+                    isDeleted: false,
+                },
+                include: {
+                    campaign: {
+                        include: { organisation: true }
+                    }
+                },
+                take: 10
+            });
+
+            if (potentialPosts.length > 0) {
+                console.log(`[Scheduler] Diagnostic: Found ${potentialPosts.length} posts due but skipped.`);
+                potentialPosts.forEach(p => {
+                    const campaign = p.campaign;
+                    const org = campaign?.organisation;
+                    if (!campaign) console.log(`[Scheduler] Post ${p.id} skipped: No campaign attached.`);
+                    else if (campaign.isDeleted) console.log(`[Scheduler] Post ${p.id} skipped: Campaign ${campaign.name} is deleted.`);
+                    else if (now < campaign.startDate || now > campaign.endDate) {
+                        console.log(`[Scheduler] Post ${p.id} skipped: Campaign ${campaign.name} is not active (Window: ${campaign.startDate.toISOString()} to ${campaign.endDate.toISOString()}).`);
+                    }
+                    else if (!org) console.log(`[Scheduler] Post ${p.id} skipped: No organisation attached to campaign.`);
+                    else if (!org.isApproved) console.log(`[Scheduler] Post ${p.id} skipped: Organisation ${org.name} is not approved.`);
+                    else if (org.isDeleted) console.log(`[Scheduler] Post ${p.id} skipped: Organisation ${org.name} is deleted.`);
+                });
+            }
+        }
+
         const results = {
             total: scheduledPosts.length,
             processed: 0,
