@@ -29,7 +29,7 @@ export function PlanComparisonModal({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[95vw] md:max-w-[85vw] lg:max-w-[75vw] xl:max-w-[65vw] p-0 overflow-hidden rounded-[2rem] border-none bg-[#fafafa] dark:bg-zinc-950 shadow-2xl">
+            <DialogContent className="sm:max-w-[95vw] md:max-w-[85vw] lg:max-w-[75vw] xl:max-w-[65vw] p-0 overflow-hidden rounded-[2rem] border-none bg-[#fafafa]  shadow-2xl">
                 <div className="relative h-full overflow-y-auto custom-scrollbar max-h-[90vh]">
                     {/* Background Accents */}
                     <div className="absolute top-0 inset-x-0 h-64 bg-gradient-to-b from-primary/5 to-transparent pointer-events-none -z-10" />
@@ -82,7 +82,7 @@ export function PlanComparisonModal({
                                         transition={{ delay: 0.3 + index * 0.1 }}
                                         className="relative group"
                                     >
-                                        <Card className={`h-full border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-none bg-white/50 dark:bg-zinc-900/50 backdrop-blur-xl rounded-[2rem] overflow-hidden transition-all duration-500 hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)] hover:-translate-y-2 ${isPopular ? "ring-2 ring-primary" : ""}`}>
+                                        <Card className={`h-full border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)]  bg-white/50  backdrop-blur-xl rounded-[2rem] overflow-hidden transition-all duration-500 hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)] hover:-translate-y-2 ${isPopular ? "ring-2 ring-primary" : ""}`}>
                                             <div className="p-8 pb-4">
                                                 {isPopular && (
                                                     <div className="absolute top-4 right-4 animate-pulse">
@@ -139,7 +139,7 @@ export function PlanComparisonModal({
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             transition={{ delay: 0.7 }}
-                            className="bg-white/30 dark:bg-zinc-900/10 rounded-[2.5rem] border border-gray-100 dark:border-white/5 p-8"
+                            className="bg-white/30  rounded-[2.5rem] border border-gray-100  p-8"
                         >
                             <div className="flex items-center gap-3 mb-8">
                                 <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -166,9 +166,9 @@ export function PlanComparisonModal({
                                     <tbody>
                                         {Array.from(new Set(plans.flatMap((p) => p.features))).map((feature, idx) => (
                                             <tr key={idx} className="group transition-colors hover:bg-primary/[0.02]">
-                                                <td className="py-4 px-6 text-sm font-semibold border-b border-gray-50 dark:border-zinc-800/50 group-last:border-none">{feature}</td>
+                                                <td className="py-4 px-6 text-sm font-semibold border-b border-gray-50  group-last:border-none">{feature}</td>
                                                 {plans.map((plan) => (
-                                                    <td key={plan.id} className="py-4 px-6 text-center border-b border-gray-50 dark:border-zinc-800/50 group-last:border-none">
+                                                    <td key={plan.id} className="py-4 px-6 text-center border-b border-gray-50  group-last:border-none">
                                                         {plan.features.includes(feature) ? (
                                                             <div className="size-8 rounded-full bg-green-500/10 flex items-center justify-center mx-auto ring-1 ring-green-500/20">
                                                                 <Check className="size-4 text-green-600" />
