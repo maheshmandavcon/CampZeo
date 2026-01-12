@@ -164,6 +164,7 @@ export async function PUT(
             };
         }
 
+        if (scheduledPostTime) {
             const scheduledDate = new Date(scheduledPostTime);
             if (scheduledDate < campaign.startDate || scheduledDate > campaign.endDate) {
                 return NextResponse.json({
