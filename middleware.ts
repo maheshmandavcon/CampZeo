@@ -53,6 +53,12 @@ function validateApiKey(request: NextRequest): boolean {
 // Make the function handling the middleware async
 export default clerkMiddleware(async (auth, req) => {
     const request = req as NextRequest;
+ const { pathname } = request.nextUrl;
+
+    // 1. EXPLICITLY ALLOW SEO FILES
+    if (pathname === '/robots.txt' || pathname === '/sitemap.xml') {
+        return NextResponse.next();
+    }
 
     // Allow public API routes without any authentication
     if (isPublicApiRoute(request)) {
