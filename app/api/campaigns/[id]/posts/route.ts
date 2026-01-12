@@ -181,6 +181,15 @@ export async function POST(
             };
         }
 
+        if (scheduledPostTime) {
+            const scheduledDate = new Date(scheduledPostTime);
+            if (scheduledDate < campaign.startDate || scheduledDate > campaign.endDate) {
+                return NextResponse.json({
+                    error: `Scheduled time must be between ${campaign.startDate.toLocaleString()} and ${campaign.endDate.toLocaleString()} (Campaign Active Window)`
+                }, { status: 400 });
+            }
+        }
+
         // Create post
         const post = await prisma.campaignPost.create({
             data: {
