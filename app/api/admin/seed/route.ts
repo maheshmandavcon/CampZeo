@@ -103,7 +103,7 @@ export async function POST() {
         const jobSettings = [
             {
                 jobId: 'campaign-post-scheduler',
-                cronExpression: '*/5 * * * *',
+                cronExpression: '5',
                 isEnabled: true
             }
         ];
