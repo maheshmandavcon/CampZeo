@@ -7,7 +7,7 @@
   "crons": [
     {
       "path": "/api/scheduler/campaign-posts",
-      "schedule": "0 0 * * *"
+      "schedule": "*/2 * * * *"
     }
   ]
 }
