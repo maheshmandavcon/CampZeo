@@ -463,77 +463,41 @@ export default function CampaignPostsPage() {
                         </div>
 
                         {/* Platform Selection */}
-                        <div className="space-y-3">
-                            <label className="text-sm font-semibold flex items-center gap-1">
-                                Select Platform <span className="text-red-500">*</span>
-                            </label>
-                            <div className="grid grid-cols-1 gap-4 ">
+                        <div className="space-y-4">
+                            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-muted/30 p-2 rounded-lg border">
+                                    <TabsList className="bg-transparent h-auto flex flex-wrap gap-1 p-0">
+                                        <TabsTrigger
+                                            value="all"
+                                            className="px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm capitalize"
+                                        >
+                                            All
+                                        </TabsTrigger>
+                                        {(() => {
+                                            const PLATFORM_ORDER = ['EMAIL', 'SMS', 'WHATSAPP', 'PINTEREST', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'FACEBOOK'];
+                                            return [...organisationPlatforms]
+                                                .sort((a, b) => {
+                                                    const idxA = PLATFORM_ORDER.indexOf(a.toUpperCase());
+                                                    const idxB = PLATFORM_ORDER.indexOf(b.toUpperCase());
+                                                    if (idxA === -1) return 1;
+                                                    if (idxB === -1) return -1;
+                                                    return idxA - idxB;
+                                                })
+                                                .map((platform) => (
+                                                    <TabsTrigger
+                                                        key={platform}
+                                                        value={platform}
+                                                        className="px-4 py-2 cursor-pointer data-[state=active]:bg-background data-[state=active]:shadow-sm capitalize"
+                                                    >
+                                                        {platform.toLowerCase()}
+                                                    </TabsTrigger>
+                                                ));
+                                        })()}
+                                    </TabsList>
 
-                                <div className="flex justify-center md:justify-start flex-wrap gap-4">
-                                    <button
-                                        onClick={() => setActiveTab('all')}
-                                        className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] cursor-pointer ${activeTab === 'all'
-                                            ? 'border-primary bg-primary/10 shadow-sm'
-                                            : 'border-border hover:border-primary/50 hover:bg-muted/50'
-                                            }`}
-                                    >
-                                        <Globe className={`size-6 ${activeTab === 'all' ? 'text-primary' : 'text-muted-foreground'}`} />
-                                        <span className={`text-xs font-medium ${activeTab === 'all' ? 'text-primary' : 'text-muted-foreground'}`}>
-                                            ALL
-                                        </span>
-                                    </button>
-                                    {(() => {
-                                        const PLATFORM_ORDER = ['EMAIL', 'SMS', 'WHATSAPP', 'PINTEREST', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'FACEBOOK'];
-                                        const sortedPlatforms = [...organisationPlatforms].sort((a, b) => {
-                                            const idxA = PLATFORM_ORDER.indexOf(a.toUpperCase());
-                                            const idxB = PLATFORM_ORDER.indexOf(b.toUpperCase());
-                                            if (idxA === -1) return 1;
-                                            if (idxB === -1) return -1;
-                                            return idxA - idxB;
-                                        });
-
-                                        return sortedPlatforms.map((platform) => {
-                                            const isSelected = activeTab === platform;
-                                            const displayPlatform = platform.toUpperCase();
-
-                                            // Dynamic Icon Selection to match design
-                                            const getDesignIcon = (p: string) => {
-                                                switch (p) {
-                                                    case 'EMAIL': return Mail;
-                                                    case 'SMS': return MessageSquare;
-                                                    case 'WHATSAPP': return Phone;
-                                                    case 'PINTEREST': return Send;
-                                                    case 'INSTAGRAM': return Instagram;
-                                                    case 'LINKEDIN': return Linkedin;
-                                                    case 'YOUTUBE': return Youtube;
-                                                    case 'FACEBOOK': return Facebook;
-                                                    default: return Globe;
-                                                }
-                                            };
-                                            const Icon = getDesignIcon(displayPlatform);
-
-                                            return (
-                                                <button
-                                                    key={platform}
-                                                    onClick={() => setActiveTab(platform)}
-                                                    className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] cursor-pointer ${isSelected
-                                                        ? 'border-primary bg-primary/10 shadow-sm'
-                                                        : 'border-border hover:border-primary/50 hover:bg-muted/50'
-                                                        }`}
-                                                >
-                                                    <Icon className={`size-6 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-                                                    <span className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
-                                                        {displayPlatform}
-                                                    </span>
-                                                </button>
-                                            );
-                                        });
-                                    })()}
-                                </div>
-                                <div className="flex items-center justify-end ">
-                                    <div className="flex items-center gap-4   rounded-md">
+                                    <div className="flex items-center gap-4 shrink-0 w-full md:w-auto">
                                         <Select value={filterStatus} onValueChange={setFilterStatus}>
-                                            <SelectTrigger className="w-[180px]">
+                                            <SelectTrigger className="w-full md:w-[180px] bg-background">
                                                 <SelectValue placeholder="All Status" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -545,7 +509,7 @@ export default function CampaignPostsPage() {
                                         </Select>
                                     </div>
                                 </div>
-                            </div>
+                            </Tabs>
                         </div>
 
 

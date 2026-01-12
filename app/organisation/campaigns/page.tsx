@@ -292,14 +292,16 @@ export default function CampaignsPage() {
                                                         </TableCell>
                                                         <TableCell>
                                                             <div className="flex items-center  gap-2">
+                                                                <div className="border border-1 rounded-md">
                                                                 <Button
-                                                                    className='cursor-pointer'
+                                                                    className='cursor-pointer   '
                                                                     size="sm"
                                                                     variant="outline"
                                                                     onClick={() => handleManagePosts(campaign)}
-                                                                >
+                                                                    >
                                                                     {campaign._count.posts === 0 ? 'Add Post' : 'Posts'}
                                                                 </Button>
+                                                                    </div>
                                                                 <Button
                                                                     className='cursor-pointer'
                                                                     size="sm"
