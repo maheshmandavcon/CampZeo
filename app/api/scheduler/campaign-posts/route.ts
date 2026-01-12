@@ -40,16 +40,6 @@ export async function GET(request: NextRequest) {
         const now = new Date();
         const frequencyMins = parseInt(jobSetting.cronExpression || "5");
 
-        // Skip if not a manual trigger and not on schedule
-        const isManual = request.headers.get('x-manual-run') === 'true';
-        if (!isManual && now.getMinutes() % frequencyMins !== 0) {
-            return NextResponse.json({
-                success: true,
-                message: `Skipping: Not on schedule (Frequency: ${frequencyMins}m)`,
-                timestamp: now.toISOString()
-            });
-        }
-
         // 2. Verify the request is from a trusted source (cron job)
         const authHeader = request.headers.get('authorization');
         const cronSecret = process.env.CRON_SECRET || 'your-secret-key';
