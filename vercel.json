@@ -8,6 +8,10 @@
     {
       "path": "/api/scheduler/campaign-posts",
       "schedule": "*/1 * * * *"
+    },
+    {
+      "path": "/api/scheduler/social-metrics",
+      "schedule": "0 * * * *"
     }
   ]
 }
