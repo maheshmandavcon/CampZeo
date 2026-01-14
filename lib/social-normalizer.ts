@@ -8,7 +8,7 @@ import { getYouTubeChannelVideos, getYouTubeVideoInsights } from "./youtube";
 import { getPinterestUserPins, getPinterestPostInsights } from "./pinterest";
 
 // Unified Metric Types
-export type UnifiedMetricName = 
+export type UnifiedMetricName =
     | "amplification_count"  // Shares, Saves, Reposts
     | "engagement_count"     // Total interactions
     | "impression_count"     // Views, Impressions
@@ -83,8 +83,11 @@ export class SocialNormalizerService {
             }));
         }
 
+        // 6. Campaign Posts (from PostTransaction)
+        promises.push(this.syncCampaignPosts(orgId, user));
+
         const results = await Promise.allSettled(promises);
-        
+
         results.forEach((result, index) => {
             if (result.status === 'rejected') {
                 console.error(`[SocialNormalizer] Platform sync failed:`, result.reason);
@@ -123,7 +126,7 @@ export class SocialNormalizerService {
                     ];
 
                     // Calculate total engagement
-                    const engagementTotal = insights.likes + insights.comments; 
+                    const engagementTotal = insights.likes + insights.comments;
                     metrics.push({ metricName: "engagement_count", value: engagementTotal, rawMetricName: "likes+comments" });
 
                     await this.storeMetrics(orgId, "FACEBOOK", post.id, metrics);
@@ -155,7 +158,7 @@ export class SocialNormalizerService {
                         { metricName: "engagement_count", value: insights.likes + insights.comments, rawMetricName: "likes+comments" },
                         // IG Amplification = Saves (not always available in basic insights but useful if there)
                     ];
-                    
+
                     await this.storeMetrics(orgId, "INSTAGRAM", item.id, metrics);
                 } catch (err) {
                     console.error(`[SocialNormalizer] Failed to sync IG post ${item.id}`, err);
@@ -175,7 +178,7 @@ export class SocialNormalizerService {
             for (const post of posts) {
                 try {
                     const insights = await getLinkedInPostInsights(post.id, creds.accessToken);
-                    
+
                     const metrics: MetricPoint[] = [
                         { metricName: "like_count", value: insights.likes, rawMetricName: "likes" },
                         { metricName: "comment_count", value: insights.comments, rawMetricName: "comments" },
@@ -204,7 +207,7 @@ export class SocialNormalizerService {
             for (const video of videos) {
                 try {
                     const insights = await getYouTubeVideoInsights(video.id, creds.accessToken);
-                     if (insights.isDeleted) continue;
+                    if (insights.isDeleted) continue;
 
                     const metrics: MetricPoint[] = [
                         { metricName: "like_count", value: insights.likes, rawMetricName: "likeCount" },
@@ -254,33 +257,211 @@ export class SocialNormalizerService {
         }
     }
 
+    /**
+     * Sync metrics for campaign posts tracked in PostTransaction
+     */
+    private static async syncCampaignPosts(orgId: number, user: any) {
+        try {
+            console.log(`[SocialNormalizer] Syncing Campaign Posts...`);
+
+            // Find published posts that haven't been checked recently (or never checked)
+            const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+
+            const campaignPosts = await prisma.postTransaction.findMany({
+                where: {
+                    published: true,
+                    OR: [
+                        { lastInsightsCheck: null },
+                        { lastInsightsCheck: { lt: oneHourAgo } }
+                    ]
+                },
+                take: 50 // Limit to avoid overwhelming the API
+            });
+
+            console.log(`[SocialNormalizer] Found ${campaignPosts.length} campaign posts to sync`);
+
+            for (const post of campaignPosts) {
+                try {
+                    const platform = post.platform as string;
+                    let insights: any = null;
+
+                    // Fetch insights based on platform
+                    switch (platform) {
+                        case 'FACEBOOK':
+                            if (user.facebookPageAccessToken) {
+                                insights = await getFacebookPostInsights(post.postId, user.facebookPageAccessToken);
+                            }
+                            break;
+                        case 'INSTAGRAM':
+                            if (user.instagramAccessToken) {
+                                insights = await getInstagramPostInsights(post.postId, user.instagramAccessToken);
+                            }
+                            break;
+                        case 'LINKEDIN':
+                            if (user.linkedInAccessToken) {
+                                insights = await getLinkedInPostInsights(post.postId, user.linkedInAccessToken);
+                            }
+                            break;
+                        case 'YOUTUBE':
+                            if (user.youtubeAccessToken) {
+                                insights = await getYouTubeVideoInsights(post.postId, user.youtubeAccessToken);
+                            }
+                            break;
+                        case 'PINTEREST':
+                            if (user.pinterestAccessToken) {
+                                insights = await getPinterestPostInsights(post.postId, user.pinterestAccessToken);
+                            }
+                            break;
+                    }
+
+                    if (insights && !insights.isDeleted) {
+                        // Map platform-specific insights to unified metrics
+                        const metrics: MetricPoint[] = [];
+
+                        if (platform === 'FACEBOOK') {
+                            metrics.push(
+                                { metricName: "like_count", value: insights.likes, rawMetricName: "likes" },
+                                { metricName: "comment_count", value: insights.comments, rawMetricName: "comments" },
+                                { metricName: "impression_count", value: insights.impressions, rawMetricName: "post_impressions" },
+                                { metricName: "reach_count", value: insights.reach, rawMetricName: "post_impressions_unique" },
+                                { metricName: "engagement_count", value: insights.likes + insights.comments, rawMetricName: "likes+comments" }
+                            );
+                        } else if (platform === 'INSTAGRAM') {
+                            metrics.push(
+                                { metricName: "like_count", value: insights.likes, rawMetricName: "likes" },
+                                { metricName: "comment_count", value: insights.comments, rawMetricName: "comments" },
+                                { metricName: "impression_count", value: insights.impressions, rawMetricName: "impressions" },
+                                { metricName: "reach_count", value: insights.reach, rawMetricName: "reach" },
+                                { metricName: "engagement_count", value: insights.likes + insights.comments, rawMetricName: "likes+comments" }
+                            );
+                        } else if (platform === 'LINKEDIN') {
+                            metrics.push(
+                                { metricName: "like_count", value: insights.likes, rawMetricName: "likes" },
+                                { metricName: "comment_count", value: insights.comments, rawMetricName: "comments" },
+                                { metricName: "impression_count", value: insights.impressions, rawMetricName: "impressionCount" },
+                                { metricName: "reach_count", value: insights.reach, rawMetricName: "uniqueImpressionsCount" },
+                                { metricName: "engagement_count", value: insights.likes + insights.comments, rawMetricName: "likes+comments" }
+                            );
+                        } else if (platform === 'YOUTUBE') {
+                            metrics.push(
+                                { metricName: "like_count", value: insights.likes, rawMetricName: "likeCount" },
+                                { metricName: "comment_count", value: insights.comments, rawMetricName: "commentCount" },
+                                { metricName: "impression_count", value: insights.views, rawMetricName: "viewCount" },
+                                { metricName: "reach_count", value: insights.views, rawMetricName: "viewCount" },
+                                { metricName: "engagement_count", value: insights.likes + insights.comments, rawMetricName: "likes+comments" }
+                            );
+                        } else if (platform === 'PINTEREST') {
+                            metrics.push(
+                                { metricName: "like_count", value: insights.likes, rawMetricName: "reactions/saves" },
+                                { metricName: "comment_count", value: insights.comments, rawMetricName: "comments" },
+                                { metricName: "impression_count", value: insights.impressions, rawMetricName: "impressions" },
+                                { metricName: "reach_count", value: insights.reach, rawMetricName: "outbound_click/reach" },
+                                { metricName: "amplification_count", value: insights.saves, rawMetricName: "saves" },
+                                { metricName: "engagement_count", value: insights.saves + insights.pinClicks + insights.outboundClicks + insights.comments, rawMetricName: "total_engagement" }
+                            );
+                        }
+
+                        if (metrics.length > 0) {
+                            await this.storeMetrics(orgId, platform as PlatformType, post.postId, metrics);
+                        }
+                    }
+
+                    // Update lastInsightsCheck timestamp
+                    await prisma.postTransaction.update({
+                        where: { id: post.id },
+                        data: { lastInsightsCheck: new Date() }
+                    });
+
+                } catch (err) {
+                    console.error(`[SocialNormalizer] Failed to sync campaign post ${post.id}`, err);
+                }
+            }
+
+        } catch (err) {
+            console.error(`[SocialNormalizer] Campaign posts sync error`, err);
+            throw err;
+        }
+    }
 
     /**
      * Store metrics in the database
      */
     private static async storeMetrics(
-        orgId: number, 
-        platform: PlatformType, 
-        postId: string, 
+        orgId: number,
+        platform: PlatformType,
+        postId: string,
         metrics: MetricPoint[]
     ) {
         // We use a transaction or batch create to be efficient
         // Since we are recording history, we just insert new rows with default 'now()' timestamp.
-        
+
         // TODO: Optimization - Don't insert if exact same value exists for recent time window? 
         // For time-series, usually we just insert.
-        
+
         try {
-           await prisma.socialMetricHistory.createMany({
-               data: metrics.map(m => ({
-                   organisationId: orgId,
-                   platform: platform,
-                   postId: postId,
-                   metricName: m.metricName,
-                   value: m.value,
-                   rawMetricName: m.rawMetricName
-               }))
-           });
+            await prisma.socialMetricHistory.createMany({
+                data: metrics.map(m => ({
+                    organisationId: orgId,
+                    platform: platform,
+                    postId: postId,
+                    metricName: m.metricName,
+                    value: m.value,
+                    rawMetricName: m.rawMetricName
+                }))
+            });
+
+            // 2. Latest Metrics Storage: Upsert into PostInsight for quick access
+            const metricsMap = metrics.reduce((acc, m) => {
+                acc[m.metricName] = m.value;
+                return acc;
+            }, {} as Record<string, number>);
+
+            const likes = metricsMap['like_count'] || 0;
+            const comments = metricsMap['comment_count'] || 0;
+            const reach = metricsMap['reach_count'] || 0;
+            const impressions = metricsMap['impression_count'] || 0;
+            const engagement = metricsMap['engagement_count'] || 0;
+
+            // Calculate engagement rate
+            const engagementRate = impressions > 0 ? (engagement / impressions) * 100 : 0;
+
+            // Find existing insight for this post and platform
+            const existingInsight = await prisma.postInsight.findFirst({
+                where: {
+                    postId: postId,
+                    platform: platform
+                }
+            });
+
+            if (existingInsight) {
+                // Update existing
+                await prisma.postInsight.update({
+                    where: { id: existingInsight.id },
+                    data: {
+                        likes,
+                        comments,
+                        reach,
+                        impressions,
+                        engagementRate,
+                        lastUpdated: new Date(),
+                        updatedAt: new Date()
+                    }
+                });
+            } else {
+                // Create new
+                await prisma.postInsight.create({
+                    data: {
+                        postId,
+                        platform,
+                        likes,
+                        comments,
+                        reach,
+                        impressions,
+                        engagementRate,
+                        lastUpdated: new Date()
+                    }
+                });
+            }
         } catch (err) {
             console.error(`[SocialNormalizer] Error storing metrics for ${platform} post ${postId}`, err);
         }

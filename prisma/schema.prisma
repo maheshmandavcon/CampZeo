@@ -247,6 +247,7 @@ model Payment {
 model PostInsight {
   id             Int      @id @default(autoincrement())
   postId         String
+  platform       String   @default("")
   likes          Int      @default(0)
   comments       Int      @default(0)
   reach          Int      @default(0)
@@ -256,6 +257,9 @@ model PostInsight {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   isDeleted      Boolean  @default(false)
+
+  @@index([platform])
+  @@index([postId])
 }
 
 model PostTransaction {
