@@ -68,6 +68,7 @@ model Organisation {
   notifications         Notification[]
   organisationPlatforms OrganisationPlatform[]
   payments              Payment[]
+  socialMetricHistory   SocialMetricHistory[]
   subscriptions         Subscription[]
   users                 User[]
 }
@@ -366,6 +367,21 @@ model MessageUsage {
   Organisation   Organisation   @relation(fields: [organisationId], references: [id])
 
   @@unique([organisationId, channel, periodStart])
+}
+
+model SocialMetricHistory {
+  id             Int          @id @default(autoincrement())
+  organisationId Int
+  platform       PlatformType
+  postId         String?
+  metricName     String
+  value          Float
+  rawMetricName  String?
+  recordedAt     DateTime     @default(now())
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+
+  @@index([organisationId, platform, recordedAt])
+  @@index([metricName, recordedAt])
 }
 
 enum UserRole {
