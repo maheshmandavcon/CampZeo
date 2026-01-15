@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -33,6 +33,8 @@ import { toast } from 'sonner';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import {
     LineChart,
     Line,
@@ -134,11 +136,14 @@ export default function AnalyticsPage() {
 
     // AI Chat State
     const [isChatOpen, setIsChatOpen] = useState(false);
-    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-        { role: 'assistant', content: 'Hi! I can analyze your campaign performance. Ask me anything like "Which platform is doing best this month?"', timestamp: new Date() }
-    ]);
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]); // Start empty to show Welcome Prompts
     const [chatInput, setChatInput] = useState('');
     const [isChatLoading, setIsChatLoading] = useState(false);
+
+    // Analytics Cache State
+    const [analyticsCache, setAnalyticsCache] = useState<any>(null);
+    const [isSyncingAnalytics, setIsSyncingAnalytics] = useState(false);
+    const hasSynced = useRef(false); // Prevent duplicate sync in StrictMode
 
     // Fetch platforms
     useEffect(() => {
@@ -205,6 +210,35 @@ export default function AnalyticsPage() {
         }
     }, [selectedPlatform, page, startDate, endDate]);
 
+    // Sync analytics data on page load
+    useEffect(() => {
+        // Prevent duplicate sync in React StrictMode
+        if (hasSynced.current) return;
+
+        const syncAnalyticsOnLoad = async () => {
+            hasSynced.current = true;
+            setIsSyncingAnalytics(true);
+            try {
+                console.log('[Analytics Page] Syncing fresh metrics on page load...');
+                const response = await fetch('/api/Analytics/sync-all');
+                if (!response.ok) throw new Error('Failed to sync analytics');
+
+                const data = await response.json();
+                setAnalyticsCache(data.analytics);
+                console.log('[Analytics Page] Analytics synced and cached:', data.analytics);
+                toast.success('Analytics data refreshed');
+            } catch (error) {
+                console.error('[Analytics Page] Sync error:', error);
+                toast.error('Failed to sync analytics data');
+                hasSynced.current = false; // Allow retry on error
+            } finally {
+                setIsSyncingAnalytics(false);
+            }
+        };
+
+        syncAnalyticsOnLoad();
+    }, []); // Run once on mount
+
     const handleSync = async (post: Post) => {
         setSyncing(post.id);
         try {
@@ -255,20 +289,146 @@ export default function AnalyticsPage() {
         }
     };
 
-    const handleSendMessage = async (e?: React.FormEvent) => {
-        e?.preventDefault();
-        if (!chatInput.trim() || isChatLoading) return;
+    // Calculate instant answers from cached data
+    const getInstantAnswer = (prompt: string): string | null => {
+        if (!analyticsCache) return null;
 
-        const userMessage = chatInput;
+        const { allPosts, campaignPosts, dataInfo } = analyticsCache;
+
+        switch (prompt) {
+            case "Total Average Views": {
+                const postsWithMetrics = allPosts.filter((p: any) => p.metrics);
+                if (postsWithMetrics.length === 0) return "No posts with metrics found.";
+
+                const totalImpressions = postsWithMetrics.reduce((sum: number, p: any) =>
+                    sum + (p.metrics?.impressions || 0), 0);
+                const avgImpressions = Math.round(totalImpressions / postsWithMetrics.length);
+
+                return `📊 **Total Average Views**: ${avgImpressions.toLocaleString()} impressions\n\nBased on ${postsWithMetrics.length} posts across all platforms.`;
+            }
+
+            case "Best Performing Platform": {
+                const platformStats: Record<string, { total: number, count: number }> = {};
+
+                allPosts.forEach((p: any) => {
+                    if (p.metrics) {
+                        if (!platformStats[p.platform]) {
+                            platformStats[p.platform] = { total: 0, count: 0 };
+                        }
+                        platformStats[p.platform].total += (p.metrics.likes || 0) + (p.metrics.comments || 0);
+                        platformStats[p.platform].count++;
+                    }
+                });
+
+                const platforms = Object.entries(platformStats)
+                    .map(([platform, stats]) => ({
+                        platform,
+                        avgEngagement: stats.total / stats.count,
+                        totalEngagement: stats.total,
+                        posts: stats.count
+                    }))
+                    .sort((a, b) => b.avgEngagement - a.avgEngagement);
+
+                if (platforms.length === 0) return "No platform data available.";
+
+                const best = platforms[0];
+                return `🏆 **Best Performing Platform**: ${best.platform}\n\n` +
+                    `• Average Engagement: ${Math.round(best.avgEngagement)} per post\n` +
+                    `• Total Engagement: ${best.totalEngagement.toLocaleString()}\n` +
+                    `• Posts Analyzed: ${best.posts}`;
+            }
+
+            case "Campaign Summary": {
+                if (campaignPosts.length === 0) return "No campaign posts found.";
+
+                const campaigns: Record<string, any> = {};
+                campaignPosts.forEach((p: any) => {
+                    const name = p.campaignName || 'Uncategorized';
+                    if (!campaigns[name]) {
+                        campaigns[name] = { posts: 0, likes: 0, comments: 0, impressions: 0 };
+                    }
+                    if (p.metrics) {
+                        campaigns[name].posts++;
+                        campaigns[name].likes += p.metrics.likes || 0;
+                        campaigns[name].comments += p.metrics.comments || 0;
+                        campaigns[name].impressions += p.metrics.impressions || 0;
+                    }
+                });
+
+                const summary = Object.entries(campaigns)
+                    .map(([name, stats]: [string, any]) =>
+                        `**${name}**\n` +
+                        `• Posts: ${stats.posts}\n` +
+                        `• Avg Engagement: ${Math.round((stats.likes + stats.comments) / stats.posts)}\n` +
+                        `• Total Impressions: ${stats.impressions.toLocaleString()}`
+                    )
+                    .join('\n\n');
+
+                return `📈 **Campaign Summary**\n\n${summary}`;
+            }
+
+            case "Engagement Trends": {
+                const postsWithMetrics = allPosts.filter((p: any) => p.metrics && p.publishedAt);
+                if (postsWithMetrics.length < 2) return "Not enough data for trend analysis.";
+
+                // Sort by date
+                postsWithMetrics.sort((a: any, b: any) =>
+                    new Date(a.publishedAt).getTime() - new Date(b.publishedAt).getTime()
+                );
+
+                const half = Math.floor(postsWithMetrics.length / 2);
+                const firstHalf = postsWithMetrics.slice(0, half);
+                const secondHalf = postsWithMetrics.slice(half);
+
+                const avgFirst = firstHalf.reduce((sum: number, p: any) =>
+                    sum + (p.metrics.likes || 0) + (p.metrics.comments || 0), 0) / firstHalf.length;
+                const avgSecond = secondHalf.reduce((sum: number, p: any) =>
+                    sum + (p.metrics.likes || 0) + (p.metrics.comments || 0), 0) / secondHalf.length;
+
+                const change = ((avgSecond - avgFirst) / avgFirst * 100).toFixed(1);
+                const trend = avgSecond > avgFirst ? '📈 Increasing' : '📉 Decreasing';
+
+                return `${trend} **Engagement Trends**\n\n` +
+                    `• Recent Average: ${Math.round(avgSecond)} interactions\n` +
+                    `• Previous Average: ${Math.round(avgFirst)} interactions\n` +
+                    `• Change: ${change}%`;
+            }
+
+            default:
+                return null;
+        }
+    };
+
+    const sendMessage = async (text: string) => {
+        if (!text.trim() || isChatLoading) return;
+
         setChatInput('');
-        setChatMessages(prev => [...prev, { role: 'user', content: userMessage, timestamp: new Date() }]);
+        // Optimistically add user message
+        setChatMessages(prev => [...prev, { role: 'user', content: text, timestamp: new Date() }]);
+
+        // Check if we can provide an instant answer from cached data
+        const instantAnswer = getInstantAnswer(text);
+        if (instantAnswer) {
+            // Provide instant answer without calling AI
+            setChatMessages(prev => [...prev, {
+                role: 'assistant',
+                content: instantAnswer,
+                timestamp: new Date()
+            }]);
+            return;
+        }
+
+        // For custom questions, call AI with cached data
         setIsChatLoading(true);
 
         try {
             const response = await fetch('/api/ai/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: userMessage })
+                body: JSON.stringify({
+                    message: text,
+                    analyticsData: analyticsCache // Pass cached analytics data
+                })
             });
 
             if (!response.ok) throw new Error('Failed to get answer');
@@ -277,11 +437,16 @@ export default function AnalyticsPage() {
             setChatMessages(prev => [...prev, { role: 'assistant', content: data.message, timestamp: new Date() }]);
         } catch (error) {
             console.error('Chat error:', error);
-            toast.error('Failed to connect to AI Assistant');
+            // toast.error('Failed to connect to AI Assistant'); // Squelch toast to keep UI clean, error message in chat is enough
             setChatMessages(prev => [...prev, { role: 'assistant', content: "I'm having trouble connecting to the analytics engine right now. Please try again later.", timestamp: new Date() }]);
         } finally {
             setIsChatLoading(false);
         }
+    };
+
+    const handleSendMessage = async (e?: React.FormEvent) => {
+        e?.preventDefault();
+        sendMessage(chatInput);
     };
 
     // CSV Export
@@ -791,82 +956,143 @@ export default function AnalyticsPage() {
                 )}
             </div>
 
-            {/* AI Assistant Floating Chat */}
-            <div className={`fixed bottom-6 right-6 z-50 transition-all duration-300 ease-in-out ${isChatOpen ? 'w-[380px]' : 'w-auto'}`}>
-                {isChatOpen ? (
-                    <Card className="border shadow-2xl overflow-hidden glass-panel">
-                        <div className="bg-primary p-4 flex items-center justify-between text-primary-foreground">
-                            <div className="flex items-center gap-2">
-                                <div className="p-1.5 bg-white/20 rounded-full">
-                                    <Sparkles className="size-4 text-yellow-300 fill-yellow-300" />
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold text-sm">AI Analytics Assistant</h3>
-                                    <span className="text-[10px] text-primary-foreground/80 block">Everything about your data</span>
-                                </div>
+            {/* Floating Chat Window - Resized and Restyled to match AIContentAssistant */}
+            {isChatOpen ? (
+                <Card className="border shadow-2xl overflow-hidden flex flex-col h-[600px] w-[450px] rounded-2xl ring-1 ring-black/5 fixed bottom-4 right-4">
+                    {/* Header */}
+                    <div className="p-4 border-b shrink-0 bg-white z-10 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Sparkles className="size-5 text-primary" />
+                            <div>
+                                <h3 className="font-semibold text-sm text-foreground">AI Analytics Assistant</h3>
+                                <p className="text-[10px] text-muted-foreground">Ask about metrics, comparisons, and performance</p>
                             </div>
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-primary-foreground hover:bg-white/20" onClick={() => setIsChatOpen(false)}>
-                                <X className="size-4" />
-                            </Button>
                         </div>
-                        <div className="h-[400px] flex flex-col bg-background/95 backdrop-blur-sm">
-                            <ScrollArea className="flex-1 p-4">
-                                <div className="space-y-4">
-                                    {chatMessages.map((msg, i) => (
-                                        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${msg.role === 'user'
-                                                ? 'bg-primary text-primary-foreground rounded-br-none'
-                                                : 'bg-muted text-foreground rounded-bl-none border'
-                                                }`}>
-                                                {msg.content}
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:bg-gray-100 rounded-full"
+                            onClick={() => setIsChatOpen(false)}
+                        >
+                            <X className="size-4" />
+                        </Button>
+                    </div>
+
+                    {/* Chat Area */}
+                    <CardContent className="p-0 flex-1 flex flex-col min-h-0 bg-background">
+                        <ScrollArea className="flex-1 min-h-0 p-4">
+                            <div className="space-y-6 pb-4">
+                                {/* Welcome State */}
+                                {chatMessages.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center text-muted-foreground px-4">
+                                        <div className="bg-primary/10 p-3 rounded-full mb-3">
+                                            <Sparkles className="size-6 text-primary" />
+                                        </div>
+                                        <h4 className="font-semibold text-gray-900 mb-1">How can I help you?</h4>
+                                        <p className="text-xs max-w-[250px] mx-auto">
+                                            Analyze your social media performance, compare platforms, or get campaign summaries.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    // Chat History
+                                    chatMessages.map((msg, idx) => (
+                                        <div
+                                            key={idx}
+                                            className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start w-full'}`}
+                                        >
+                                            <div
+                                                className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${msg.role === 'user'
+                                                    ? 'bg-primary text-primary-foreground'
+                                                    : 'bg-muted/30 border text-foreground'
+                                                    }`}
+                                            >
+                                                <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                                            </div>
+                                            <p className="text-[9px] opacity-70 px-1">
+                                                {format(new Date(msg.timestamp), 'h:mm a')}
+                                            </p>
+                                        </div>
+                                    ))
+                                )}
+
+                                {/* Loading State */}
+                                {isChatLoading && (
+                                    <div className="flex justify-start w-full">
+                                        <div className="bg-muted/30 border rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3">
+                                            <div className="bg-primary/20 p-1.5 rounded-full">
+                                                <Sparkles className="size-3 text-primary animate-pulse" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-xs font-medium">Syncing fresh metrics...</p>
+                                                <p className="text-[10px] text-muted-foreground">Fetching data from all platforms</p>
                                             </div>
                                         </div>
+                                    </div>
+                                )}
+                            </div>
+                        </ScrollArea>
+
+                        {/* Input Area - Fixed at Bottom */}
+                        <div className="p-4 bg-background border-t shrink-0">
+                            {/* Persistent Quick Prompts - Styled as Badges */}
+                            <div className="mb-3 overflow-x-auto pb-1 -mx-2 px-2 scrollbar-hide">
+                                <div className="flex gap-2 w-max">
+                                    {[
+                                        "Total Average Views",
+                                        "Best Performing Platform",
+                                        "Campaign Summary",
+                                        "Engagement Trends"
+                                    ].map((prompt, i) => (
+                                        <Badge
+                                            key={i}
+                                            onClick={() => sendMessage(prompt)}
+                                            className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors px-3 py-1.5 text-[10px] font-normal whitespace-nowrap border-primary/10 bg-primary/5 text-primary"
+                                        >
+                                            {prompt}
+                                        </Badge>
                                     ))}
-                                    {isChatLoading && (
-                                        <div className="flex justify-start">
-                                            <div className="bg-muted rounded-2xl rounded-bl-none px-4 py-2 border flex items-center gap-2">
-                                                <Loader2 className="size-3 animate-spin text-muted-foreground" />
-                                                <span className="text-xs text-muted-foreground">Analyzing data...</span>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
-                            </ScrollArea>
-                            <div className="p-3 border-t bg-background">
-                                <form onSubmit={handleSendMessage} className="flex gap-2">
-                                    <input
-                                        className="flex-1 bg-muted/50 border rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all placeholder:text-muted-foreground/70"
-                                        placeholder="Ask about your engagement..."
-                                        value={chatInput}
-                                        onChange={(e) => setChatInput(e.target.value)}
-                                        disabled={isChatLoading}
-                                    />
-                                    <Button
-                                        type="submit"
-                                        size="icon"
-                                        className="rounded-full shrink-0"
-                                        disabled={!chatInput.trim() || isChatLoading}
-                                    >
-                                        <Send className="size-4" />
-                                    </Button>
-                                </form>
+                            </div>
+
+                            <div className="flex gap-2 items-end">
+                                <Textarea
+                                    placeholder="Ask a question..."
+                                    value={chatInput}
+                                    onChange={(e) => setChatInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            sendMessage(chatInput);
+                                        }
+                                    }}
+                                    className="min-h-[50px] max-h-[100px] border-primary/20 rounded-xl resize-none py-3 text-xs focus-visible:ring-primary/20"
+                                />
+                                <Button
+                                    onClick={() => sendMessage(chatInput)}
+                                    disabled={!chatInput.trim() || isChatLoading}
+                                    className="h-[50px] w-[50px] shrink-0 rounded-xl flex flex-col items-center justify-center gap-0.5 shadow-sm"
+                                >
+                                    {isChatLoading ? (
+                                        <Loader2 className="size-5 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Send className="size-4" />
+                                        </>
+                                    )}
+                                </Button>
                             </div>
                         </div>
-                    </Card>
-                ) : (
-                    <Button
-                        onClick={() => setIsChatOpen(true)}
-                        size="lg"
-                        className="rounded-full shadow-lg h-14 w-14 p-0 bg-primary hover:bg-primary/90 transition-transform hover:scale-110 active:scale-95 group relative"
-                    >
-                        <Bot className="size-8" />
-                        <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                        </span>
-                    </Button>
-                )}
-            </div>
+                    </CardContent>
+                </Card>
+            ) : (
+                <Button
+                    onClick={() => setIsChatOpen(true)}
+                    className="rounded-full h-14 w-14 fixed bottom-4 right-4   shadow-xl hover:shadow-2xl hover:scale-110 transition-all duration-300 bg-primary text-primary-foreground group"
+                >
+                    <Sparkles className="size-6 group-hover:rotate-12 transition-transform" />
+                    <span className="sr-only">Open AI Assistant</span>
+                </Button>
+            )}
         </div>
     );
 }
