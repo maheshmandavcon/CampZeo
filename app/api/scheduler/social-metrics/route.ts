@@ -9,9 +9,10 @@ export async function GET(req: Request) {
     try {
         const authHeader = req.headers.get('authorization');
 
-        
+
         if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
             if (process.env.NODE_ENV === 'production') {
+                // return new NextResponse('Unauthorized', { status: 401 });
             }
         }
 
@@ -41,16 +42,37 @@ export async function GET(req: Request) {
             users.map(user => SocialNormalizerService.syncUserMetrics(user.clerkId))
         );
 
-        const successes = results.filter(r => r.status === 'fulfilled').length;
-        const failures = results.filter(r => r.status === 'rejected').length;
+        let totalSuccesses = 0;
+        let totalFailures = 0;
+        const details: any[] = [];
 
-        console.log(`[Scheduler] Job Complete. Success: ${successes}, Failures: ${failures}`);
+        results.forEach(r => {
+            if (r.status === 'fulfilled' && r.value) {
+                // Cast to any to access the dynamic properties returned by the service
+                const val = r.value as any;
+                if (val.totalSuccess !== undefined) {
+                    totalSuccesses += val.totalSuccess;
+                    totalFailures += val.totalFailed;
+                    details.push({
+                        user: val.userId,
+                        success: val.totalSuccess,
+                        failed: val.totalFailed
+                    });
+                }
+            } else if (r.status === 'rejected') {
+                console.error('[Scheduler] User sync failed fatally:', r.reason);
+            }
+        });
+
+        console.log(`[Scheduler] Job Complete. Total Items Synced: ${totalSuccesses}, Failed: ${totalFailures}`);
+        console.log('[Scheduler] Details:', JSON.stringify(details));
 
         return NextResponse.json({
             success: true,
-            processed: users.length,
-            successes,
-            failures
+            processed_users: users.length,
+            total_items_synced: totalSuccesses,
+            total_items_failed: totalFailures,
+            details
         });
 
     } catch (error: any) {

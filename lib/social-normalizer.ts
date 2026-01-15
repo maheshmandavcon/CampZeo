@@ -30,6 +30,16 @@ export class SocialNormalizerService {
     static async syncUserMetrics(clerkId: string) {
         console.log(`[SocialNormalizer] Starting sync for user: ${clerkId}`);
 
+        const result = {
+            userId: clerkId,
+            facebook: { success: 0, failed: 0 },
+            instagram: { success: 0, failed: 0 },
+            linkedin: { success: 0, failed: 0 },
+            youtube: { success: 0, failed: 0 },
+            pinterest: { success: 0, failed: 0 },
+            campaigns: { success: 0, failed: 0 }
+        };
+
         const user = await prisma.user.findUnique({
             where: { clerkId },
             include: { organisation: true }
@@ -37,7 +47,7 @@ export class SocialNormalizerService {
 
         if (!user || !user.organisationId) {
             console.warn(`[SocialNormalizer] User or Organisation not found for ${clerkId}`);
-            return;
+            return result;
         }
 
         const orgId = user.organisationId;
@@ -47,59 +57,82 @@ export class SocialNormalizerService {
 
         // 1. Facebook
         if (user.facebookPageAccessToken && user.facebookPageId) {
-            promises.push(this.syncFacebook(orgId, {
-                accessToken: user.facebookPageAccessToken,
-                pageId: user.facebookPageId
-            }));
+            promises.push(
+                this.syncFacebook(orgId, {
+                    accessToken: user.facebookPageAccessToken,
+                    pageId: user.facebookPageId
+                }).then(res => { result.facebook = res; })
+            );
         }
 
         // 2. Instagram
         if (user.instagramAccessToken && user.instagramUserId) {
-            promises.push(this.syncInstagram(orgId, {
-                accessToken: user.instagramAccessToken,
-                userId: user.instagramUserId
-            }));
+            promises.push(
+                this.syncInstagram(orgId, {
+                    accessToken: user.instagramAccessToken,
+                    userId: user.instagramUserId
+                }).then(res => { result.instagram = res; })
+            );
         }
 
         // 3. LinkedIn
         if (user.linkedInAccessToken && user.linkedInAuthUrn) {
-            promises.push(this.syncLinkedIn(orgId, {
-                accessToken: user.linkedInAccessToken,
-                authorUrn: user.linkedInAuthUrn
-            }));
+            promises.push(
+                this.syncLinkedIn(orgId, {
+                    accessToken: user.linkedInAccessToken,
+                    authorUrn: user.linkedInAuthUrn
+                }).then(res => { result.linkedin = res; })
+            );
         }
 
         // 4. YouTube
         if (user.youtubeAccessToken) {
-            promises.push(this.syncYouTube(orgId, {
-                accessToken: user.youtubeAccessToken
-            }));
+            promises.push(
+                this.syncYouTube(orgId, {
+                    accessToken: user.youtubeAccessToken
+                }).then(res => { result.youtube = res; })
+            );
         }
 
         // 5. Pinterest
         if (user.pinterestAccessToken) {
-            promises.push(this.syncPinterest(orgId, {
-                accessToken: user.pinterestAccessToken
-            }));
+            promises.push(
+                this.syncPinterest(orgId, {
+                    accessToken: user.pinterestAccessToken
+                }).then(res => { result.pinterest = res; })
+            );
         }
 
         // 6. Campaign Posts (from PostTransaction)
-        promises.push(this.syncCampaignPosts(orgId, user));
+        promises.push(
+            this.syncCampaignPosts(orgId, user).then(res => { result.campaigns = res; })
+        );
 
         const results = await Promise.allSettled(promises);
 
-        results.forEach((result, index) => {
-            if (result.status === 'rejected') {
-                console.error(`[SocialNormalizer] Platform sync failed:`, result.reason);
+        results.forEach((r, index) => {
+            if (r.status === 'rejected') {
+                console.error(`[SocialNormalizer] Platform sync failed:`, r.reason);
             }
         });
 
-        console.log(`[SocialNormalizer] Sync complete for user: ${clerkId}`);
+        // Calculate total stats
+        const totalSuccess = Object.values(result).filter(v => typeof v === 'object' && 'success' in v).reduce((acc, v: any) => acc + v.success, 0);
+        const totalFailed = Object.values(result).filter(v => typeof v === 'object' && 'failed' in v).reduce((acc, v: any) => acc + v.failed, 0);
+
+        console.log(`[SocialNormalizer] Sync complete for user: ${clerkId}. Success: ${totalSuccess}, Failed: ${totalFailed}`);
+        return {
+            ...result,
+            totalSuccess,
+            totalFailed
+        };
     }
 
     // --- Platform Specific Syncers ---
 
     private static async syncFacebook(orgId: number, creds: { accessToken: string, pageId: string }) {
+        let success = 0;
+        let failed = 0;
         try {
             console.log(`[SocialNormalizer] Syncing Facebook...`);
             const posts = await getFacebookPagePosts(creds, 10); // Sync last 10 posts
@@ -115,14 +148,6 @@ export class SocialNormalizerService {
                         { metricName: "impression_count", value: insights.impressions, rawMetricName: "post_impressions" },
                         { metricName: "reach_count", value: insights.reach, rawMetricName: "post_impressions_unique" },
                         // Amplification for FB is primarily Shares
-                        // Note: Shares might be missing in basic insights, but usually part of engagement
-                        // We don't have direct 'shares' in standard return of getFacebookPostInsights yet unless we add it,
-                        // checking the lib, it does return `shares: postData.shares?.count || 0` inside but not in interface explicitly?
-                        // Wait, looking at `getFacebookPostInsights`, it calculates engagementRate but doesn't return `shares` explicitly in the interface.
-                        // I will approximate amplification if needed or update lib. For now, let's stick to what is exposed.
-                        // Actually, looking at the code I read earlier:
-                        // `return { likes, comments, impressions, reach, engagementRate, ... }`
-                        // It does NOT return shares. I will skip amplification for FB for now or treat generic engagement.
                     ];
 
                     // Calculate total engagement
@@ -130,17 +155,22 @@ export class SocialNormalizerService {
                     metrics.push({ metricName: "engagement_count", value: engagementTotal, rawMetricName: "likes+comments" });
 
                     await this.storeMetrics(orgId, "FACEBOOK", post.id, metrics);
+                    success++;
                 } catch (err) {
                     console.error(`[SocialNormalizer] Failed to sync FB post ${post.id}`, err);
+                    failed++;
                 }
             }
         } catch (err) {
             console.error(`[SocialNormalizer] Facebook sync error`, err);
-            throw err;
+            // If fetching posts fails, we might still have partial results or 0
         }
+        return { success, failed };
     }
 
     private static async syncInstagram(orgId: number, creds: { accessToken: string, userId: string }) {
+        let success = 0;
+        let failed = 0;
         try {
             console.log(`[SocialNormalizer] Syncing Instagram...`);
             const mediaItems = await getInstagramUserMedia(creds, 10);
@@ -156,21 +186,24 @@ export class SocialNormalizerService {
                         { metricName: "impression_count", value: insights.impressions, rawMetricName: "impressions" },
                         { metricName: "reach_count", value: insights.reach, rawMetricName: "reach" },
                         { metricName: "engagement_count", value: insights.likes + insights.comments, rawMetricName: "likes+comments" },
-                        // IG Amplification = Saves (not always available in basic insights but useful if there)
                     ];
 
                     await this.storeMetrics(orgId, "INSTAGRAM", item.id, metrics);
+                    success++;
                 } catch (err) {
                     console.error(`[SocialNormalizer] Failed to sync IG post ${item.id}`, err);
+                    failed++;
                 }
             }
         } catch (err) {
             console.error(`[SocialNormalizer] Instagram sync error`, err);
-            throw err;
         }
+        return { success, failed };
     }
 
     private static async syncLinkedIn(orgId: number, creds: { accessToken: string, authorUrn: string }) {
+        let success = 0;
+        let failed = 0;
         try {
             console.log(`[SocialNormalizer] Syncing LinkedIn...`);
             const posts = await getLinkedInUserPosts(creds, 10);
@@ -188,17 +221,21 @@ export class SocialNormalizerService {
                     ];
 
                     await this.storeMetrics(orgId, "LINKEDIN", post.id, metrics);
+                    success++;
                 } catch (err) {
                     console.error(`[SocialNormalizer] Failed to sync LinkedIn post ${post.id}`, err);
+                    failed++;
                 }
             }
         } catch (err) {
             console.error(`[SocialNormalizer] LinkedIn sync error`, err);
-            throw err;
         }
+        return { success, failed };
     }
 
     private static async syncYouTube(orgId: number, creds: { accessToken: string }) {
+        let success = 0;
+        let failed = 0;
         try {
             console.log(`[SocialNormalizer] Syncing YouTube...`);
             // YouTube 'videos' are channel videos
@@ -218,17 +255,21 @@ export class SocialNormalizerService {
                     ];
 
                     await this.storeMetrics(orgId, "YOUTUBE", video.id, metrics);
+                    success++;
                 } catch (err) {
                     console.error(`[SocialNormalizer] Failed to sync YT video ${video.id}`, err);
+                    failed++;
                 }
             }
         } catch (err) {
             console.error(`[SocialNormalizer] YouTube sync error`, err);
-            throw err;
         }
+        return { success, failed };
     }
 
     private static async syncPinterest(orgId: number, creds: { accessToken: string }) {
+        let success = 0;
+        let failed = 0;
         try {
             console.log(`[SocialNormalizer] Syncing Pinterest...`);
             const pins = await getPinterestUserPins(creds.accessToken, 10);
@@ -247,20 +288,24 @@ export class SocialNormalizerService {
                     ];
 
                     await this.storeMetrics(orgId, "PINTEREST", pin.id, metrics);
+                    success++;
                 } catch (err) {
                     console.error(`[SocialNormalizer] Failed to sync Pinterest pin ${pin.id}`, err);
+                    failed++;
                 }
             }
         } catch (err) {
             console.error(`[SocialNormalizer] Pinterest sync error`, err);
-            throw err;
         }
+        return { success, failed };
     }
 
     /**
      * Sync metrics for campaign posts tracked in PostTransaction
      */
     private static async syncCampaignPosts(orgId: number, user: any) {
+        let success = 0;
+        let failed = 0;
         try {
             console.log(`[SocialNormalizer] Syncing Campaign Posts...`);
 
@@ -363,6 +408,7 @@ export class SocialNormalizerService {
 
                         if (metrics.length > 0) {
                             await this.storeMetrics(orgId, platform as PlatformType, post.postId, metrics);
+                            success++;
                         }
                     }
 
@@ -374,13 +420,14 @@ export class SocialNormalizerService {
 
                 } catch (err) {
                     console.error(`[SocialNormalizer] Failed to sync campaign post ${post.id}`, err);
+                    failed++;
                 }
             }
 
         } catch (err) {
             console.error(`[SocialNormalizer] Campaign posts sync error`, err);
-            throw err;
         }
+        return { success, failed };
     }
 
     /**
@@ -392,11 +439,6 @@ export class SocialNormalizerService {
         postId: string,
         metrics: MetricPoint[]
     ) {
-        // We use a transaction or batch create to be efficient
-        // Since we are recording history, we just insert new rows with default 'now()' timestamp.
-
-        // TODO: Optimization - Don't insert if exact same value exists for recent time window? 
-        // For time-series, usually we just insert.
 
         try {
             await prisma.socialMetricHistory.createMany({
@@ -464,6 +506,7 @@ export class SocialNormalizerService {
             }
         } catch (err) {
             console.error(`[SocialNormalizer] Error storing metrics for ${platform} post ${postId}`, err);
+            throw err; // Re-throw to count as failure in the caller
         }
     }
 }
