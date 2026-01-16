@@ -980,14 +980,6 @@ export default function EditTemplatePage() {
                         </div>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => router.back()}>
-                        Cancel
-                    </Button>
-                    <Button onClick={handleUpdate} disabled={isSaving}>
-                        {isSaving ? "Saving..." : "Save Changes"}
-                    </Button>
-                </div>
             </div>
 
             {/* Main Content */}
@@ -1325,6 +1317,15 @@ export default function EditTemplatePage() {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div className="flex justify-end mb-2 mx-5 gap-2">
+                <Button variant="outline" onClick={() => router.back()}>
+                    Cancel
+                </Button>
+                <Button onClick={handleUpdate} disabled={isSaving}>
+                    {isSaving ? "Saving..." : "Save Changes"}
+                </Button>
             </div>
         </div>
     );
