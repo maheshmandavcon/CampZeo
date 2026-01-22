@@ -69,9 +69,23 @@ model Organisation {
   organisationPlatforms OrganisationPlatform[]
   payments              Payment[]
   socialMetricHistory   SocialMetricHistory[]
+  audienceInsights      AudienceInsight[]
   subscriptions         Subscription[]
   users                 User[]
 }
+
+model AudienceInsight {
+  id             Int          @id @default(autoincrement())
+  organisationId Int
+  platform       PlatformType
+  data           Json         // Stores normalized demographics and activity patterns
+  lastUpdated    DateTime     @default(now()) @updatedAt
+  createdAt      DateTime     @default(now())
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@unique([organisationId, platform])
+}
+
 
 model OrganisationPlatform {
   id             Int          @id @default(autoincrement())
@@ -113,7 +127,14 @@ model CampaignPost {
   mediaUrls            String[]
   metadata             Json?
   isDeleted            Boolean      @default(false)
+  approvalStatus       String       @default("PENDING")
+  category             String?
+  engagement           Json?
+  liveLink             String?
+  publishedDate        DateTime?
+  status               PostStatus   @default(DRAFT)
   campaign             Campaign?    @relation(fields: [campaignId], references: [id])
+  PostAudit            PostAudit[]
 }
 
 model Contact {
@@ -252,6 +273,9 @@ model PostInsight {
   comments       Int      @default(0)
   reach          Int      @default(0)
   impressions    Int      @default(0)
+  saves          Int      @default(0)
+  shares         Int      @default(0)
+  videoViews     Int      @default(0)
   engagementRate Float    @default(0)
   lastUpdated    DateTime
   createdAt      DateTime @default(now())
@@ -388,6 +412,17 @@ model SocialMetricHistory {
   @@index([metricName, recordedAt])
 }
 
+model PostAudit {
+  id           Int          @id @default(autoincrement())
+  postId       Int
+  fieldChanged String
+  oldValue     String?
+  newValue     String?
+  changedBy    String?
+  changedAt    DateTime     @default(now())
+  CampaignPost CampaignPost @relation(fields: [postId], references: [id])
+}
+
 enum UserRole {
   ADMIN_USER
   ORGANISATION_USER
@@ -415,4 +450,10 @@ enum PlatformType {
 enum MessageChannel {
   SMS
   WHATSAPP
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
 }

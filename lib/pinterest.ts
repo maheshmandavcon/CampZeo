@@ -281,6 +281,7 @@ export interface PinterestPostInsights {
     comments: number; // Not always available in API v5 standard analytics
     impressions: number;
     reach: number; // Not directly 'reach', usually 'impression' or 'outbound_click'
+    engagement: number;
     engagementRate: number;
     saves: number;
     pinClicks: number;
@@ -345,7 +346,7 @@ export async function getPinterestPostInsights(
             outboundClicks = lt.outbound_click ?? lt.outbound_clicks ?? 0;
         } else if (detailsResponse.status === 404) {
             return {
-                likes: 0, comments: 0, impressions: 0, reach: 0, engagementRate: 0,
+                likes: 0, comments: 0, impressions: 0, reach: 0, engagement: 0, engagementRate: 0,
                 saves: 0, pinClicks: 0, outboundClicks: 0, isDeleted: true
             };
         }
@@ -403,6 +404,7 @@ export async function getPinterestPostInsights(
             comments,
             impressions,
             reach,
+            engagement: totalEngagements,
             engagementRate,
             saves,
             pinClicks,
@@ -427,6 +429,7 @@ export async function getPinterestPostInsights(
             comments: 0,
             impressions: 0,
             reach: 0,
+            engagement: 0,
             engagementRate: 0,
             saves: 0,
             pinClicks: 0,
@@ -572,5 +575,72 @@ export async function refreshPinterestToken(refreshToken: string, clientId: stri
     }
 
     const data = await response.json();
-    return data; // Returns { access_token, refresh_token, expires_in, refresh_token_expires_in, scope, token_type }
+    return data;
+}
+
+export interface PinterestAudienceInsights {
+    categories: Record<string, number>;
+    demographics: {
+        ages: Record<string, number>;
+        genders: Record<string, number>;
+        locations: Record<string, number>; // Metro/Country
+        devices: Record<string, number>;
+    };
+    totalFollowers?: number;
+}
+
+export async function getPinterestAudienceInsights(
+    accessToken: string
+): Promise<PinterestAudienceInsights> {
+    try {
+        // 1. Get Ad Account (needed for insights)
+        const adAccounts = await getPinterestAdAccounts(accessToken);
+        if (adAccounts.length === 0) {
+            return { categories: {}, demographics: { ages: {}, genders: {}, locations: {}, devices: {} } };
+        }
+
+        const adAccountId = adAccounts[0].id; // Use first account for now
+
+        // 2. Fetch Audience Insights (YOUR_TOTAL_AUDIENCE)
+        const params = new URLSearchParams({
+            audience_insight_type: 'YOUR_TOTAL_AUDIENCE'
+        });
+
+        const insightsResponse = await fetch(`https://api.pinterest.com/v5/ad_accounts/${adAccountId}/audience_insights?${params}`, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+            },
+        });
+
+        // 3. Fetch User Account for Follower Count
+        const userResponse = await fetch('https://api.pinterest.com/v5/user_account', {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+            },
+        });
+        const userData = userResponse.ok ? await userResponse.json() : {};
+
+        let data: any = {};
+        if (insightsResponse.ok) {
+            data = await insightsResponse.json();
+        } else {
+            const error = await insightsResponse.json();
+            console.warn(`[Pinterest] Failed to fetch audience insights: ${JSON.stringify(error)}`);
+        }
+
+        return {
+            categories: data.category_interest || {},
+            demographics: {
+                ages: data.demographics?.ages || {},
+                genders: data.demographics?.genders || {},
+                locations: data.demographics?.countries || {}, // Note: API returns countries here
+                devices: data.demographics?.devices || {}
+            },
+            totalFollowers: userData.follower_count || 0
+        };
+
+    } catch (error) {
+        console.error('[Pinterest] Error fetching audience insights:', error);
+        return { categories: {}, demographics: { ages: {}, genders: {}, locations: {}, devices: {} } };
+    }
 }

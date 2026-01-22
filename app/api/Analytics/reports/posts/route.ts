@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
         const { searchParams } = new URL(req.url);
         const campaignId = searchParams.get('campaignId');
         const platform = searchParams.get('platform');
+        const page = parseInt(searchParams.get('page') || '1');
+        const limit = parseInt(searchParams.get('limit') || '5');
+        const skip = (page - 1) * limit;
 
         // 1. Fetch campaigns for filter dropdown
         const campaigns = await prisma.campaign.findMany({
@@ -37,23 +40,33 @@ export async function GET(req: NextRequest) {
         const activeCampaignPostIds = await prisma.campaignPost.findMany({
             where: {
                 isDeleted: false,
-                ...(campaignId ? { campaignId: parseInt(campaignId) } : { campaign: { organisationId: orgId } })
+                ...(campaignId && campaignId !== 'all' ? { campaignId: parseInt(campaignId) } : { campaign: { organisationId: orgId } })
             },
             select: { id: true }
         }).then(posts => posts.map(p => p.id));
 
-        // Fetch transactions for these posts
+        // 3. Fetch paginated transactions for these posts
         const transactions = await prisma.postTransaction.findMany({
             where: {
                 published: true,
-                ...(platform ? { platform } : {}),
+                ...(platform && platform !== 'all' ? { platform } : {}),
                 refId: { in: activeCampaignPostIds }
             },
             orderBy: { publishedAt: 'desc' },
-            take: 200
+            take: limit,
+            skip: skip
         });
 
-        // 3. Fetch related details
+        // Get total count for pagination
+        const totalCount = await prisma.postTransaction.count({
+            where: {
+                published: true,
+                ...(platform && platform !== 'all' ? { platform } : {}),
+                refId: { in: activeCampaignPostIds }
+            }
+        });
+
+        // 4. Fetch related details for the current page
         const platformPostIds = transactions.map(t => t.postId);
         const transactionRefIds = transactions.map(t => t.refId);
 
@@ -67,16 +80,45 @@ export async function GET(req: NextRequest) {
             })
         ]);
 
-        // Aggregation
-        const totalStats = insights.reduce((acc, curr) => {
-            acc.likes += curr.likes;
-            acc.comments += curr.comments;
-            acc.reach += curr.reach;
-            acc.impressions += curr.impressions;
-            return acc;
-        }, { likes: 0, comments: 0, reach: 0, impressions: 0 });
+        // 5. Fetch Aggregate Stats (Always for the filtered context, not just current page)
+        // For performance in reporting, we might want to aggregate all insights linked to the organization's posts
+        const allTransactionsForStats = await prisma.postTransaction.findMany({
+            where: {
+                published: true,
+                ...(platform && platform !== 'all' ? { platform } : {}),
+                refId: { in: activeCampaignPostIds }
+            },
+            select: { postId: true }
+        });
+        const allPlatformPostIds = allTransactionsForStats.map(t => t.postId);
 
-        // Map insights back to posts for the table
+        const aggregateInsights = await prisma.postInsight.aggregate({
+            where: {
+                postId: { in: allPlatformPostIds },
+                isDeleted: false
+            },
+            _sum: {
+                likes: true,
+                comments: true,
+                reach: true,
+                impressions: true,
+                saves: true,
+                shares: true,
+                videoViews: true
+            }
+        });
+
+        const totalStats = {
+            likes: aggregateInsights._sum.likes || 0,
+            comments: aggregateInsights._sum.comments || 0,
+            reach: aggregateInsights._sum.reach || 0,
+            impressions: aggregateInsights._sum.impressions || 0,
+            saves: aggregateInsights._sum.saves || 0,
+            shares: aggregateInsights._sum.shares || 0,
+            videoViews: aggregateInsights._sum.videoViews || 0
+        };
+
+        // 6. Map data for frontend
         const posts = transactions.map(t => {
             const insight = insights.find(i => i.postId === t.postId);
             const campaignPost = detailedCampaignPosts.find(cp => cp.id === t.refId);
@@ -89,20 +131,19 @@ export async function GET(req: NextRequest) {
                 postType: t.postType,
                 mediaUrls: t.mediaUrls,
                 campaignName: campaignPost?.campaign?.name || 'No Campaign',
-                insight: {
-                    likes: insight?.likes || 0,
-                    comments: insight?.comments || 0,
-                    reach: insight?.reach || 0,
-                    impressions: insight?.impressions || 0,
-                    engagementRate: insight?.engagementRate || 0,
-                    isDeleted: insight?.isDeleted || false,
-                    lastUpdated: insight?.updatedAt?.toISOString() || null
-                },
+                likes: insight?.likes || 0,
+                comments: insight?.comments || 0,
+                reach: insight?.reach || 0,
+                impressions: insight?.impressions || 0,
+                saves: insight?.saves || 0,
+                shares: insight?.shares || 0,
+                videoViews: insight?.videoViews || 0,
+                engagementRate: insight?.engagementRate || 0,
                 publishedAt: t.publishedAt
             };
         });
 
-        // 4. Fetch Engagement Trends (Daily)
+        // 7. Fetch Engagement Trends (Daily, last 14 days)
         const fourteenDaysAgo = new Date();
         fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
 
@@ -111,24 +152,20 @@ export async function GET(req: NextRequest) {
             where: {
                 organisationId: orgId,
                 metricName: 'engagement_count',
-                ...(platform ? { platform: platform as any } : {}),
+                postId: { in: allPlatformPostIds }, // ONLY posts sent from our platform
+                ...(platform && platform !== 'all' ? { platform: platform as any } : {}),
                 recordedAt: { gte: fourteenDaysAgo }
             },
-            _sum: {
-                value: true
-            },
-            orderBy: {
-                recordedAt: 'asc'
-            }
+            _sum: { value: true },
+            orderBy: { recordedAt: 'asc' }
         });
 
-        // Format trends for Recharts
         const trends = trendData.map(t => ({
             date: t.recordedAt.toISOString().split('T')[0],
             engagement: t._sum?.value || 0
         }));
 
-        // 5. Get Last Sync Timestamp
+        // 8. Get Last Sync Timestamp
         const lastSyncRecord = await prisma.postInsight.findFirst({
             where: { isDeleted: false },
             orderBy: { updatedAt: 'desc' },
@@ -140,13 +177,13 @@ export async function GET(req: NextRequest) {
             totalStats,
             posts,
             trends,
-            totalCount: posts.length,
-            totalPages: 1,
+            totalCount,
+            totalPages: Math.ceil(totalCount / limit),
             lastSync: lastSyncRecord?.updatedAt || new Date()
         });
 
     } catch (error) {
-        console.error("[API] Post Analytics error:", error);
+        console.error("[API] Reports Posts Analytics error:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }

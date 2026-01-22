@@ -212,6 +212,7 @@ export interface LinkedInPostInsights {
     comments: number;
     impressions: number;
     reach: number;
+    engagement: number;
     engagementRate: number;
     isDeleted?: boolean;
     text?: string;
@@ -266,12 +267,13 @@ export async function getLinkedInPostInsights(
                     comments: 0,
                     impressions: 0,
                     reach: 0,
+                    engagement: 0,
                     engagementRate: 0,
                     isDeleted: true
                 };
             }
 
-            return { likes: 0, comments: 0, impressions: 0, reach: 0, engagementRate: 0, isDeleted: false };
+            return { likes: 0, comments: 0, impressions: 0, reach: 0, engagement: 0, engagementRate: 0, isDeleted: false };
         }
 
         const data = await response.json();
@@ -351,6 +353,7 @@ export async function getLinkedInPostInsights(
             comments,
             impressions,
             reach,
+            engagement: totalEngagements,
             engagementRate,
             isDeleted: false
         };
@@ -371,6 +374,7 @@ export async function getLinkedInPostInsights(
             comments: 0,
             impressions: 0,
             reach: 0,
+            engagement: 0,
             engagementRate: 0,
             isDeleted: false
         };
@@ -423,5 +427,104 @@ export async function getLinkedInUserPosts(
     } catch (error) {
         console.error('LinkedIn fetch posts error:', error);
         throw error;
+    }
+}
+
+export interface LinkedInAudienceInsights {
+    followerCounts: {
+        organic: number;
+        paid: number;
+        total: number;
+    };
+    followerGeography: Record<string, number>;
+}
+
+export async function getLinkedInAudienceInsights(
+    credentials: LinkedInCredentials
+): Promise<LinkedInAudienceInsights> {
+    const { accessToken, authorUrn } = credentials;
+
+    // Verify it is an organization
+    if (!authorUrn || !authorUrn.includes('organization')) {
+        console.warn('[LinkedIn] Audience insights are only available for Organization Pages, not personal profiles.');
+        return {
+            followerCounts: { organic: 0, paid: 0, total: 0 },
+            followerGeography: {}
+        };
+    }
+
+    // Extract ID if needed, but we can pass urn directly if format is correct
+    // q=organizationalEntity&organizationalEntity={urn}
+
+    try {
+        const response = await fetch(
+            `https://api.linkedin.com/v2/organizationalEntityFollowerStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(authorUrn)}`,
+            {
+                headers: {
+                    "Authorization": `Bearer ${accessToken}`,
+                    "X-Restli-Protocol-Version": "2.0.0",
+                    "LinkedIn-Version": "202401",
+                }
+            }
+        );
+
+        if (!response.ok) {
+            // 403 means permission denied (needs rw_organization_admin or similar)
+            // 404 means not found
+            const errorText = await response.text();
+            console.warn(`[LinkedIn] Failed to fetch follower stats: ${response.status} - ${errorText}`);
+            return { followerCounts: { organic: 0, paid: 0, total: 0 }, followerGeography: {} };
+        }
+
+        const data = await response.json();
+        const element = data.elements?.[0]; // Usually returns one aggregated object for the queried entity
+
+        if (element) {
+            const organic = element.followerCountsByAssociationType?.organicFollowerCount || 0;
+            const paid = element.followerCountsByAssociationType?.paidFollowerCount || 0;
+
+            // 2. Fetch Geographic Statistics (Followers by country)
+            let followerGeography: Record<string, number> = {};
+            try {
+                const geoResponse = await fetch(
+                    `https://api.linkedin.com/v2/organizationalEntityFollowerStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(authorUrn)}&dimensions=List(geography)`,
+                    {
+                        headers: {
+                            "Authorization": `Bearer ${accessToken}`,
+                            "X-Restli-Protocol-Version": "2.0.0",
+                            "LinkedIn-Version": "202401",
+                        }
+                    }
+                );
+
+                if (geoResponse.ok) {
+                    const geoData = await geoResponse.json();
+                    if (geoData.elements) {
+                        geoData.elements.forEach((el: any) => {
+                            const geoId = el.geography?.split(':').pop() || 'Unknown';
+                            const count = el.followerCountsByAssociationType?.organicFollowerCount || 0;
+                            followerGeography[geoId] = (followerGeography[geoId] || 0) + count;
+                        });
+                    }
+                }
+            } catch (geoErr) {
+                console.warn('[LinkedIn] Geography fetch failed:', geoErr);
+            }
+
+            return {
+                followerCounts: {
+                    organic,
+                    paid,
+                    total: organic + paid
+                },
+                followerGeography
+            };
+        }
+
+        return { followerCounts: { organic: 0, paid: 0, total: 0 }, followerGeography: {} };
+
+    } catch (error) {
+        console.error('[LinkedIn] Error fetching audience insights:', error);
+        return { followerCounts: { organic: 0, paid: 0, total: 0 }, followerGeography: {} };
     }
 }

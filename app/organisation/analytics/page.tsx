@@ -140,10 +140,21 @@ export default function AnalyticsPage() {
     const [chatInput, setChatInput] = useState('');
     const [isChatLoading, setIsChatLoading] = useState(false);
 
+    // Groq AI Chat State (Positioned Left)
+    const [isGroqChatOpen, setIsGroqChatOpen] = useState(false);
+    const [groqChatMessages, setGroqChatMessages] = useState<ChatMessage[]>([]);
+    const [groqChatInput, setGroqChatInput] = useState('');
+    const [isGroqChatLoading, setIsGroqChatLoading] = useState(false);
+
     // Analytics Cache State
     const [analyticsCache, setAnalyticsCache] = useState<any>(null);
+    const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
     const [isSyncingAnalytics, setIsSyncingAnalytics] = useState(false);
     const hasSynced = useRef(false); // Prevent duplicate sync in StrictMode
+
+    // AI Delayed Prompt State
+    const [pendingMessage, setPendingMessage] = useState<{ text: string, type: 'gemini' | 'groq' } | null>(null);
+    const [showSyncPrompt, setShowSyncPrompt] = useState<{ gemini: boolean, groq: boolean }>({ gemini: false, groq: false });
 
     // Fetch platforms
     useEffect(() => {
@@ -210,34 +221,61 @@ export default function AnalyticsPage() {
         }
     }, [selectedPlatform, page, startDate, endDate]);
 
-    // Sync analytics data on page load
+    // Sync analytics data on page load - SMART CACHING
     useEffect(() => {
-        // Prevent duplicate sync in React StrictMode
-        if (hasSynced.current) return;
-
-        const syncAnalyticsOnLoad = async () => {
-            hasSynced.current = true;
-            setIsSyncingAnalytics(true);
-            try {
-                console.log('[Analytics Page] Syncing fresh metrics on page load...');
-                const response = await fetch('/api/Analytics/sync-all');
-                if (!response.ok) throw new Error('Failed to sync analytics');
-
-                const data = await response.json();
-                setAnalyticsCache(data.analytics);
-                console.log('[Analytics Page] Analytics synced and cached:', data.analytics);
-                toast.success('Analytics data refreshed');
-            } catch (error) {
-                console.error('[Analytics Page] Sync error:', error);
-                toast.error('Failed to sync analytics data');
-                hasSynced.current = false; // Allow retry on error
-            } finally {
-                setIsSyncingAnalytics(false);
+        const loadCache = () => {
+            const savedCache = localStorage.getItem('campzeo_analytics_cache');
+            const savedTime = localStorage.getItem('campzeo_analytics_last_sync');
+            if (savedCache && savedTime) {
+                try {
+                    setAnalyticsCache(JSON.parse(savedCache));
+                    setLastSyncedAt(savedTime);
+                    console.log('[Analytics Page] Restored cache from localStorage:', savedTime);
+                    return true;
+                } catch (e) {
+                    console.error('Failed to parse cache', e);
+                }
             }
+            return false;
         };
 
-        syncAnalyticsOnLoad();
-    }, []); // Run once on mount
+        const hasCache = loadCache();
+
+        // Only trigger automatic sync if no cache exists or if specifically needed
+        if (hasSynced.current) return;
+        hasSynced.current = true;
+
+        if (!hasCache) {
+            syncAnalyticsOnLoad();
+        }
+    }, []);
+
+    const syncAnalyticsOnLoad = async (forceFullSync = false) => {
+        setIsSyncingAnalytics(true);
+        try {
+            console.log(`[Analytics Page] Syncing ${forceFullSync ? 'FRESH' : 'cached'} metrics...`);
+            // Professional approach: If not forced, we could have a 'fast' endpoint that only reads DB
+            // but for now we use the existing sync-all. We can add a Param if we want to optimize further.
+            const response = await fetch(`/api/Analytics/sync-all${forceFullSync ? '' : '?skipSync=true'}`);
+            if (!response.ok) throw new Error('Failed to sync analytics');
+
+            const data = await response.json();
+            setAnalyticsCache(data.analytics);
+            setLastSyncedAt(data.syncedAt);
+
+            // Persist to localStorage
+            localStorage.setItem('campzeo_analytics_cache', JSON.stringify(data.analytics));
+            localStorage.setItem('campzeo_analytics_last_sync', data.syncedAt);
+
+            console.log('[Analytics Page] Analytics synced and cached:', data.syncedAt);
+            toast.success(forceFullSync ? 'Full metrics refresh complete' : 'Data loaded from database');
+        } catch (error) {
+            console.error('[Analytics Page] Sync error:', error);
+            toast.error('Failed to sync analytics data');
+        } finally {
+            setIsSyncingAnalytics(false);
+        }
+    };
 
     const handleSync = async (post: Post) => {
         setSyncing(post.id);
@@ -399,12 +437,25 @@ export default function AnalyticsPage() {
         }
     };
 
-    const sendMessage = async (text: string) => {
+    const sendMessage = async (text: string, skipSyncPrompt = false) => {
         if (!text.trim() || isChatLoading) return;
 
+        // If it's the first message and we have cache, ask for sync preference
+        if (!skipSyncPrompt && chatMessages.length === 0 && analyticsCache) {
+            setPendingMessage({ text, type: 'gemini' });
+            setShowSyncPrompt(prev => ({ ...prev, gemini: true }));
+            setChatMessages(prev => [...prev, { role: 'user', content: text, timestamp: new Date() }]);
+            return;
+        }
+
         setChatInput('');
-        // Optimistically add user message
-        setChatMessages(prev => [...prev, { role: 'user', content: text, timestamp: new Date() }]);
+        if (!skipSyncPrompt || chatMessages.find(m => m.role === 'user' && m.content === text) === undefined) {
+            // Only add if not already optimistically added by prompt flow
+            setChatMessages(prev => {
+                if (prev.find(m => m.role === 'user' && m.content === text)) return prev;
+                return [...prev, { role: 'user', content: text, timestamp: new Date() }];
+            });
+        }
 
         // Check if we can provide an instant answer from cached data
         const instantAnswer = getInstantAnswer(text);
@@ -441,6 +492,84 @@ export default function AnalyticsPage() {
             setChatMessages(prev => [...prev, { role: 'assistant', content: "I'm having trouble connecting to the analytics engine right now. Please try again later.", timestamp: new Date() }]);
         } finally {
             setIsChatLoading(false);
+        }
+    };
+
+    const sendGroqMessage = async (text: string, skipSyncPrompt = false) => {
+        if (!text.trim() || isGroqChatLoading) return;
+
+        // If it's the first message and we have cache, ask for sync preference
+        if (!skipSyncPrompt && groqChatMessages.length === 0 && analyticsCache) {
+            setPendingMessage({ text, type: 'groq' });
+            setShowSyncPrompt(prev => ({ ...prev, groq: true }));
+            setGroqChatMessages(prev => [...prev, { role: 'user', content: text, timestamp: new Date() }]);
+            return;
+        }
+
+        setGroqChatInput('');
+        if (!skipSyncPrompt || groqChatMessages.find(m => m.role === 'user' && m.content === text) === undefined) {
+            setGroqChatMessages(prev => {
+                if (prev.find(m => m.role === 'user' && m.content === text)) return prev;
+                return [...prev, { role: 'user', content: text, timestamp: new Date() }];
+            });
+        }
+
+        // Check if we can provide an instant answer from cached data
+        const instantAnswer = getInstantAnswer(text);
+        if (instantAnswer) {
+            setGroqChatMessages(prev => [...prev, {
+                role: 'assistant',
+                content: instantAnswer,
+                timestamp: new Date()
+            }]);
+            return;
+        }
+
+        setIsGroqChatLoading(true);
+
+        try {
+            const response = await fetch('/api/ai/groq-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: text,
+                    analyticsData: analyticsCache
+                })
+            });
+
+            if (!response.ok) throw new Error('Failed to get answer');
+
+            const data = await response.json();
+            setGroqChatMessages(prev => [...prev, { role: 'assistant', content: data.message, timestamp: new Date() }]);
+        } catch (error) {
+            console.error('Groq Chat error:', error);
+            setGroqChatMessages(prev => [...prev, { role: 'assistant', content: "I'm having trouble connecting to the Groq analytics engine right now. Please try again later.", timestamp: new Date() }]);
+        } finally {
+            setIsGroqChatLoading(false);
+        }
+    };
+
+    const handleSyncChoice = async (type: 'latest' | 'existing', mode: 'gemini' | 'groq') => {
+        if (!pendingMessage) return;
+
+        const currentMessage = pendingMessage.text;
+        setShowSyncPrompt(prev => ({ ...prev, [mode]: false }));
+        setPendingMessage(null);
+
+        if (type === 'latest') {
+            if (mode === 'gemini') {
+                setChatMessages(prev => [...prev, { role: 'assistant', content: "Refreshing latest analytics for you... this may take a moment. ⏳", timestamp: new Date() }]);
+            } else {
+                setGroqChatMessages(prev => [...prev, { role: 'assistant', content: "Fetching fresh metrics from all platforms... please hold on. ⏳", timestamp: new Date() }]);
+            }
+            await syncAnalyticsOnLoad(true); // Force full sync
+        }
+
+        // Now proceed with actual message
+        if (mode === 'gemini') {
+            sendMessage(currentMessage, true);
+        } else {
+            sendGroqMessage(currentMessage, true);
         }
     };
 
@@ -956,15 +1085,179 @@ export default function AnalyticsPage() {
                 )}
             </div>
 
-            {/* Floating Chat Window - Resized and Restyled to match AIContentAssistant */}
+            {/* Groq Floating Chat Window - FIXED BOTTOM LEFT */}
+            {isGroqChatOpen ? (
+                <Card className="border shadow-2xl overflow-hidden flex flex-col h-[600px] w-[450px] rounded-2xl ring-1 ring-black/5 fixed bottom-4 left-4 z-50">
+                    {/* Header */}
+                    <div className="p-4 border-b shrink-0 bg-white z-10 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Bot className="size-5 text-indigo-600" />
+                            <div>
+                                <h3 className="font-semibold text-sm text-foreground">Groq AI Assistant (Llama 3.3)</h3>
+                                <p className="text-[10px] text-muted-foreground">Reports, Metrics & Sentiment Analysis</p>
+                            </div>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:bg-gray-100 rounded-full"
+                            onClick={() => setIsGroqChatOpen(false)}
+                        >
+                            <X className="size-4" />
+                        </Button>
+                    </div>
+
+                    {/* Chat Area */}
+                    <CardContent className="p-0 flex-1 flex flex-col min-h-0 bg-background">
+                        <ScrollArea className="flex-1 min-h-0 p-4">
+                            <div className="space-y-6 pb-4">
+                                {groqChatMessages.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center text-muted-foreground px-4">
+                                        <div className="bg-indigo-50 p-3 rounded-full mb-3">
+                                            <Bot className="size-6 text-indigo-600" />
+                                        </div>
+                                        <h4 className="font-semibold text-gray-900 mb-1">Deep Analytics with Groq</h4>
+                                        <p className="text-xs max-w-[250px] mx-auto">
+                                            Llama 3.3 powered sentiment analysis and metric-heavy reports.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    groqChatMessages.map((msg, idx) => (
+                                        <div
+                                            key={idx}
+                                            className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start w-full'}`}
+                                        >
+                                            <div
+                                                className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${msg.role === 'user'
+                                                    ? 'bg-indigo-600 text-white'
+                                                    : 'bg-muted/30 border text-foreground'
+                                                    }`}
+                                            >
+                                                <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                                            </div>
+                                            <p className="text-[9px] opacity-70 px-1">
+                                                {format(new Date(msg.timestamp), 'h:mm a')}
+                                            </p>
+                                        </div>
+                                    ))
+                                )}
+
+                                {showSyncPrompt.groq && (
+                                    <div className="flex justify-start w-full">
+                                        <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-4 shadow-sm space-y-3 w-full max-w-[90%]">
+                                            <div className="flex items-center gap-2">
+                                                <RefreshCw className="size-4 text-indigo-600" />
+                                                <p className="text-xs font-semibold text-indigo-900">Data Freshness Alert</p>
+                                            </div>
+                                            <p className="text-[11px] text-indigo-700 leading-relaxed">
+                                                Your last sync was <strong>{lastSyncedAt ? format(new Date(lastSyncedAt), 'MMM d, h:mm a') : 'never'}</strong>.
+                                                For large accounts, a fresh sync can take up to 30 seconds.
+                                            </p>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-8 text-[10px] border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                                                    onClick={() => handleSyncChoice('latest', 'groq')}
+                                                >
+                                                    Fetch Latest
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    className="h-8 text-[10px] bg-indigo-600 text-white hover:bg-indigo-700"
+                                                    onClick={() => handleSyncChoice('existing', 'groq')}
+                                                >
+                                                    Continue with Existing
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {isGroqChatLoading && (
+                                    <div className="flex justify-start w-full">
+                                        <div className="bg-muted/30 border rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3">
+                                            <div className="bg-indigo-100 p-1.5 rounded-full">
+                                                <Bot className="size-3 text-indigo-600 animate-pulse" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-xs font-medium">Groq is thinking...</p>
+                                                <p className="text-[10px] text-muted-foreground">Analyzing deep metrics & sentiment</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </ScrollArea>
+
+                        {/* Input Area */}
+                        <div className="p-4 bg-background border-t shrink-0">
+                            <div className="mb-3 overflow-x-auto pb-1 -mx-2 px-2 scrollbar-hide">
+                                <div className="flex gap-2 w-max">
+                                    {[
+                                        "Platform Performance Comparison",
+                                        "Overall Sentiment Analysis",
+                                        "Top 3 Best Posts Report",
+                                        "Engagement Growth Forecast"
+                                    ].map((prompt, i) => (
+                                        <Badge
+                                            key={i}
+                                            onClick={() => sendGroqMessage(prompt)}
+                                            className="cursor-pointer hover:bg-indigo-600 hover:text-white transition-colors px-3 py-1.5 text-[10px] font-normal whitespace-nowrap border-indigo-100 bg-indigo-50 text-indigo-700"
+                                        >
+                                            {prompt}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="flex gap-2 items-end">
+                                <Textarea
+                                    placeholder="Ask for reports or sentiment..."
+                                    value={groqChatInput}
+                                    onChange={(e) => setGroqChatInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            sendGroqMessage(groqChatInput);
+                                        }
+                                    }}
+                                    className="min-h-[50px] max-h-[100px] border-indigo-100 rounded-xl resize-none py-3 text-xs focus-visible:ring-indigo-200"
+                                />
+                                <Button
+                                    onClick={() => sendGroqMessage(groqChatInput)}
+                                    disabled={!groqChatInput.trim() || isGroqChatLoading}
+                                    className="h-[50px] w-[50px] shrink-0 rounded-xl flex flex-col items-center justify-center gap-0.5 shadow-sm bg-indigo-600 hover:bg-indigo-700"
+                                >
+                                    {isGroqChatLoading ? (
+                                        <Loader2 className="size-5 animate-spin text-white" />
+                                    ) : (
+                                        <Send className="size-4 text-white" />
+                                    )}
+                                </Button>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            ) : (
+                <Button
+                    onClick={() => setIsGroqChatOpen(true)}
+                    className="rounded-full h-14 w-14 fixed bottom-4 left-4 z-40 shadow-xl hover:shadow-2xl hover:scale-110 transition-all duration-300 bg-indigo-600 text-white group"
+                >
+                    <Bot className="size-6 group-hover:rotate-12 transition-transform" />
+                    <span className="sr-only">Open Groq AI Assistant</span>
+                </Button>
+            )}
+
+            {/* Google Floating Chat Window - FIXED BOTTOM RIGHT */}
             {isChatOpen ? (
-                <Card className="border shadow-2xl overflow-hidden flex flex-col h-[600px] w-[450px] rounded-2xl ring-1 ring-black/5 fixed bottom-4 right-4">
+                <Card className="border shadow-2xl overflow-hidden flex flex-col h-[600px] w-[450px] rounded-2xl ring-1 ring-black/5 fixed bottom-4 right-4 z-50">
                     {/* Header */}
                     <div className="p-4 border-b shrink-0 bg-white z-10 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <Sparkles className="size-5 text-primary" />
                             <div>
-                                <h3 className="font-semibold text-sm text-foreground">AI Analytics Assistant</h3>
+                                <h3 className="font-semibold text-sm text-foreground">AI Analytics Assistant (Gemini)</h3>
                                 <p className="text-[10px] text-muted-foreground">Ask about metrics, comparisons, and performance</p>
                             </div>
                         </div>
@@ -988,9 +1281,9 @@ export default function AnalyticsPage() {
                                         <div className="bg-primary/10 p-3 rounded-full mb-3">
                                             <Sparkles className="size-6 text-primary" />
                                         </div>
-                                        <h4 className="font-semibold text-gray-900 mb-1">How can I help you?</h4>
+                                        <h4 className="font-semibold text-gray-900 mb-1">Interactive Analytics</h4>
                                         <p className="text-xs max-w-[250px] mx-auto">
-                                            Analyze your social media performance, compare platforms, or get campaign summaries.
+                                            Gemini powered quick insights and platform comparisons.
                                         </p>
                                     </div>
                                 ) : (
@@ -1015,6 +1308,38 @@ export default function AnalyticsPage() {
                                     ))
                                 )}
 
+                                {showSyncPrompt.gemini && (
+                                    <div className="flex justify-start w-full">
+                                        <div className="bg-primary/5 border border-primary/10 rounded-2xl px-4 py-4 shadow-sm space-y-3 w-full max-w-[90%]">
+                                            <div className="flex items-center gap-2">
+                                                <RefreshCw className="size-4 text-primary" />
+                                                <p className="text-xs font-semibold text-primary">Data Freshness Alert</p>
+                                            </div>
+                                            <p className="text-[11px] text-primary/80 leading-relaxed">
+                                                Your current data is from <strong>{lastSyncedAt ? format(new Date(lastSyncedAt), 'MMM d, h:mm a') : 'never'}</strong>.
+                                                Would you like to analyze with the latest metrics?
+                                            </p>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-8 text-[10px] border-primary/20 text-primary hover:bg-primary/10"
+                                                    onClick={() => handleSyncChoice('latest', 'gemini')}
+                                                >
+                                                    Sync Latest
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    className="h-8 text-[10px] bg-primary text-primary-foreground"
+                                                    onClick={() => handleSyncChoice('existing', 'gemini')}
+                                                >
+                                                    Use Existing
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Loading State */}
                                 {isChatLoading && (
                                     <div className="flex justify-start w-full">
@@ -1023,8 +1348,8 @@ export default function AnalyticsPage() {
                                                 <Sparkles className="size-3 text-primary animate-pulse" />
                                             </div>
                                             <div className="space-y-1">
-                                                <p className="text-xs font-medium">Syncing fresh metrics...</p>
-                                                <p className="text-[10px] text-muted-foreground">Fetching data from all platforms</p>
+                                                <p className="text-xs font-medium">Gemini is thinking...</p>
+                                                <p className="text-[10px] text-muted-foreground">Processing metrics & trends</p>
                                             </div>
                                         </div>
                                     </div>
@@ -1056,7 +1381,7 @@ export default function AnalyticsPage() {
 
                             <div className="flex gap-2 items-end">
                                 <Textarea
-                                    placeholder="Ask a question..."
+                                    placeholder="Ask about metrics & trends..."
                                     value={chatInput}
                                     onChange={(e) => setChatInput(e.target.value)}
                                     onKeyDown={(e) => {
@@ -1075,9 +1400,7 @@ export default function AnalyticsPage() {
                                     {isChatLoading ? (
                                         <Loader2 className="size-5 animate-spin" />
                                     ) : (
-                                        <>
-                                            <Send className="size-4" />
-                                        </>
+                                        <Send className="size-4" />
                                     )}
                                 </Button>
                             </div>
@@ -1087,10 +1410,10 @@ export default function AnalyticsPage() {
             ) : (
                 <Button
                     onClick={() => setIsChatOpen(true)}
-                    className="rounded-full h-14 w-14 fixed bottom-4 right-4   shadow-xl hover:shadow-2xl hover:scale-110 transition-all duration-300 bg-primary text-primary-foreground group"
+                    className="rounded-full h-14 w-14 fixed bottom-4 right-4 z-40  shadow-xl hover:shadow-2xl hover:scale-110 transition-all duration-300 bg-primary text-primary-foreground group"
                 >
                     <Sparkles className="size-6 group-hover:rotate-12 transition-transform" />
-                    <span className="sr-only">Open AI Assistant</span>
+                    <span className="sr-only">Open Gemini Assistant</span>
                 </Button>
             )}
         </div>
