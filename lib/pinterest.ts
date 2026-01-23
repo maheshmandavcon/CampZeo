@@ -45,7 +45,11 @@ export async function postToPinterest(
 
             const hasVideo = mediaList.some(url => /\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i.test(url));
             if (hasVideo) {
-                console.warn('[Pinterest] Video detected in multiple items. Pinterest organic carousel mainly supports images. Proceeding with multiple_image_urls check.');
+                // Pinterest Organic API Limitations:
+                // - Video Carousel: Not supported via standard organic endpoints (only ads).
+                // - Mixed Media: Not supported.
+                // - Multiple Videos: Not supported.
+                throw new Error('Pinterest does not support multiple video posts or mixed media with video. Please use a single video or multiple images.');
             }
 
             body.media_source = {
@@ -591,56 +595,141 @@ export interface PinterestAudienceInsights {
 
 export async function getPinterestAudienceInsights(
     accessToken: string
-): Promise<PinterestAudienceInsights> {
+): Promise<any> {
+    console.log('[Pinterest] 🔍 Starting audience insights fetch...');
+
+    let totalFollowers = 0;
+    let categories: Record<string, number> = {};
+    let demographics = { ages: {}, genders: {}, locations: {}, devices: {} };
+
+    // Store raw API responses for debugging
+    let rawUserAccountResponse: any = null;
+    let rawAudienceInsightsResponse: any = null;
+
+    // STEP 1: Fetch follower count (CRITICAL - must succeed)
     try {
-        // 1. Get Ad Account (needed for insights)
-        const adAccounts = await getPinterestAdAccounts(accessToken);
-        if (adAccounts.length === 0) {
-            return { categories: {}, demographics: { ages: {}, genders: {}, locations: {}, devices: {} } };
-        }
-
-        const adAccountId = adAccounts[0].id; // Use first account for now
-
-        // 2. Fetch Audience Insights (YOUR_TOTAL_AUDIENCE)
-        const params = new URLSearchParams({
-            audience_insight_type: 'YOUR_TOTAL_AUDIENCE'
-        });
-
-        const insightsResponse = await fetch(`https://api.pinterest.com/v5/ad_accounts/${adAccountId}/audience_insights?${params}`, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
-
-        // 3. Fetch User Account for Follower Count
+        console.log('[Pinterest] 📊 Fetching user account...');
         const userResponse = await fetch('https://api.pinterest.com/v5/user_account', {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
+            headers: { 'Authorization': `Bearer ${accessToken}` },
         });
-        const userData = userResponse.ok ? await userResponse.json() : {};
 
-        let data: any = {};
-        if (insightsResponse.ok) {
-            data = await insightsResponse.json();
+        if (userResponse.ok) {
+            const userData = await userResponse.json();
+            rawUserAccountResponse = userData; // Capture raw response
+            totalFollowers = userData.follower_count || 0;
+            console.log(`[Pinterest] ✅ Follower count: ${totalFollowers}`);
         } else {
-            const error = await insightsResponse.json();
-            console.warn(`[Pinterest] Failed to fetch audience insights: ${JSON.stringify(error)}`);
+            const errorText = await userResponse.text();
+            console.error(`[Pinterest] ❌ User account fetch failed (${userResponse.status}):`, errorText);
         }
-
-        return {
-            categories: data.category_interest || {},
-            demographics: {
-                ages: data.demographics?.ages || {},
-                genders: data.demographics?.genders || {},
-                locations: data.demographics?.countries || {}, // Note: API returns countries here
-                devices: data.demographics?.devices || {}
-            },
-            totalFollowers: userData.follower_count || 0
-        };
-
     } catch (error) {
-        console.error('[Pinterest] Error fetching audience insights:', error);
-        return { categories: {}, demographics: { ages: {}, genders: {}, locations: {}, devices: {} } };
+        console.error('[Pinterest] ❌ Exception in user account fetch:', error);
     }
+
+    // STEP 2: Fetch ad accounts (needed for demographics)
+    let adAccounts: any[] = [];
+    try {
+        console.log('[Pinterest] 🏢 Fetching ad accounts...');
+        adAccounts = await getPinterestAdAccounts(accessToken);
+        console.log(`[Pinterest] Found ${adAccounts.length} ad account(s)`);
+
+        if (adAccounts.length === 0) {
+            console.warn('[Pinterest] ⚠️ No ad accounts - demographics unavailable');
+        }
+    } catch (error) {
+        console.error('[Pinterest] ❌ Exception fetching ad accounts:', error);
+    }
+
+    // STEP 3: Fetch audience insights (optional demographics)
+    if (adAccounts.length > 0) {
+        try {
+            const adAccountId = adAccounts[0].id;
+            console.log(`[Pinterest] 📈 Fetching insights for account: ${adAccountId}`);
+
+            const params = new URLSearchParams({
+                audience_insight_type: 'YOUR_TOTAL_AUDIENCE'
+            });
+
+            const insightsResponse = await fetch(
+                `https://api.pinterest.com/v5/ad_accounts/${adAccountId}/audience_insights?${params}`,
+                {
+                    headers: { 'Authorization': `Bearer ${accessToken}` },
+                }
+            );
+
+            if (insightsResponse.ok) {
+                const data = await insightsResponse.json();
+                rawAudienceInsightsResponse = data; // Capture raw response
+
+                // Pinterest API returns demographics as arrays with {key, name, ratio}
+                // Convert to our expected format: Record<string, number>
+
+                // Categories (if present)
+                if (data.categories && Array.isArray(data.categories)) {
+                    categories = data.categories.reduce((acc: Record<string, number>, cat: any) => {
+                        acc[cat.name || cat.key] = cat.ratio || 0;
+                        return acc;
+                    }, {});
+                }
+
+                // Demographics
+                if (data.demographics) {
+                    // Ages: [{key: "18-24", name: "18-24", ratio: 0.259}, ...]
+                    if (Array.isArray(data.demographics.ages)) {
+                        demographics.ages = data.demographics.ages.reduce((acc: Record<string, number>, age: any) => {
+                            acc[age.key || age.name] = age.ratio || 0;
+                            return acc;
+                        }, {});
+                    }
+
+                    // Genders: [{key: "Female", name: "Female", ratio: 0.68}, ...]
+                    if (Array.isArray(data.demographics.genders)) {
+                        demographics.genders = data.demographics.genders.reduce((acc: Record<string, number>, gender: any) => {
+                            acc[gender.key || gender.name] = gender.ratio || 0;
+                            return acc;
+                        }, {});
+                    }
+
+                    // Countries: [{key: "us", name: "United States", ratio: 0.666}, ...]
+                    if (Array.isArray(data.demographics.countries)) {
+                        demographics.locations = data.demographics.countries.reduce((acc: Record<string, number>, country: any) => {
+                            acc[country.key || country.name] = country.ratio || 0;
+                            return acc;
+                        }, {});
+                    }
+
+                    // Devices: [{key: "IPHONE", name: "iPhone", ratio: 0.61}, ...]
+                    if (Array.isArray(data.demographics.devices)) {
+                        demographics.devices = data.demographics.devices.reduce((acc: Record<string, number>, device: any) => {
+                            acc[device.key || device.name] = device.ratio || 0;
+                            return acc;
+                        }, {});
+                    }
+                }
+
+                console.log('[Pinterest] ✅ Demographics fetched and parsed successfully');
+            } else {
+                const errorText = await insightsResponse.text();
+                console.warn(`[Pinterest] ⚠️ Insights fetch failed (${insightsResponse.status}):`, errorText);
+            }
+        } catch (error) {
+            console.error('[Pinterest] ❌ Exception fetching insights:', error);
+        }
+    }
+
+    // FINAL: Return all collected data including raw responses
+    const result = {
+        categories,
+        demographics,
+        totalFollowers,
+        _rawApiResponses: {
+            userAccount: rawUserAccountResponse,
+            audienceInsights: rawAudienceInsightsResponse
+        }
+    };
+
+    console.log('[Pinterest] 📦 Final result captured with raw responses');
+
+    return result;
 }
+

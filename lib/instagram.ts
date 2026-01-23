@@ -10,45 +10,116 @@ interface InstagramCredentials {
 export async function postToInstagram(
     credentials: InstagramCredentials,
     caption: string,
-    mediaUrl: string,
-    options?: { isReel?: boolean }
+    media: string | string[],
+    options?: { isReel?: boolean; shareToFeed?: boolean; isVideo?: boolean }
 ) {
     const { accessToken, userId } = credentials;
 
-    console.log(`[Instagram] Posting to user: ${userId}, Is Reel: ${options?.isReel || false}`);
+    // Normalize media to array
+    const mediaList = Array.isArray(media) ? media : [media];
+    const isCarousel = mediaList.length > 1;
+
+    console.log(`[Instagram] Posting to user: ${userId}, Media Count: ${mediaList.length}, Is Carousel: ${isCarousel}, Is Reel: ${options?.isReel || false}`);
 
     try {
-        // 1. Create Media Container
-        const isVideo = options?.isReel || isVideoUrl(mediaUrl);
-        const mediaType = isVideo ? 'VIDEO' : 'IMAGE';
+        let creationId: string;
 
-        let containerUrl = `https://graph.facebook.com/v24.0/${userId}/media?media_type=${mediaType}&caption=${encodeURIComponent(caption)}&access_token=${accessToken}`;
+        if (isCarousel) {
+            // CAROUSEL POSTING
+            // 1. Create Item Containers for each media
+            const itemIds: string[] = [];
 
-        if (isVideo) {
-            containerUrl += `&video_url=${encodeURIComponent(mediaUrl)}`;
-            if (options?.isReel) {
-                containerUrl += `&media_type=REELS`;
+            for (const mediaUrl of mediaList) {
+                const isVideo = isVideoUrl(mediaUrl) || options?.isVideo; // Naive check for individual items
+                const mediaType = isVideo ? 'VIDEO' : 'IMAGE';
+
+                let itemUrl = `https://graph.facebook.com/v24.0/${userId}/media?is_carousel_item=true&access_token=${accessToken}`;
+
+                if (isVideo) {
+                    itemUrl += `&media_type=VIDEO&video_url=${encodeURIComponent(mediaUrl)}`;
+                } else {
+                    itemUrl += `&image_url=${encodeURIComponent(mediaUrl)}`;
+                }
+
+                console.log(`[Instagram] Creating carousel item (${mediaType}): ${mediaUrl}`);
+                const itemRes = await fetch(itemUrl, { method: 'POST' });
+
+                if (!itemRes.ok) {
+                    const error = await itemRes.json();
+                    throw new Error(`Carousel Item creation failed: ${JSON.stringify(error)}`);
+                }
+
+                const itemData = await itemRes.json();
+                itemIds.push(itemData.id);
+
+                // Wait for video processing if needed
+                if (isVideo) {
+                    await waitForInstagramMediaProcessing(itemData.id, accessToken);
+                }
             }
-        } else {
-            containerUrl += `&image_url=${encodeURIComponent(mediaUrl)}`;
-        }
 
-        const containerResponse = await fetch(containerUrl, { method: 'POST' });
+            // 2. Create Carousel Container
+            console.log(`[Instagram] Creating carousel container with items: ${itemIds.join(', ')}`);
+            const containerUrl = `https://graph.facebook.com/v24.0/${userId}/media?media_type=CAROUSEL&caption=${encodeURIComponent(caption)}&children=${itemIds.join(',')}&access_token=${accessToken}`;
 
-        if (!containerResponse.ok) {
-            const error = await containerResponse.json();
-            throw new Error(`Media Container creation failed: ${JSON.stringify(error)}`);
-        }
+            const containerRes = await fetch(containerUrl, { method: 'POST' });
 
-        const containerData = await containerResponse.json();
-        const creationId = containerData.id;
+            if (!containerRes.ok) {
+                const error = await containerRes.json();
+                const errorStr = JSON.stringify(error);
 
-        // 2. Wait for Processing (if video)
-        if (isVideo) {
+                // Add helpful context for common mixed-media carousel failures
+                let hint = '';
+                if (mediaList.length > 1 && mediaList.some(isVideoUrl) && mediaList.some(u => !isVideoUrl(u))) {
+                    hint = ' (Hint: Mixed Image/Video carousels often fail if items have different aspect ratios. Try ensuring all items are 1:1 or 4:5)';
+                }
+
+                throw new Error(`Carousel Container creation failed: ${errorStr}${hint}`);
+            }
+
+            const containerData = await containerRes.json();
+            creationId = containerData.id;
+
+            // Wait for Carousel Container to be READY (IMPORTANT)
+            // Even though items are ready, the container itself takes time to become FINISHED
             await waitForInstagramMediaProcessing(creationId, accessToken);
+
+        } else {
+            // SINGLE POST OR REEL
+            const mediaUrl = mediaList[0];
+            const isVideo = options?.isReel || isVideoUrl(mediaUrl);
+            const mediaType = isVideo ? 'VIDEO' : 'IMAGE';
+
+            let containerUrl = `https://graph.facebook.com/v24.0/${userId}/media?caption=${encodeURIComponent(caption)}&access_token=${accessToken}`;
+
+            if (isVideo) {
+                containerUrl += `&media_type=${options?.isReel ? 'REELS' : 'VIDEO'}&video_url=${encodeURIComponent(mediaUrl)}`;
+                if (options?.shareToFeed) {
+                    // containerUrl += `&share_to_feed=true`; // Specific to REELS sometimes, but often automatic
+                }
+            } else {
+                containerUrl += `&image_url=${encodeURIComponent(mediaUrl)}`;
+            }
+
+            console.log(`[Instagram] Creating single media container (${mediaType})`);
+            const containerResponse = await fetch(containerUrl, { method: 'POST' });
+
+            if (!containerResponse.ok) {
+                const error = await containerResponse.json();
+                throw new Error(`Media Container creation failed: ${JSON.stringify(error)}`);
+            }
+
+            const containerData = await containerResponse.json();
+            creationId = containerData.id;
+
+            // 2. Wait for Processing (if video)
+            if (isVideo) {
+                await waitForInstagramMediaProcessing(creationId, accessToken);
+            }
         }
 
         // 3. Publish Media
+        console.log(`[Instagram] Publishing media: ${creationId}`);
         const publishResponse = await fetch(
             `https://graph.facebook.com/v24.0/${userId}/media_publish?creation_id=${creationId}&access_token=${accessToken}`,
             { method: 'POST' }
@@ -69,27 +140,44 @@ export async function postToInstagram(
 }
 
 async function waitForInstagramMediaProcessing(
-    creationId: string,
+    containerId: string,
     accessToken: string,
     timeout: number = 60000
 ): Promise<void> {
     const startTime = Date.now();
-    const pollInterval = 3000;
+    const pollInterval = 5000; // Increased poll interval to 5s
+
+    console.log(`[Instagram] Waiting for processing of container: ${containerId}`);
 
     while (Date.now() - startTime < timeout) {
-        const response = await fetch(
-            `https://graph.facebook.com/v24.0/${creationId}?fields=status_code&access_token=${accessToken}`
-        );
+        try {
+            const response = await fetch(
+                `https://graph.facebook.com/v24.0/${containerId}?fields=status_code&access_token=${accessToken}`
+            );
 
-        if (response.ok) {
-            const data = await response.json();
-            if (data.status_code === 'FINISHED') return;
-            if (data.status_code === 'ERROR') throw new Error('Media processing failed');
+            if (response.ok) {
+                const data = await response.json();
+                const status = data.status_code;
+                console.log(`[Instagram] Container ${containerId} status: ${status}`);
+
+                if (status === 'FINISHED') return;
+                if (status === 'ERROR') {
+                    // Try to fetch error details if possible (though often not exposed on this edge)
+                    console.error(`[Instagram] Container ${containerId} failed processing.`);
+                    throw new Error(`Media processing failed for ${containerId}. This usually means one of the items (Video/Image) failed validation (e.g. wrong aspect ratio, corrupt file).`);
+                }
+                // If IN_PROGRESS or PUBLISHED, keep waiting (though PUBLISHED shouldn't happen before publish step)
+            } else {
+                console.warn(`[Instagram] Status check failed for ${containerId}: ${response.status}`);
+            }
+        } catch (e) {
+            console.error(`[Instagram] Error checking status for ${containerId}`, e);
         }
+
         await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
 
-    throw new Error(`Media processing timeout for ${creationId}`);
+    throw new Error(`Media processing timeout for ${containerId}`);
 }
 
 export interface InstagramPostInsights {
@@ -411,7 +499,18 @@ export async function getInstagramAudienceInsights(
         };
     } catch (error) {
         console.error('[Instagram] Error fetching audience insights:', error);
-        return { audienceCity: {}, audienceCountry: {}, audienceGenderAge: {}, audienceLocale: {}, totalFollowers: 0 };
+        return {
+            audienceCity: {},
+            audienceCountry: {},
+            audienceGenderAge: {},
+            audienceLocale: {},
+            totalFollowers: 0,
+            followerCity: {},
+            followerCountry: {},
+            followerGenderAge: {},
+            followerReach: 0,
+            nonFollowerReach: 0
+        };
     }
 }
 
@@ -428,23 +527,55 @@ export async function getInstagramAccountInsights(
 ): Promise<InstagramAccountInsights> {
     const { accessToken, userId } = credentials;
     try {
-        const metrics = 'reach,views,profile_views';
-        const response = await fetch(
-            `https://graph.facebook.com/v24.0/${userId}/insights?metric=${metrics}&period=days_28&access_token=${accessToken}`
-        );
+        let reach = 0;
+        let impressions = 0;
+        let profileViews = 0;
 
-        if (!response.ok) {
-            const err = await response.json();
-            console.warn(`[Instagram] Failed to fetch account insights for ${userId}:`, JSON.stringify(err));
-            return { reach: 0, impressions: 0, profileViews: 0, websiteClicks: 0, followerCount: 0 };
+        // 1. Fetch Reach (supports days_28)
+        try {
+            const reachRes = await fetch(
+                `https://graph.facebook.com/v24.0/${userId}/insights?metric=reach&period=days_28&access_token=${accessToken}`
+            );
+            if (reachRes.ok) {
+                const data = await reachRes.json();
+                reach = data.data?.[0]?.values?.[0]?.value || 0;
+            } else {
+                console.warn(`[Instagram] Failed to fetch reach:`, await reachRes.json());
+            }
+        } catch (e) {
+            console.error('[Instagram] Error fetching reach:', e);
         }
 
-        const data = await response.json();
-        const items = data.data || [];
+        // 2. Fetch Views & Profile Views (Incompatible with days_28, require metric_type=total_value)
+        try {
+            // Using period=day and metric_type=total_value as requested
+            const metrics = 'views,profile_views';
+            const otherRes = await fetch(
+                `https://graph.facebook.com/v24.0/${userId}/insights?metric=${metrics}&metric_type=total_value&period=day&access_token=${accessToken}`
+            );
 
-        const reach = items.find((m: any) => m.name === 'reach')?.values[0]?.value || 0;
-        const impressions = items.find((m: any) => m.name === 'views' || m.name === 'impressions')?.values[0]?.value || 0;
-        const profileViews = items.find((m: any) => m.name === 'profile_views')?.values[0]?.value || 0;
+            if (otherRes.ok) {
+                const data = await otherRes.json();
+                (data.data || []).forEach((m: any) => {
+                    let val = 0;
+                    // Check for total_value first (if API returns it aggregated)
+                    if (m.total_value) {
+                        val = typeof m.total_value === 'object' ? (m.total_value.value || 0) : m.total_value;
+                    }
+                    // Fallback to summing values array if total_value isn't present
+                    else if (m.values && Array.isArray(m.values)) {
+                        val = m.values.reduce((acc: number, cur: any) => acc + (cur.value || 0), 0);
+                    }
+
+                    if (m.name === 'views' || m.name === 'impressions') impressions = val;
+                    if (m.name === 'profile_views') profileViews = val;
+                });
+            } else {
+                console.warn(`[Instagram] Failed to fetch views/profile_views:`, await otherRes.json());
+            }
+        } catch (e) {
+            console.error('[Instagram] Error fetching other insights:', e);
+        }
 
         // Follower count is fetched separately as it's often not in the same metric set
         const profileRes = await fetch(`https://graph.facebook.com/v24.0/${userId}?fields=followers_count&access_token=${accessToken}`);

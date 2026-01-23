@@ -27,6 +27,14 @@ export interface UnifiedAudienceData {
     topCountries: { name: string; code: string; value: number }[];
     activityHeatmap: { day: number; hour: number; value: number }[];
     platformBreakdown: PlatformDetail[];
+    // Detailed reach breakdowns by demographics
+    reachByCity: Record<string, number>;
+    reachByCountry: Record<string, number>;
+    reachByGender: Record<string, number>;
+    // Debug: Raw Pinterest response
+    debug?: {
+        pinterestRawResponse?: any;
+    };
 }
 
 export class AudienceNormalizerService {
@@ -103,13 +111,22 @@ export class AudienceNormalizerService {
             select: { id: true }
         }).then(posts => posts.map(p => p.id));
 
-        const allPlatformPostIds = await prisma.postTransaction.findMany({
+        const transactions = await prisma.postTransaction.findMany({
             where: {
                 refId: { in: campaignPostIds },
-                published: true // Ensure we only count published ones if field exists, otherwise ignore
+                published: true
             },
-            select: { postId: true }
-        }).then(posts => posts.map(p => p.postId));
+            select: { postId: true, publishedAt: true }
+        });
+        const allPlatformPostIds = transactions.map(p => p.postId);
+
+        // Fetch insights for these posts for heatmap calculation
+        const allInsights = await prisma.postInsight.findMany({
+            where: {
+                postId: { in: allPlatformPostIds },
+                isDeleted: false
+            }
+        });
 
         const engagementStats = await prisma.postInsight.groupBy({
             by: ['platform'],
@@ -133,15 +150,57 @@ export class AudienceNormalizerService {
 
         const results = await Promise.all(promises);
 
-        return this.normalizeResults(results, engagementStats);
+        // Calculate Real Heatmap
+        const realHeatmap = this.calculateRealHeatmap(transactions, allInsights);
+
+        return this.normalizeResults(results, engagementStats, realHeatmap);
     }
 
-    private static normalizeResults(results: any[], engagementStats: any[]): UnifiedAudienceData {
+    private static calculateRealHeatmap(transactions: { postId: string, publishedAt: Date | null }[], insights: any[]) {
+        const heatmap = Array(7).fill(0).map(() => Array(24).fill(0));
+        let totalEngagementFound = 0;
+
+        transactions.forEach(t => {
+            if (!t.publishedAt) return;
+
+            const insight = insights.find(i => i.postId === t.postId);
+            if (!insight) return;
+
+            const engagement = (insight.likes || 0) + (insight.comments || 0) + (insight.shares || 0) + (insight.saves || 0) + (insight.videoViews || 0);
+            if (engagement > 0) {
+                const date = new Date(t.publishedAt);
+                const day = date.getDay(); // 0-6 (Sun-Sat)
+                const hour = date.getHours(); // 0-23
+
+                heatmap[day][hour] += engagement;
+                totalEngagementFound += engagement;
+            }
+        });
+
+        if (totalEngagementFound === 0) return null;
+
+        // Convert grid to array format
+        const result = [];
+        for (let d = 0; d < 7; d++) {
+            for (let h = 0; h < 24; h++) {
+                result.push({ day: d, hour: h, value: heatmap[d][h] });
+            }
+        }
+        return result;
+    }
+
+    private static normalizeResults(results: any[], engagementStats: any[], realHeatmap: { day: number; hour: number; value: number }[] | null): UnifiedAudienceData {
         console.log('[AudienceNormalizer] Normalizing results...');
         const aggregated = {
             cities: {} as Record<string, number>,
             countries: {} as Record<string, number>,
-            platforms: [] as PlatformDetail[]
+            platforms: [] as PlatformDetail[],
+            // Track reach breakdowns by demographics
+            reachByCity: {} as Record<string, number>,
+            reachByCountry: {} as Record<string, number>,
+            reachByGender: {} as Record<string, number>,
+            // Debug data - always initialize
+            pinterestRawResponse: {} as any
         };
 
         results.forEach(res => {
@@ -151,13 +210,41 @@ export class AudienceNormalizerService {
             if (res.platform === 'FACEBOOK') {
                 const data = res.data;
                 // Use reached audience demographics as primary for aggregate charts
-                Object.entries(data.reachedByCity || {}).forEach(([k, v]) => aggregated.cities[k] = (aggregated.cities[k] || 0) + (v as number));
-                Object.entries(data.reachedByCountry || {}).forEach(([k, v]) => aggregated.countries[k] = (aggregated.countries[k] || 0) + (v as number));
+                Object.entries(data.reachedByCity || {}).forEach(([k, v]) => {
+                    aggregated.cities[k] = (aggregated.cities[k] || 0) + (v as number);
+                    aggregated.reachByCity[k] = (aggregated.reachByCity[k] || 0) + (v as number);
+                });
+                Object.entries(data.reachedByCountry || {}).forEach(([k, v]) => {
+                    aggregated.countries[k] = (aggregated.countries[k] || 0) + (v as number);
+                    aggregated.reachByCountry[k] = (aggregated.reachByCountry[k] || 0) + (v as number);
+                });
+                // Extract gender from reachedByGenderAge (format: "M.25-34", "F.18-24", etc.)
+                Object.entries(data.reachedByGenderAge || {}).forEach(([k, v]) => {
+                    const gender = k.split('.')[0]; // Extract 'M' or 'F'
+                    if (gender === 'M' || gender === 'F') {
+                        const genderKey = gender === 'M' ? 'male' : 'female';
+                        aggregated.reachByGender[genderKey] = (aggregated.reachByGender[genderKey] || 0) + (v as number);
+                    }
+                });
 
                 // Fallback to fan demographics if reached is empty
                 if (Object.keys(data.reachedByCity || {}).length === 0) {
-                    Object.entries(data.fansByCity || {}).forEach(([k, v]) => aggregated.cities[k] = (aggregated.cities[k] || 0) + (v as number));
-                    Object.entries(data.fansByCountry || {}).forEach(([k, v]) => aggregated.countries[k] = (aggregated.countries[k] || 0) + (v as number));
+                    Object.entries(data.fansByCity || {}).forEach(([k, v]) => {
+                        aggregated.cities[k] = (aggregated.cities[k] || 0) + (v as number);
+                        aggregated.reachByCity[k] = (aggregated.reachByCity[k] || 0) + (v as number);
+                    });
+                    Object.entries(data.fansByCountry || {}).forEach(([k, v]) => {
+                        aggregated.countries[k] = (aggregated.countries[k] || 0) + (v as number);
+                        aggregated.reachByCountry[k] = (aggregated.reachByCountry[k] || 0) + (v as number);
+                    });
+                    // Also extract gender from fansByGenderAge if using fallback
+                    Object.entries(data.fansByGenderAge || {}).forEach(([k, v]) => {
+                        const gender = k.split('.')[0];
+                        if (gender === 'M' || gender === 'F') {
+                            const genderKey = gender === 'M' ? 'male' : 'female';
+                            aggregated.reachByGender[genderKey] = (aggregated.reachByGender[genderKey] || 0) + (v as number);
+                        }
+                    });
                 }
 
                 followers = data.followerCount || data.totalFollowers || 0;
@@ -167,8 +254,22 @@ export class AudienceNormalizerService {
             } else if (res.platform === 'INSTAGRAM') {
                 const data = res.data;
                 // Instagram already has audience metrics
-                Object.entries(data.audienceCity || {}).forEach(([k, v]) => aggregated.cities[k] = (aggregated.cities[k] || 0) + (v as number));
-                Object.entries(data.audienceCountry || {}).forEach(([k, v]) => aggregated.countries[k] = (aggregated.countries[k] || 0) + (v as number));
+                Object.entries(data.audienceCity || {}).forEach(([k, v]) => {
+                    aggregated.cities[k] = (aggregated.cities[k] || 0) + (v as number);
+                    aggregated.reachByCity[k] = (aggregated.reachByCity[k] || 0) + (v as number);
+                });
+                Object.entries(data.audienceCountry || {}).forEach(([k, v]) => {
+                    aggregated.countries[k] = (aggregated.countries[k] || 0) + (v as number);
+                    aggregated.reachByCountry[k] = (aggregated.reachByCountry[k] || 0) + (v as number);
+                });
+                // Extract gender from audienceGenderAge (format: "M.13-17", "F.25-34", etc.)
+                Object.entries(data.audienceGenderAge || {}).forEach(([k, v]) => {
+                    const gender = k.split('.')[0]; // Extract 'M' or 'F'
+                    if (gender === 'M' || gender === 'F') {
+                        const genderKey = gender === 'M' ? 'male' : 'female';
+                        aggregated.reachByGender[genderKey] = (aggregated.reachByGender[genderKey] || 0) + (v as number);
+                    }
+                });
                 followers = data.followerCount || data.totalFollowers || 0;
                 res.accountReach = data.reach || 0;
                 res.followerReach = data.followerReach || 0;
@@ -186,10 +287,43 @@ export class AudienceNormalizerService {
                 });
                 res.accountReach = res.data?.views || 0;
             } else if (res.platform === 'PINTEREST') {
-                followers = res.data?.totalFollowers || 0;
-                Object.entries(res.data?.demographics?.locations || {}).forEach(([k, v]) => {
-                    aggregated.countries[k] = (aggregated.countries[k] || 0) + ((v as number / 100) * (followers || 1000));
+                const data = res.data;
+
+                // Store raw Pinterest response for debugging
+                aggregated.pinterestRawResponse = data;
+
+                console.log('[AudienceNormalizer] Pinterest raw data:', {
+                    totalFollowers: data?.totalFollowers,
+                    hasCategories: !!data?.categories,
+                    hasDemographics: !!data?.demographics,
+                    hasRawResponses: !!data?._rawApiResponses
                 });
+
+                // Extract follower count with multiple fallbacks
+                followers = data?.totalFollowers || data?.followerCount || 0;
+                console.log('[AudienceNormalizer] Pinterest followers extracted:', followers);
+
+                // Process demographics if available
+                if (data?.demographics) {
+                    // Countries/Locations
+                    if (data.demographics.locations) {
+                        Object.entries(data.demographics.locations).forEach(([k, v]) => {
+                            const ratio = v as number;
+                            aggregated.countries[k] = (aggregated.countries[k] || 0) + (ratio * (followers || 1000));
+                            aggregated.reachByCountry[k] = (aggregated.reachByCountry[k] || 0) + (ratio * (followers || 1000));
+                        });
+                    }
+
+                    // Genders
+                    if (data.demographics.genders) {
+                        Object.entries(data.demographics.genders).forEach(([k, v]) => {
+                            const genderKey = k.toLowerCase().includes('female') ? 'female' :
+                                k.toLowerCase().includes('male') ? 'male' : 'unknown';
+                            const ratio = v as number;
+                            aggregated.reachByGender[genderKey] = (aggregated.reachByGender[genderKey] || 0) + (ratio * (followers || 1000));
+                        });
+                    }
+                }
             }
 
             aggregated.platforms.push({
@@ -243,8 +377,14 @@ export class AudienceNormalizerService {
         return {
             topCities,
             topCountries,
-            activityHeatmap: this.generateMockHeatmap(),
-            platformBreakdown: aggregated.platforms
+            activityHeatmap: realHeatmap || this.generateMockHeatmap(),
+            platformBreakdown: aggregated.platforms,
+            reachByCity: aggregated.reachByCity,
+            reachByCountry: aggregated.reachByCountry,
+            reachByGender: aggregated.reachByGender,
+            debug: {
+                pinterestRawResponse: aggregated.pinterestRawResponse
+            }
         };
     }
 

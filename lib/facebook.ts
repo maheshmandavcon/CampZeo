@@ -1,6 +1,24 @@
 import { getSocialMediaUrl, validateMediaUrl, isVideoUrl } from './media-utils';
 import { Buffer } from 'buffer';
 
+async function debugFacebookToken(accessToken: string, logPrefix: string = '[Facebook]'): Promise<void> {
+    try {
+        console.log(`${logPrefix} Debugging Token permissions...`);
+        const response = await fetch(`https://graph.facebook.com/v24.0/debug_token?input_token=${accessToken}&access_token=${accessToken}`);
+
+        if (response.ok) {
+            const data = await response.json();
+            const scopes = data.data?.scopes || [];
+            const isValid = data.data?.is_valid;
+            console.log(`${logPrefix} Token Debug: Valid=${isValid}, Scopes=${JSON.stringify(scopes)}`);
+        } else {
+            console.warn(`${logPrefix} Failed to debug token:`, response.status);
+        }
+    } catch (e) {
+        console.error(`${logPrefix} Token debug error:`, e);
+    }
+}
+
 interface FacebookCredentials {
     accessToken: string;
     pageId: string;
@@ -24,6 +42,12 @@ export async function postToFacebook(
     const mediaList = Array.isArray(mediaUrls) ? mediaUrls : (mediaUrls ? [mediaUrls] : []);
 
     console.log(`[Facebook] Posting to page: ${pageId}, Media Count: ${mediaList.length}, Is Reel: ${options?.isReel || false}`);
+
+    // Strict check: Facebook allows only one video per post
+    const videoCount = mediaList.filter(url => isVideoUrl(url)).length;
+    if (videoCount > 1) {
+        throw new Error('Facebook allows only one video per post. Please remove extra videos.');
+    }
 
     try {
         let postId: string;
@@ -220,6 +244,7 @@ export async function postToFacebook(
 
     } catch (error) {
         console.error('Facebook posting error:', error);
+        await debugFacebookToken(accessToken);
         throw error;
     }
 }
@@ -272,31 +297,33 @@ async function postFacebookReel(
     });
 
     if (!uploadRes.ok) {
-        const errorText = await uploadRes.text();
-        throw new Error(`Facebook Reel binary upload error: ${errorText}`);
+        const err = await uploadRes.json();
+        throw new Error(`Failed to upload reel binary: ${JSON.stringify(err)}`);
     }
 
-    // 4. Publish/Finish Reel Upload
+    console.log(`[Facebook] Reel binary uploaded: ${videoId}. Finalizing...`);
+
+    // 4. Finish Reel Upload & Publish
     const finishResponse = await fetch(`https://graph.facebook.com/v24.0/${pageId}/video_reels`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-            upload_phase: 'finish',
+            access_token: accessToken,
             video_id: videoId,
+            upload_phase: 'finish',
             video_state: 'PUBLISHED',
             description: message,
-            access_token: accessToken,
         }),
     });
 
     if (!finishResponse.ok) {
         const error = await finishResponse.json();
-        throw new Error(`Facebook Reel publishing error: ${JSON.stringify(error)}`);
+        throw new Error(`Facebook Reel finish error: ${JSON.stringify(error)}`);
     }
 
-    // 5. Wait for processing
-    await waitForFacebookVideoProcessing(videoId, accessToken);
-
+    console.log(`[Facebook] Reel published successfully: ${videoId}`);
     return { id: videoId };
 }
 
@@ -329,13 +356,19 @@ async function waitForFacebookVideoProcessing(
                     console.log(`[Facebook] Video processing complete: ${videoId}`);
                     return;
                 } else if (videoStatus === 'error') {
-                    throw new Error(`Video processing failed for ${videoId}`);
+                    console.error(`[Facebook] Video processing error details:`, JSON.stringify(statusData, null, 2));
+                    throw new Error(`Video processing failed for ${videoId}. Status: ${videoStatus}. Details: ${JSON.stringify(statusData)}`);
                 }
             } else {
                 console.warn(`[Facebook] Status check failed for ${videoId}: ${statusResponse.status}`);
             }
         } catch (e) {
             console.error(`[Facebook] Error checking status for ${videoId}`, e);
+            // Don't swallow the specific error thrown above
+            if (e instanceof Error && e.message.includes('Video processing failed')) {
+                await debugFacebookToken(accessToken);
+                throw e;
+            }
         }
 
         await new Promise(resolve => setTimeout(resolve, pollInterval));

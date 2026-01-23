@@ -7,38 +7,50 @@ import { AudienceNormalizerService } from "@/lib/audience-normalizer";
 
 export async function GET() {
     try {
+        console.log('[Audience API] Request received');
         const user = await currentUser();
+
         if (!user) {
+            console.error('[Audience API] No authenticated user found');
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        console.log('[Audience API] User authenticated:', user.id);
         let targetUserId = user.id;
         const impersonatedOrgId = await getImpersonatedOrganisationId();
         let orgId = -1;
 
         if (impersonatedOrgId) {
+            console.log('[Audience API] Using impersonated org:', impersonatedOrgId);
             orgId = impersonatedOrgId;
         } else {
             const dbUser = await prisma.user.findUnique({
                 where: { clerkId: targetUserId },
             });
-            if (!dbUser || !dbUser.organisationId) {
-                return NextResponse.json({ error: "User or Organisation not found" }, { status: 404 });
+
+            if (!dbUser) {
+                console.error('[Audience API] User not found in database:', targetUserId);
+                return NextResponse.json({ error: "User not found" }, { status: 404 });
             }
+
+            if (!dbUser.organisationId) {
+                console.error('[Audience API] User has no organisation:', targetUserId);
+                return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
+            }
+
             orgId = dbUser.organisationId;
+            console.log('[Audience API] Using org:', orgId);
         }
 
         // Fetch Unified audience data
-        // Note: This might be slow if fetching fresh from all APIs.
-        // In production we should cache this result in AudienceInsight table.
-        // We will do direct fetch first as per requirement to "pull Deep Data".
-
+        console.log('[Audience API] Fetching audience data for org:', orgId);
         const audienceData = await AudienceNormalizerService.getAggregatedAudience(orgId);
 
+        console.log('[Audience API] Successfully fetched audience data');
         return NextResponse.json(audienceData);
 
     } catch (error) {
-        console.error("Error fetching audience analytics:", error);
+        console.error("[Audience API] Error:", error);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }

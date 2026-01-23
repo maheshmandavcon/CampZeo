@@ -11,7 +11,7 @@ import {
     XAxis,
     YAxis,
     CartesianGrid,
-    Tooltip,
+    Tooltip as RechartsTooltip,
     Legend,
     ResponsiveContainer,
     PieChart,
@@ -24,6 +24,7 @@ import { UnifiedAudienceData } from '@/lib/audience-normalizer';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
@@ -212,7 +213,7 @@ export default function ReportsPage() {
                 {/* Network Insights Tab */}
                 <TabsContent value="networks" className="space-y-8 animate-in fade-in duration-500">
                     {/* Platform Legend */}
-                    <div className="flex flex-wrap items-center justify-between gap-4 p-5 bg-white/50 dark:bg-slate-900/50 rounded-3xl backdrop-blur-sm border border-slate-200 dark:border-slate-800 border border-white/20">
+                    <div className="flex flex-wrap items-center justify-between gap-4 p-5 bg-white/50  rounded-3xl backdrop-blur-sm border border-md  border border-md shadow-md">
                         <div className="flex flex-wrap items-center gap-x-8 gap-y-4 text-xs font-bold uppercase tracking-widest text-slate-500">
                             <div className="flex items-center gap-3">
                                 <div className="size-3 rounded-full bg-slate-400 opacity-60" /> Reach (Audience)
@@ -234,7 +235,7 @@ export default function ReportsPage() {
 
                     <div className="grid gap-8">
                         {/* Platform Distribution Card - Full Width */}
-                        <Card className="rounded-3xl border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-md">
+                        <Card className="rounded-3xl border-md shadow-md bg-white/80  backdrop-blur-md">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2 text-2xl">
                                     <BarChart3 className="size-6 text-indigo-500" /> Platform Distribution
@@ -257,7 +258,7 @@ export default function ReportsPage() {
                                                 tickFormatter={(val) => val.charAt(0) + val.slice(1).toLowerCase()}
                                             />
                                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                                            <Tooltip
+                                            <RechartsTooltip
                                                 cursor={{ fill: '#f8fafc' }}
                                                 contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                             />
@@ -293,7 +294,7 @@ export default function ReportsPage() {
                         {/* Platform Wise Detail Cards */}
                         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                             {data.platformBreakdown.map((platform) => (
-                                <Card key={platform.platform} className="rounded-3xl border-none shadow-xl bg-white/90 dark:bg-slate-900/90 overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
+                                <Card key={platform.platform} className="rounded-3xl border-md shadow-md bg-white/90  overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
                                     <CardHeader className="p-6 pb-2" style={{ backgroundColor: `${PLATFORM_COLORS[platform.platform]}10` }}>
                                         <div className="flex items-center justify-between">
                                             <CardTitle className="text-lg font-black tracking-tight flex items-center gap-2">
@@ -402,7 +403,7 @@ export default function ReportsPage() {
                 <TabsContent value="locality" className="space-y-6">
 
                     <div className="grid gap-6 md:grid-cols-2">
-                        <Card className="rounded-3xl border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-md">
+                        <Card className="rounded-3xl border-md shadow-md bg-white/80  backdrop-blur-md">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2 text-xl">
                                     <Globe className="size-6 text-blue-500" /> Top Countries
@@ -416,7 +417,7 @@ export default function ReportsPage() {
                                             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
                                             <XAxis type="number" hide />
                                             <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} />
-                                            <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '16px', border: 'none' }} />
+                                            <RechartsTooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '16px', border: 'none' }} />
                                             <Bar dataKey="value" fill="#3b82f6" radius={[0, 12, 12, 0]} name="Audience" />
                                         </BarChart>
                                     </ResponsiveContainer>
@@ -429,7 +430,7 @@ export default function ReportsPage() {
                             </CardContent>
                         </Card>
 
-                        <Card className="rounded-3xl border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-md">
+                        <Card className="rounded-3xl border-md shadow-md bg-white/80  backdrop-blur-md">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2 text-xl">
                                     <MapPin className="size-6 text-emerald-500" /> Top Cities
@@ -443,7 +444,7 @@ export default function ReportsPage() {
                                             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
                                             <XAxis type="number" hide />
                                             <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} />
-                                            <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '16px', border: 'none' }} />
+                                            <RechartsTooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '16px', border: 'none' }} />
                                             <Bar dataKey="value" fill="#10b981" radius={[0, 12, 12, 0]} name="Audience" />
                                         </BarChart>
                                     </ResponsiveContainer>
@@ -460,71 +461,90 @@ export default function ReportsPage() {
 
                 {/* Activity Tab */}
                 <TabsContent value="activity">
-                    <Card className="rounded-3xl border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-md overflow-hidden">
+                    <Card className="rounded-3xl border-md shadow-md bg-white/80  backdrop-blur-md overflow-hidden">
                         <CardHeader className="p-8">
                             <CardTitle className="flex items-center gap-3 text-2xl font-bold">
-                                <Clock className="size-7 text-indigo-500" /> Best Time to Post
+                                <Clock className="size-7 text-red-500" /> Best Time to Post
                             </CardTitle>
                             <CardDescription className="text-base">Activity heatmap showing when your audience is most active across the week</CardDescription>
                         </CardHeader>
                         <CardContent className="px-8 pb-8">
-                            <div className="overflow-x-auto pb-4">
-                                <div className="min-w-[800px]">
-                                    {/* Hour Headers */}
-                                    <div className="flex mb-4">
-                                        <div className="w-20"></div>
-                                        {Array.from({ length: 24 }).map((_, i) => (
-                                            <div key={i} className="flex-1 text-center text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
-                                                {i === 0 ? '12am' : i === 12 ? '12pm' : i > 12 ? `${i - 12}p` : `${i}a`}
+                            {/* Legend */}
+                            <div className="flex items-center justify-end gap-3 mb-6">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Less Interaction</span>
+                                <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                                    {[0.1, 0.3, 0.5, 0.7, 0.9].map((op) => (
+                                        <div
+                                            key={op}
+                                            className="w-6 h-4 rounded-md"
+                                            style={{ backgroundColor: `rgb(220 38 38 / ${op})` }}
+                                        />
+                                    ))}
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Most Interaction</span>
+                            </div>
+
+                            <TooltipProvider>
+                                <div className="overflow-x-auto pb-4">
+                                    <div className="min-w-[100%]">
+                                        {/* Hour Headers */}
+                                        <div className="flex mb-4">
+                                            <div className="w-20"></div>
+                                            {Array.from({ length: 24 }).map((_, i) => (
+                                                <div key={i} className="flex-1 text-center text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                                                    {i === 0 ? '12am' : i === 12 ? '12pm' : i > 12 ? `${i - 12}p` : `${i}a`}
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Grid */}
+                                        {days.map((day, dIndex) => (
+                                            <div key={day} className="flex items-center mb-2">
+                                                <div className="w-20 text-xs font-bold text-slate-500">{day}</div>
+                                                {heatmapGrid[dIndex].map((val, hIndex) => {
+                                                    const opacity = Math.min(Math.max(val / 80, 0.05), 1);
+                                                    return (
+                                                        <Tooltip key={`${dIndex}-${hIndex}`} delayDuration={0}>
+                                                            <TooltipTrigger asChild>
+                                                                <div
+                                                                    className="flex-1 h-10 mx-[2px] rounded-lg transition-all hover:scale-110 hover:shadow-lg hover:z-10 relative cursor-pointer"
+                                                                    style={{
+                                                                        backgroundColor: `rgb(220 38 38 / ${opacity})`,
+                                                                        boxShadow: val > 50 ? `0 0 15px rgb(220 38 38 / ${opacity * 0.5})` : 'none'
+                                                                    }}
+                                                                />
+                                                            </TooltipTrigger>
+                                                            <TooltipContent className="bg-slate-950 text-white border-white/10">
+                                                                <div className="flex flex-col items-center">
+                                                                    <span className="text-xs font-bold">{day}, {hIndex}:00</span>
+                                                                    <span className="text-red-400 font-extrabold">{val} Engagements</span>
+                                                                </div>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    );
+                                                })}
                                             </div>
                                         ))}
                                     </div>
-
-                                    {/* Grid */}
-                                    {days.map((day, dIndex) => (
-                                        <div key={day} className="flex items-center mb-2">
-                                            <div className="w-20 text-xs font-bold text-slate-500">{day}</div>
-                                            {heatmapGrid[dIndex].map((val, hIndex) => {
-                                                const opacity = Math.min(Math.max(val / 80, 0.05), 1);
-                                                return (
-                                                    <div
-                                                        key={`${dIndex}-${hIndex}`}
-                                                        className="flex-1 h-10 mx-[2px] rounded-lg transition-all hover:scale-110 hover:shadow-lg hover:z-10 relative group cursor-pointer"
-                                                        style={{
-                                                            backgroundColor: `rgb(79 70 229 / ${opacity})`,
-                                                            boxShadow: val > 50 ? `0 0 15px rgb(79 70 229 / ${opacity * 0.5})` : 'none'
-                                                        }}
-                                                    >
-                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 hidden group-hover:block bg-slate-950 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-2xl z-50 whitespace-nowrap border border-white/10 backdrop-blur-md">
-                                                            <div className="flex flex-col items-center">
-                                                                <span>{day}, {hIndex}:00</span>
-                                                                <span className="text-indigo-400 font-extrabold">{val} Engagements</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    ))}
                                 </div>
-                            </div>
+                            </TooltipProvider>
                         </CardContent>
                     </Card>
                 </TabsContent>
 
                 {/* Post Performance Tab */}
-                <TabsContent value="performance" className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+                <TabsContent value="performance" className="space-y-8  ">
                     {/* Filters & Actions */}
                     <div className="flex flex-col lg:flex-row gap-6">
-                        <Card className="flex-1 rounded-3xl border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-md">
+                        <Card className="flex-1 rounded-3xl border-md shadow-md bg-white/80  backdrop-blur-md">
                             <CardContent className="p-6 flex flex-wrap items-end gap-6">
                                 <div className="space-y-2 flex-1 min-w-[240px]">
-                                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">Filter by Campaign</label>
+                                    <label className="text-sm font-bold text-slate-700  ml-1">Filter by Campaign</label>
                                     <Select value={campaignId} onValueChange={setCampaignId}>
-                                        <SelectTrigger className="h-12 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border-none shadow-inner ring-offset-2 focus:ring-2 focus:ring-slate-900 dark:focus:ring-white">
+                                        <SelectTrigger className="h-12 rounded-2xl bg-slate-50  border-1 border shadow-inner ring-offset-2 focus:ring-2 focus:ring-slate-900 ">
                                             <SelectValue placeholder="All Campaigns" />
                                         </SelectTrigger>
-                                        <SelectContent className="rounded-2xl border-none shadow-2xl">
+                                        <SelectContent className="rounded-2xl border-none shadow-md">
                                             <SelectItem value="all">Total Organisation View</SelectItem>
                                             {postData?.campaigns.map(c => (
                                                 <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
@@ -533,12 +553,12 @@ export default function ReportsPage() {
                                     </Select>
                                 </div>
                                 <div className="space-y-2 flex-1 min-w-[240px]">
-                                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">Filter by Platform</label>
+                                    <label className="text-sm font-bold text-slate-700  ml-1">Filter by Platform</label>
                                     <Select value={platform} onValueChange={setPlatform}>
-                                        <SelectTrigger className="h-12 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border-none shadow-inner">
+                                        <SelectTrigger className="h-12 rounded-2xl bg-slate-50  border-1 border shadow-inner">
                                             <SelectValue placeholder="All Platforms" />
                                         </SelectTrigger>
-                                        <SelectContent className="rounded-2xl border-none shadow-2xl">
+                                        <SelectContent className="rounded-2xl border-none shadow-md">
                                             <SelectItem value="all">Omnichannel Overview</SelectItem>
                                             <SelectItem value="FACEBOOK">Facebook</SelectItem>
                                             <SelectItem value="INSTAGRAM">Instagram</SelectItem>
@@ -553,14 +573,14 @@ export default function ReportsPage() {
                     </div>
 
                     {/* Engagement Trends Chart */}
-                    <Card className="rounded-4xl border-none shadow-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl overflow-hidden">
+                    <Card className="rounded-4xl border-md shadow-md bg-white/90  backdrop-blur-sm overflow-hidden">
                         <CardHeader className="p-8">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <CardTitle className="text-2xl font-black tracking-tight">Engagement Trends</CardTitle>
                                     <CardDescription>Visualizing interaction growth over the last 14 days</CardDescription>
                                 </div>
-                                <div className="px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold text-xs uppercase tracking-widest">
+                                <div className="px-4 py-2 rounded-xl bg-blue-50  text-blue-600  font-bold text-xs uppercase tracking-widest">
                                     Last 14 Days
                                 </div>
                             </div>
@@ -593,7 +613,7 @@ export default function ReportsPage() {
                                                 tickLine={false}
                                                 tick={{ fontSize: 12, fill: '#64748b', fontWeight: 600 }}
                                             />
-                                            <Tooltip
+                                            <RechartsTooltip
                                                 contentStyle={{
                                                     borderRadius: '20px',
                                                     border: 'none',
@@ -629,7 +649,7 @@ export default function ReportsPage() {
                             { label: 'Impressions', val: postData?.totalStats.impressions, icon: Eye, color: 'text-amber-500', bg: 'bg-amber-50' },
                             { label: 'Avg Reach', val: postData && postData.posts.length > 0 ? Math.round(postData.totalStats.reach / Math.max(postData.totalCount, 1)) : 0, icon: TrendingUp, color: 'text-indigo-500', bg: 'bg-indigo-50' }
                         ].map((stat, i) => (
-                            <Card key={i} className="rounded-3xl border-none shadow-lg bg-white dark:bg-slate-900 border-l-4 overflow-hidden" style={{ borderLeftColor: i === 0 ? '#3b82f6' : i === 1 ? '#10b981' : i === 2 ? '#f59e0b' : '#6366f1' }}>
+                            <Card key={i} className="rounded-3xl border-md shadow-md bg-white  border-l-4 overflow-hidden" style={{ borderLeftColor: i === 0 ? '#3b82f6' : i === 1 ? '#10b981' : i === 2 ? '#f59e0b' : '#6366f1' }}>
                                 <CardHeader className="pb-2">
                                     <div className="flex items-center justify-between">
                                         <stat.icon className={`size-5 ${stat.color}`} />
@@ -649,7 +669,7 @@ export default function ReportsPage() {
                     </div>
 
                     {/* Posts Table */}
-                    <Card className="rounded-4xl border-none shadow-2xl bg-white dark:bg-slate-900 overflow-hidden">
+                    <Card className="rounded-4xl border-md shadow-xl bg-white dark:bg-slate-900 overflow-hidden">
                         <CardHeader className="p-8 border-b border-slate-50 dark:border-slate-800">
                             <div className="flex items-center justify-between">
                                 <div>
