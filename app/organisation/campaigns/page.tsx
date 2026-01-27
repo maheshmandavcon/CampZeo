@@ -48,6 +48,7 @@ import {
     Calendar,
     FileText,
     Users,
+    Download,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -146,6 +147,11 @@ export default function CampaignsPage() {
         router.push(`/organisation/campaigns/${campaign.id}/posts`);
     };
 
+    // Handle export campaigns
+    const handleExport = () => {
+        window.open('/api/campaigns/export', '_blank');
+    };
+
     // Format date
     const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleDateString('en-US', {
@@ -208,6 +214,14 @@ export default function CampaignsPage() {
                                     className="pl-9"
                                 />
                             </div>
+                            <Button
+                                variant="outline"
+                                className="cursor-pointer"
+                                onClick={handleExport}
+                            >
+                                <Download className="size-4 mr-2" />
+                                Export All
+                            </Button>
                         </div>
                     </CardContent>
                 </Card>
@@ -293,15 +307,15 @@ export default function CampaignsPage() {
                                                         <TableCell>
                                                             <div className="flex items-center  gap-2">
                                                                 <div className="border border-1 rounded-md">
-                                                                <Button
-                                                                    className='cursor-pointer   '
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    onClick={() => handleManagePosts(campaign)}
+                                                                    <Button
+                                                                        className='cursor-pointer   '
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        onClick={() => handleManagePosts(campaign)}
                                                                     >
-                                                                    {campaign._count.posts === 0 ? 'Add Post' : 'Posts'}
-                                                                </Button>
-                                                                    </div>
+                                                                        {campaign._count.posts === 0 ? 'Add Post' : 'Posts'}
+                                                                    </Button>
+                                                                </div>
                                                                 <Button
                                                                     className='cursor-pointer'
                                                                     size="sm"
