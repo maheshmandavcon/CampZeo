@@ -147,7 +147,7 @@ model PostAudit {
   newValue     String?
   changedBy    String?
   changedAt    DateTime     @default(now())
-  PostAudit            PostAudit[]
+
 }
 
 model Contact {
@@ -460,8 +460,4 @@ enum MessageChannel {
   WHATSAPP
 }
 
-enum PostStatus {
-  DRAFT
-  SCHEDULED
-  PUBLISHED
-}
+
