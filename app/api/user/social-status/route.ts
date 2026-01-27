@@ -46,18 +46,81 @@ export async function GET() {
             }
         };
 
-        // Facebook
-        if (dbUser.facebookAccessToken) {
+        // Facebook & Instagram Shared Helper for Status
+        const getFacebookStatus = async (accessToken: string, pageId?: string | null, isInstagram = false) => {
             try {
-                const res = await fetchWithTimeout(`https://graph.facebook.com/me?fields=name&access_token=${dbUser.facebookAccessToken}`);
+                // Remove hardcoded version to use default/app-approved version
+                const baseUrl = "https://graph.facebook.com";
+
+                // Try 1: Fetch by ID (if page) or /me
+                const endpoint = pageId && !isInstagram ? `${baseUrl}/${pageId}?fields=name` : `${baseUrl}/me?fields=name`;
+                let res = await fetchWithTimeout(`${endpoint}&access_token=${accessToken}`);
+
                 if (res.ok) {
                     const data = await res.json();
-                    status.facebook = { connected: true, name: data.name };
-                } else {
-                    status.facebook = { connected: true, name: "Connected (Error fetching name)" };
+                    return { connected: true, name: data.name || "Connected" };
                 }
-            } catch (e) {
-                status.facebook = { connected: true, name: "Connected" };
+
+                // Try 2: If we had a pageId and it failed, try /me (sometimes tokens work differently)
+                if (pageId && !isInstagram) {
+                    res = await fetchWithTimeout(`${baseUrl}/me?fields=name&access_token=${accessToken}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        return { connected: true, name: data.name || "Connected" };
+                    }
+                }
+
+                // Capture Error details if all attempts failed
+                const errorData = await res.json().catch(() => ({}));
+                console.error(`[Social Status] Facebook API Error (${isInstagram ? 'IG' : 'FB'}):`, errorData);
+
+                const errorCode = errorData.error?.code;
+                const errorMsg = errorData.error?.message || "Unknown Error";
+
+                if (errorCode === 190) {
+                    return { connected: false, error: "Session Expired", details: errorMsg };
+                }
+
+                // For other errors, return descriptive status so user understands why name is missing
+                return {
+                    connected: true,
+                    name: `Connected (Error: ${errorMsg.length > 25 ? errorMsg.substring(0, 25) + "..." : errorMsg})`,
+                    error: errorMsg,
+                    details: errorData
+                };
+            } catch (e: any) {
+                console.error(`[Social Status] Connection Error (${isInstagram ? 'IG' : 'FB'}):`, e);
+                return { connected: true, name: "Connected (Network Error)", error: e.message };
+            }
+        };
+
+        // Facebook
+        if (dbUser.facebookAccessToken || dbUser.facebookPageAccessToken) {
+            // Priority 1: Try Page Access Token with Page ID if we have them
+            let fbStatus = null;
+
+            if (dbUser.facebookPageAccessToken) {
+                fbStatus = await getFacebookStatus(dbUser.facebookPageAccessToken, dbUser.facebookPageId);
+            }
+
+            // Priority 2: Try User Access Token if Page token wasn't enough or failed
+            if ((!fbStatus || !fbStatus.connected || fbStatus.error) && dbUser.facebookAccessToken) {
+                const userStatus = await getFacebookStatus(dbUser.facebookAccessToken);
+
+                // If user status is healthier (no error), or if we didn't have a page status yet, use it
+                if (userStatus && userStatus.connected && (!userStatus.error || !fbStatus)) {
+                    fbStatus = userStatus;
+                }
+            }
+
+            if (fbStatus) {
+                status.facebook = fbStatus;
+                // If it's a session expired error, override name for UI clarity
+                if (fbStatus.error === "Session Expired") {
+                    status.facebook.name = "Session Expired (Re-connect)";
+                }
+            } else {
+                status.facebook = { connected: true, name: "Connection Restricted" };
             }
         } else {
             status.facebook = { connected: false };

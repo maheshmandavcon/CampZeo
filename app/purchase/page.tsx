@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2, Star, ArrowRight, Sparkles, Check } from "lucide-react";
-import { useSignUp, useSignIn, useClerk } from "@clerk/nextjs";
+import { useSignUp, useSignIn, useClerk, useUser } from "@clerk/nextjs";
 import { usePlans } from "@/hooks/use-plans";
 import { formatPrice } from "@/lib/plans";
 import { RazorpayButton } from "@/components/razorpay-button";
@@ -32,6 +32,7 @@ function PurchaseContent() {
     const { signIn } = useSignIn();
     const { plans, isLoading: plansLoading } = usePlans();
     const clerk = useClerk();
+    const { user, isLoaded: userLoaded, isSignedIn } = useUser();
 
     const [step, setStep] = useState<"DETAILS" | "VERIFICATION" | "PAYMENT" | "SUCCESS">("DETAILS");
     const [loading, setLoading] = useState(false);
@@ -61,6 +62,16 @@ function PurchaseContent() {
     });
 
     const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
+
+    // Auto-fill email if user is signed in
+    useEffect(() => {
+        if (isSignedIn && user?.primaryEmailAddress?.emailAddress && !formData.email) {
+            setFormData(prev => ({
+                ...prev,
+                email: user.primaryEmailAddress!.emailAddress
+            }));
+        }
+    }, [isSignedIn, user, formData.email]);
 
     useEffect(() => {
         if (plans.length > 0 && !selectedPlanId) {
@@ -156,13 +167,10 @@ function PurchaseContent() {
     // Handle Initial Sign Up
     const handleSignUp = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!isLoaded) return;
 
         // Basic Validation
         const requiredFields: Record<string, string> = {
             email: "Email",
-            password: "Password",
-            confirmPassword: "Confirm Password",
             name: "Owner Name",
             mobile: "Mobile Number",
             address: "Address",
@@ -171,6 +179,11 @@ function PurchaseContent() {
             country: "Country",
             postalCode: "Postal Code",
         };
+
+        if (!isSignedIn) {
+            requiredFields.password = "Password";
+            requiredFields.confirmPassword = "Confirm Password";
+        }
 
         if (accountType === 'business') {
             requiredFields.organisationName = "Organisation Name";
@@ -184,7 +197,7 @@ function PurchaseContent() {
             }
         }
 
-        if (formData.password !== formData.confirmPassword) {
+        if (!isSignedIn && formData.password !== formData.confirmPassword) {
             toast.error("Passwords do not match.");
             return;
         }
@@ -192,12 +205,22 @@ function PurchaseContent() {
         setLoading(true);
 
         try {
+            // If already signed in, just move to payment (the createOrganisation will handle the rest)
+            if (isSignedIn) {
+                setStep("PAYMENT");
+                setLoading(false);
+                return;
+            }
+
+            if (!isLoaded || !signUp) return;
+
             // Split name
             const nameParts = formData.name.trim().split(" ");
             const firstName = nameParts[0];
             const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
 
             let signUpAttempt = signUp;
+            // Rest of existing signup logic...
 
             // Check if we are resuming an existing signup flow
             if (signUp.status === "missing_requirements" && signUp.emailAddress === formData.email) {
@@ -522,57 +545,63 @@ function PurchaseContent() {
                                     </div>
                                 )}
 
-                                <div className="col-span-1 md:col-span-2 space-y-2">
-                                    <Label htmlFor="password">Password <span className="text-destructive">*</span></Label>
-                                    <div className="relative">
-                                        <Input
-                                            id="password"
-                                            name="password"
-                                            type={showPassword ? "text" : "password"}
-                                            value={formData.password}
-                                            onChange={handleChange}
-                                            className="pr-10"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                        >
-                                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                                        </button>
-                                    </div>
-                                </div>
+                                {!isSignedIn && (
+                                    <>
+                                        <div className="col-span-1 md:col-span-2 space-y-2">
+                                            <Label htmlFor="password">Password <span className="text-destructive">*</span></Label>
+                                            <div className="relative">
+                                                <Input
+                                                    id="password"
+                                                    name="password"
+                                                    type={showPassword ? "text" : "password"}
+                                                    value={formData.password}
+                                                    onChange={handleChange}
+                                                    className="pr-10"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowPassword(!showPassword)}
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                                >
+                                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                                </button>
+                                            </div>
+                                        </div>
 
-                                <div className="col-span-1 md:col-span-2 space-y-2">
-                                    <Label htmlFor="confirmPassword">Confirm Password <span className="text-destructive">*</span></Label>
-                                    <div className="relative">
-                                        <Input
-                                            id="confirmPassword"
-                                            name="confirmPassword"
-                                            type={showConfirmPassword ? "text" : "password"}
-                                            value={formData.confirmPassword}
-                                            onChange={handleChange}
-                                            className="pr-10"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                        >
-                                            {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                                        </button>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">Min 8 chars, 1 uppercase, 1 lowercase, 1 number.</p>
-                                </div>
+                                        <div className="col-span-1 md:col-span-2 space-y-2">
+                                            <Label htmlFor="confirmPassword">Confirm Password <span className="text-destructive">*</span></Label>
+                                            <div className="relative">
+                                                <Input
+                                                    id="confirmPassword"
+                                                    name="confirmPassword"
+                                                    type={showConfirmPassword ? "text" : "password"}
+                                                    value={formData.confirmPassword}
+                                                    onChange={handleChange}
+                                                    className="pr-10"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                                >
+                                                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">Min 8 chars, 1 uppercase, 1 lowercase, 1 number.</p>
+                                        </div>
+                                    </>
+                                )}
                             </div>
 
                             <Button type="submit" className="w-full" size="lg" disabled={loading}>
                                 {loading ? <Loader2 className="animate-spin" /> : "Continue"}
                             </Button>
 
-                            <p className="text-xs text-center text-muted-foreground">
-                                Already have an account? <Link href="/sign-in" className="underline">Sign In</Link>
-                            </p>
+                            {!isSignedIn && (
+                                <p className="text-xs text-center text-muted-foreground">
+                                    Already have an account? <Link href="/sign-in" className="underline">Sign In</Link>
+                                </p>
+                            )}
                         </form>
                     )}
 

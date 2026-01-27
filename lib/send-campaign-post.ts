@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { isVideoUrl } from '@/lib/media-utils';
 import { sendCampaignEmail } from '@/lib/email';
 import { postToLinkedIn } from '@/lib/linkedin';
 import { postToFacebook } from '@/lib/facebook';
@@ -87,9 +88,14 @@ export async function sendCampaignPost(
 
             // Facebook
             if (post.type === 'FACEBOOK') {
-                const metadata = post.metadata as any;
+                const metadata = (post.metadata || {}) as any;
                 const fbToken = metadata?.facebookPageAccessToken || dbUser.facebookPageAccessToken || dbUser.facebookAccessToken;
                 const fbPageId = metadata?.facebookPageId || dbUser.facebookPageId;
+
+                const tokenSource = metadata?.facebookPageAccessToken ? 'Metadata (Page)' :
+                    dbUser.facebookPageAccessToken ? 'DB User (Page)' :
+                        dbUser.facebookAccessToken ? 'DB User (User)' : 'None';
+                console.log(`[Facebook] Posting using token source: ${tokenSource} for Page ID: ${fbPageId}`);
 
                 if (!fbToken || !fbPageId) {
                     throw new Error('Facebook credentials not found or expired. Please reconnect your account.');
@@ -97,8 +103,9 @@ export async function sendCampaignPost(
 
                 // Auto-detect if it's a Reel (single video only)
                 const mediaToUse = post.mediaUrls.length > 0 ? post.mediaUrls : post.videoUrl;
-                const hasOnlyVideo = (Array.isArray(mediaToUse) && mediaToUse.length === 1 && mediaToUse[0].toLowerCase().endsWith('.mp4')) ||
-                    (typeof mediaToUse === 'string' && mediaToUse.toLowerCase().endsWith('.mp4'));
+
+                // User logic: explicitly check check metadata.isReel. If not set, it is a standard post. 
+                // Multiple videos are handled by postToFacebook automatically as an album/feed post.
 
                 const platformResponse = await postToFacebook(
                     {
@@ -107,7 +114,7 @@ export async function sendCampaignPost(
                     },
                     post.message || post.subject || "",
                     mediaToUse,
-                    { isReel: metadata?.isReel || hasOnlyVideo }
+                    { isReel: metadata?.isReel }
                 );
 
                 await prisma.campaignPost.update({
@@ -123,7 +130,7 @@ export async function sendCampaignPost(
                         accountId: fbPageId,
                         message: post.message || post.subject || "",
                         mediaUrls: Array.isArray(mediaToUse) ? mediaToUse[0] : (mediaToUse || ""),
-                        postType: (metadata?.isReel || hasOnlyVideo) ? 'REEL' : ((post.mediaUrls.length > 0 || post.videoUrl) ? 'IMAGE' : 'TEXT'),
+                        postType: metadata?.isReel ? 'REEL' : ((post.mediaUrls.length > 0 || post.videoUrl) ? 'IMAGE' : 'TEXT'),
                         accessToken: fbToken,
                         published: true,
                         publishedAt: new Date(),
@@ -135,7 +142,7 @@ export async function sendCampaignPost(
 
             // Instagram
             if (post.type === 'INSTAGRAM') {
-                const metadata = post.metadata as any;
+                const metadata = (post.metadata || {}) as any;
                 const igToken = metadata?.facebookPageAccessToken || dbUser.instagramAccessToken;
                 const igUserId = metadata?.instagramBusinessId || dbUser.instagramUserId;
 
@@ -157,7 +164,7 @@ export async function sendCampaignPost(
                         userId: igUserId!,
                     },
                     post.message || post.subject || "",
-                    mediaToUse,
+                    mediaToUse, // Pass the full array or string
                     {
                         isReel: (post.metadata as any)?.isReel,
                         shareToFeed: true,
@@ -319,6 +326,16 @@ export async function sendCampaignPost(
 
                 if (!media || (Array.isArray(media) && media.length === 0)) {
                     throw new Error('Pinterest requires an image or video');
+                }
+
+                // Check for Multiple Videos (Pinterest API Limitation)
+                const mediaList = Array.isArray(media) ? media : [media];
+                if (mediaList.length > 1) {
+                    const videoCount = mediaList.filter(url => /\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i.test(url)).length;
+                    if (videoCount > 0) {
+                        // We throw here for earlier feedback, though lib/pinterest.ts also checks.
+                        throw new Error('Pinterest does not support multiple video posts or mixed media with videos. Please use a single video or multiple images.');
+                    }
                 }
 
                 if (!metadata?.boardId && !metadata?.newBoardName) {

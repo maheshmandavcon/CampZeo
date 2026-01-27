@@ -11,13 +11,13 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { prompt, style } = body;
+        const { prompt, style, model, width, height } = body;
 
         if (!prompt) {
             return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
         }
 
-        const result = await generateImage(prompt, style);
+        const result = await generateImage(prompt, style, { model, width, height });
 
         if (!result.success) {
             return NextResponse.json(

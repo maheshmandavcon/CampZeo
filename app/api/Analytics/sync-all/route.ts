@@ -21,11 +21,49 @@ export async function GET(request: NextRequest) {
         }
 
         const orgId = dbUser.organisationId;
+        const skipSync = request.nextUrl.searchParams.get('skipSync') === 'true';
+        const forceSync = request.nextUrl.searchParams.get('force') === 'true';
+
+        // Check for last sync time to avoid redundant heavy calls
+        let shouldSync = true;
+        const lastSyncRecord = await prisma.notification.findFirst({
+            where: {
+                organisationId: orgId,
+                category: 'ANALYTICS_SYNC',
+                isSuccess: true
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        if (lastSyncRecord && !forceSync) {
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+            if (lastSyncRecord.createdAt > fiveMinutesAgo) {
+                console.log('[Sync All] Last sync was less than 5 minutes ago. Skipping to keep things fast.');
+                shouldSync = false;
+            }
+        }
 
         // Sync fresh metrics from all connected platforms
-        console.log('[Sync All] Syncing fresh metrics from all platforms...');
-        await SocialNormalizerService.syncUserMetrics(user.id);
-        console.log('[Sync All] Sync complete. Fetching updated data...');
+        if ((!skipSync && shouldSync) || forceSync) {
+            console.log(`[Sync All] Syncing fresh metrics (force: ${forceSync})...`);
+            // We await it here because the following queries depend on the updated data
+            await SocialNormalizerService.syncUserMetrics(user.id);
+
+            // Record successful sync
+            await prisma.notification.create({
+                data: {
+                    organisationId: orgId,
+                    message: 'Analytics data synchronized successfully',
+                    type: 'SYSTEM',
+                    platform: 'SYSTEM',
+                    category: 'ANALYTICS_SYNC',
+                    isSuccess: true
+                }
+            });
+            console.log('[Sync All] Sync complete.');
+        } else {
+            console.log('[Sync All] Using existing database data.');
+        }
 
         // Fetch comprehensive analytics data
         const thirtyDaysAgo = new Date();
@@ -41,10 +79,15 @@ export async function GET(request: NextRequest) {
             take: 200
         });
 
-        // 2. Fetch Published Posts
+        // 2. Fetch Published Posts - Corrected to filter by CampaignPost IDs belonging to the Org
+        const orgCampaignPostIds = await prisma.campaignPost.findMany({
+            where: { campaign: { organisationId: orgId } },
+            select: { id: true }
+        }).then(posts => posts.map(p => p.id));
+
         const postTransactions = await prisma.postTransaction.findMany({
             where: {
-                refId: orgId,
+                refId: { in: orgCampaignPostIds },
                 published: true
             },
             orderBy: { createdAt: 'desc' },
