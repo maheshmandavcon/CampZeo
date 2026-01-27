@@ -290,9 +290,6 @@ export default function AnalyticsPage() {
         }
     };
 
-        syncAnalyticsOnLoad();
-        syncAnalyticsOnLoad();
-    }, []); // Run once on mount
 
     // Fetch Funnel Data
     useEffect(() => {
