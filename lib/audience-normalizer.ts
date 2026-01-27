@@ -18,6 +18,7 @@ export interface PlatformDetail {
     shares: number;
     saves: number;
     videoViews: number;
+    profileViews: number;
     followerReach?: number;
     nonFollowerReach?: number;
 }
@@ -31,9 +32,14 @@ export interface UnifiedAudienceData {
     reachByCity: Record<string, number>;
     reachByCountry: Record<string, number>;
     reachByGender: Record<string, number>;
-    // Debug: Raw Pinterest response
+    // Debug: Raw API responses
     debug?: {
-        pinterestRawResponse?: any;
+        facebook?: any;
+        instagram?: any;
+        youtube?: any;
+        linkedin?: any;
+        pinterest?: any;
+        [key: string]: any;
     };
 }
 
@@ -200,7 +206,13 @@ export class AudienceNormalizerService {
             reachByCountry: {} as Record<string, number>,
             reachByGender: {} as Record<string, number>,
             // Debug data - always initialize
-            pinterestRawResponse: {} as any
+            debug: {
+                facebook: [] as any[],
+                instagram: [] as any[],
+                youtube: [] as any[],
+                linkedin: [] as any[],
+                pinterest: [] as any[]
+            } as any
         };
 
         results.forEach(res => {
@@ -249,6 +261,8 @@ export class AudienceNormalizerService {
 
                 followers = data.followerCount || data.totalFollowers || 0;
                 res.accountReach = data.reach || 0;
+                res.accountEngagement = data.engagement || 0;
+                res.profileViews = data.pageViews || 0;
                 res.followerReach = data.fanReach || 0;
                 res.nonFollowerReach = data.nonFanReach || 0;
             } else if (res.platform === 'INSTAGRAM') {
@@ -272,6 +286,9 @@ export class AudienceNormalizerService {
                 });
                 followers = data.followerCount || data.totalFollowers || 0;
                 res.accountReach = data.reach || 0;
+                res.profileViews = data.profileViews || 0;
+                res.accountEngagement = 0; // Instagram engagement at account level is often a manual sum or total_interactions proxy
+                // If accountInsights has engagement, use it
                 res.followerReach = data.followerReach || 0;
                 res.nonFollowerReach = data.nonFollowerReach || 0;
             } else if (res.platform === 'LINKEDIN') {
@@ -286,11 +303,11 @@ export class AudienceNormalizerService {
                     aggregated.countries[k] = (aggregated.countries[k] || 0) + ((v as number / 100) * (followers || 1000));
                 });
                 res.accountReach = res.data?.views || 0;
+                res.profileViews = res.data?.views || 0;
             } else if (res.platform === 'PINTEREST') {
                 const data = res.data;
 
-                // Store raw Pinterest response for debugging
-                aggregated.pinterestRawResponse = data;
+                // Raw data is now collected in the debug object below
 
                 console.log('[AudienceNormalizer] Pinterest raw data:', {
                     totalFollowers: data?.totalFollowers,
@@ -326,6 +343,16 @@ export class AudienceNormalizerService {
                 }
             }
 
+            // Collect raw responses for debugging
+            if (res.data?._rawResponses && Array.isArray(res.data._rawResponses)) {
+                const platKey = res.platform.toLowerCase();
+                if (aggregated.debug[platKey]) {
+                    aggregated.debug[platKey].push(...res.data._rawResponses);
+                } else {
+                    aggregated.debug[platKey] = [...res.data._rawResponses];
+                }
+            }
+
             aggregated.platforms.push({
                 platform: res.platform as PlatformType,
                 followers,
@@ -337,6 +364,7 @@ export class AudienceNormalizerService {
                 shares: 0,
                 saves: 0,
                 videoViews: 0,
+                profileViews: res.profileViews || 0,
                 followerReach: res.followerReach || 0,
                 nonFollowerReach: res.nonFollowerReach || 0
             });
@@ -360,7 +388,9 @@ export class AudienceNormalizerService {
                     : (stats._sum.reach || 0),
                 followerReach: results.find(r => r.platform === p.platform)?.followerReach || 0,
                 nonFollowerReach: results.find(r => r.platform === p.platform)?.nonFollowerReach || 0,
-                engagement: (stats._sum.likes || 0) + (stats._sum.comments || 0) + (stats._sum.shares || 0) + (stats._sum.saves || 0)
+                engagement: (p.platform === 'INSTAGRAM' || p.platform === 'FACEBOOK' || p.platform === 'YOUTUBE')
+                    ? (results.find(r => r.platform === p.platform)?.accountEngagement || (stats._sum.likes || 0) + (stats._sum.comments || 0) + (stats._sum.shares || 0) + (stats._sum.saves || 0))
+                    : ((stats._sum.likes || 0) + (stats._sum.comments || 0) + (stats._sum.shares || 0) + (stats._sum.saves || 0))
             };
         });
 
@@ -382,9 +412,7 @@ export class AudienceNormalizerService {
             reachByCity: aggregated.reachByCity,
             reachByCountry: aggregated.reachByCountry,
             reachByGender: aggregated.reachByGender,
-            debug: {
-                pinterestRawResponse: aggregated.pinterestRawResponse
-            }
+            debug: aggregated.debug
         };
     }
 

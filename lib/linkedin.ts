@@ -437,6 +437,7 @@ export interface LinkedInAudienceInsights {
         total: number;
     };
     followerGeography: Record<string, number>;
+    _rawResponses?: any[];
 }
 
 export async function getLinkedInAudienceInsights(
@@ -457,6 +458,17 @@ export async function getLinkedInAudienceInsights(
     // q=organizationalEntity&organizationalEntity={urn}
 
     try {
+        const _rawResponses: any[] = [];
+        const capture = async (res: Response, label: string) => {
+            try {
+                const clone = res.clone();
+                const data = await clone.json();
+                _rawResponses.push({ label, url: res.url, status: res.status, data });
+            } catch (e) {
+                _rawResponses.push({ label, url: res.url, status: res.status, error: 'Failed to parse JSON' });
+            }
+        };
+
         const response = await fetch(
             `https://api.linkedin.com/v2/organizationalEntityFollowerStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(authorUrn)}`,
             {
@@ -467,6 +479,7 @@ export async function getLinkedInAudienceInsights(
                 }
             }
         );
+        await capture(response, 'follower_stats');
 
         if (!response.ok) {
             // 403 means permission denied (needs rw_organization_admin or similar)
@@ -496,6 +509,7 @@ export async function getLinkedInAudienceInsights(
                         }
                     }
                 );
+                await capture(geoResponse, 'follower_geography');
 
                 if (geoResponse.ok) {
                     const geoData = await geoResponse.json();
@@ -517,14 +531,40 @@ export async function getLinkedInAudienceInsights(
                     paid,
                     total: organic + paid
                 },
-                followerGeography
+                followerGeography,
+                _rawResponses
             };
         }
 
-        return { followerCounts: { organic: 0, paid: 0, total: 0 }, followerGeography: {} };
+        return { followerCounts: { organic: 0, paid: 0, total: 0 }, followerGeography: {}, _rawResponses };
 
     } catch (error) {
         console.error('[LinkedIn] Error fetching audience insights:', error);
         return { followerCounts: { organic: 0, paid: 0, total: 0 }, followerGeography: {} };
     }
+}
+/**
+ * Refresh LinkedIn access token using refresh token
+ */
+export async function refreshLinkedInToken(refreshToken: string, clientId: string, clientSecret: string) {
+    const tokenUrl = "https://www.linkedin.com/oauth/v2/accessToken";
+    const params = new URLSearchParams();
+    params.append("grant_type", "refresh_token");
+    params.append("refresh_token", refreshToken);
+    params.append("client_id", clientId);
+    params.append("client_secret", clientSecret);
+
+    const response = await fetch(tokenUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params,
+    });
+
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Failed to refresh LinkedIn token: ${error}`);
+    }
+
+    const data: any = await response.json();
+    return data; // Returns { access_token, refresh_token (optional), expires_in, scope, token_type }
 }

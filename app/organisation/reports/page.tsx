@@ -86,6 +86,24 @@ export default function ReportsPage() {
     const itemsPerPage = 5;
 
     useEffect(() => {
+        const refreshToken = async () => {
+            try {
+                console.log('[Reports] Triggering automatic token refresh...');
+                const response = await fetch('/api/socialmedia/refresh', { method: 'POST' });
+                if (!response.ok) {
+                    console.warn('[Reports] Token refresh failed');
+                } else {
+                    console.log('[Reports] Tokens refreshed successfully');
+                }
+            } catch (error) {
+                console.error('[Reports] Error during token refresh:', error);
+            }
+        };
+
+        refreshToken();
+    }, []);
+
+    useEffect(() => {
         const fetchData = async () => {
             try {
                 const response = await fetch('/api/Analytics/audience');
@@ -203,11 +221,11 @@ export default function ReportsPage() {
             </div>
 
             <Tabs defaultValue="performance" className="space-y-8">
-                <TabsList className="p-1 h-14 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md rounded-2xl border border-white/20 dark:border-slate-800/50 inline-flex border border-white/20">
+                <TabsList className="p-1 h-14 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md rounded-2xl border border-1  inline-flex border border-dark/90">
                     <TabsTrigger value="performance" className="flex gap-2 rounded-xl px-6 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-md transition-all"><BarChart3 className="size-4" /> Post Performance</TabsTrigger>
                     <TabsTrigger value="activity" className="flex gap-2 rounded-xl px-6 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-md transition-all"><Clock className="size-4" /> Activity Patterns</TabsTrigger>
                     <TabsTrigger value="networks" className="flex gap-2 rounded-xl px-6 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-md transition-all"><Users className="size-4" /> Network Insights</TabsTrigger>
-                    <TabsTrigger value="locality" className="flex gap-2 rounded-xl px-6 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-md transition-all"><MapPin className="size-4" /> Locality</TabsTrigger>
+                    {/* <TabsTrigger value="locality" className="flex gap-2 rounded-xl px-6 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-md transition-all"><MapPin className="size-4" /> Locality</TabsTrigger> */}
                 </TabsList>
 
                 {/* Network Insights Tab */}
@@ -343,7 +361,14 @@ export default function ReportsPage() {
                                             <div className="flex items-center gap-2">
                                                 <Eye className="size-3.5 text-amber-500" />
                                                 <div className="space-y-0.5">
-                                                    <p className="text-[9px] font-bold text-slate-400 uppercase">Views</p>
+                                                    <p className="text-[9px] font-bold text-slate-400 uppercase">Profile Views</p>
+                                                    <p className="text-sm font-bold">{platform.profileViews?.toLocaleString() ?? 0}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <BarChart3 className="size-3.5 text-purple-500" />
+                                                <div className="space-y-0.5">
+                                                    <p className="text-[9px] font-bold text-slate-400 uppercase">Video Views</p>
                                                     <p className="text-sm font-bold">{platform.videoViews?.toLocaleString() ?? 0}</p>
                                                 </div>
                                             </div>

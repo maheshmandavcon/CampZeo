@@ -185,19 +185,6 @@ export interface InstagramPostInsights {
     comments: number;
     impressions: number;
     reach: number;
-    engagement: number;
-    engagementRate: number;
-    isDeleted?: boolean;
-    caption?: string;
-    media_url?: string;
-    permalink?: string;
-}
-
-export interface InstagramPostInsights {
-    likes: number;
-    comments: number;
-    impressions: number;
-    reach: number;
     saved: number;
     shares: number;
     video_views: number;
@@ -251,15 +238,11 @@ export async function getInstagramPostInsights(
         try {
             const isVideo = mediaData.media_type === 'VIDEO';
 
-            // Comprehensive metrics for 2025/2026
-            // Note: 'total_interactions' includes likes, comments, saves, and shares
-            const metricsArr = ['reach', 'saved'];
+            // User requested metrics: impressions, reach, saves, video_views, engagement
+            const metricsArr = ['impressions', 'reach', 'saved', 'engagement'];
             if (isVideo) {
-                metricsArr.push('plays');
+                metricsArr.push('plays'); // maps to video_views for Reels
                 metricsArr.push('total_interactions');
-            } else {
-                metricsArr.push('impressions');
-                metricsArr.push('engagement');
             }
 
             const metrics = metricsArr.join(',');
@@ -284,21 +267,16 @@ export async function getInstagramPostInsights(
                 if (impressionsMetric) impressions = impressionsMetric.values[0]?.value || 0;
                 if (playsMetric) video_views = playsMetric.values[0]?.value || 0;
 
-                // If it's a Reel, totalInteractions from API is more accurate (includes shares)
                 if (interactionsMetric) {
                     totalInteractions = interactionsMetric.values[0]?.value || totalInteractions;
-                    // For Reels, impressions is often proxy'd by plays or views in newer API
                     if (impressions === 0) impressions = video_views;
                 } else if (engagementMetric) {
                     totalInteractions = engagementMetric.values[0]?.value || totalInteractions;
                 }
 
-                // Shares can be derived if total_interactions is available
-                // total_interactions = likes + comments + saves + shares
-                shares = Math.max(0, totalInteractions - (likes + comments + saved));
+            shares = Math.max(0, totalInteractions - (likes + comments + saved));
 
-            } else {
-                // Fallback for older API/media
+        } else {
                 const fallbackResponse = await fetch(
                     `https://graph.facebook.com/v24.0/${mediaId}/insights?metric=impressions,reach,saved&access_token=${accessToken}`
                 );
@@ -385,105 +363,68 @@ export interface InstagramAudienceInsights {
     followerGenderAge: Record<string, number>;
     followerReach: number;
     nonFollowerReach: number;
+    _rawResponses?: any[];
 }
 
 export async function getInstagramAudienceInsights(
     credentials: InstagramCredentials
 ): Promise<InstagramAudienceInsights> {
+    const _rawResponses: any[] = [];
+    const capture = async (res: Response, label: string) => {
+        try {
+            const clone = res.clone();
+            const data = await clone.json();
+            _rawResponses.push({ label, url: res.url, status: res.status, data });
+        } catch (e) {
+            _rawResponses.push({ label, url: res.url, status: res.status, error: 'Failed to parse JSON' });
+        }
+    };
+
     const { accessToken, userId } = credentials;
     try {
         // Fetch total followers count
         const profileRes = await fetch(`https://graph.facebook.com/v24.0/${userId}?fields=followers_count&access_token=${accessToken}`);
+        await capture(profileRes, 'profile');
         let totalFollowers = 0;
         if (profileRes.ok) {
             const profileData = await profileRes.json();
             totalFollowers = profileData.followers_count || 0;
         }
 
-        // 1. Reached Audience Demographics (Current Standard)
-        // Note: Requires metric_type=total_value and period=lifetime
-        const reachedMetric = 'reached_audience_demographics';
-        const reachedBreakdowns = 'city,country,gender,age';
-        const reachedResponse = await fetch(
-            `https://graph.facebook.com/v24.0/${userId}/insights?metric=${reachedMetric}&period=lifetime&breakdown=${reachedBreakdowns}&metric_type=total_value&access_token=${accessToken}`
-        );
+        // 1. Follower Demographics (Strict v24 - split calls)
+        const followerCity: Record<string, number> = {};
+        const followerCountry: Record<string, number> = {};
+        const followerGenderAge: Record<string, number> = {};
 
-        let audienceCity: Record<string, number> = {};
-        let audienceCountry: Record<string, number> = {};
-        let audienceGenderAge: Record<string, number> = {};
-        let audienceLocale: Record<string, number> = {};
+        const breakdowns = ['city', 'country', 'gender', 'age'];
+        for (const breakdown of breakdowns) {
+            try {
+                // v24 strict demographics: one breakdown per request, NO metric_type
+                const url = `https://graph.facebook.com/v24.0/${userId}/insights?metric=follower_demographics&period=lifetime&breakdown=${breakdown}&access_token=${accessToken}`;
+                const res = await fetch(url);
+                await capture(res, `follower_demographics_${breakdown}`);
 
-        if (reachedResponse.ok) {
-            const data = await reachedResponse.json();
-            const rawValue = data.data?.find((m: any) => m.name === reachedMetric)?.values[0]?.value || {};
-
-            Object.entries(rawValue).forEach(([key, val]) => {
-                const v = val as number;
-                if (key.includes(',')) audienceCity[key] = v; // City usually in format "City Name, Connection" or just "City"
-                else if (key.length === 2 && key.toUpperCase() === key) audienceCountry[key] = v; // Country codes
-                else if (key.includes('_') && !['male', 'female'].some(g => key.toLowerCase().includes(g))) audienceLocale[key] = v;
-                else audienceGenderAge[key] = v;
-            });
-        }
-
-        // 2. Follower Demographics
-        const followerMetric = 'follower_demographics';
-        const followerResponse = await fetch(
-            `https://graph.facebook.com/v24.0/${userId}/insights?metric=${followerMetric}&period=lifetime&breakdown=${reachedBreakdowns}&metric_type=total_value&access_token=${accessToken}`
-        );
-
-        let followerCity: Record<string, number> = {};
-        let followerCountry: Record<string, number> = {};
-        let followerGenderAge: Record<string, number> = {};
-
-        if (followerResponse.ok) {
-            const data = await followerResponse.json();
-            const rawValue = data.data?.find((m: any) => m.name === followerMetric)?.values[0]?.value || {};
-
-            Object.entries(rawValue).forEach(([key, val]) => {
-                const v = val as number;
-                if (key.includes(',')) followerCity[key] = v;
-                else if (key.length === 2 && key.toUpperCase() === key) followerCountry[key] = v;
-                else followerGenderAge[key] = v;
-            });
-        }
-
-        // 3. Follower vs Non-Follower Reach
-        // breakdown=follow_type allows seeing follow vs non-follow split
-        const reachResponse = await fetch(
-            `https://graph.facebook.com/v24.0/${userId}/insights?metric=reach&period=days_28&breakdown=follow_type&access_token=${accessToken}`
-        );
-
-        let followerReach = 0;
-        let nonFollowerReach = 0;
-
-        if (reachResponse.ok) {
-            const data = await reachResponse.json();
-            const reachData = data.data?.find((m: any) => m.name === 'reach');
-            if (reachData && reachData.values) {
-                // Reach values are often returned as an array of daily/period points
-                // We'll take the latest point or sum if it's a breakdown
-                const latestValue = reachData.values[0]?.value || {};
-                followerReach = latestValue.follower || 0;
-                nonFollowerReach = latestValue.non_follower || 0;
+                if (res.ok) {
+                    const data = await res.json();
+                    const value = data.data?.[0]?.values?.[0]?.value || {};
+                    if (breakdown === 'city') Object.assign(followerCity, value);
+                    else if (breakdown === 'country') Object.assign(followerCountry, value);
+                    else Object.assign(followerGenderAge, value);
+                }
+            } catch (e) {
+                console.error(`[Instagram] Error fetching follower demographics (${breakdown}):`, e);
             }
         }
 
-        // Fallback for legacy demographics if newer ones fail
-        if (Object.keys(audienceCity).length === 0) {
-            const oldMetrics = 'audience_city,audience_country,audience_gender_age';
-            const fallbackResponse = await fetch(
-                `https://graph.facebook.com/v24.0/${userId}/insights?metric=${oldMetrics}&period=lifetime&access_token=${accessToken}`
-            );
+        // Audience demographics (legacy/mapped from followers for UI stability)
+        const audienceCity = followerCity;
+        const audienceCountry = followerCountry;
+        const audienceGenderAge = followerGenderAge;
+        const audienceLocale: Record<string, number> = {};
 
-            if (fallbackResponse.ok) {
-                const fallbackData = await fallbackResponse.json();
-                const fItems = fallbackData.data || [];
-                audienceCity = fItems.find((m: any) => m.name === 'audience_city')?.values[0]?.value || {};
-                audienceCountry = fItems.find((m: any) => m.name === 'audience_country')?.values[0]?.value || {};
-                audienceGenderAge = fItems.find((m: any) => m.name === 'audience_gender_age')?.values[0]?.value || {};
-            }
-        }
+        // 2. Reach Breakdown (Not supported for IG accounts)
+        const followerReach = 0;
+        const nonFollowerReach = 0;
 
         return {
             audienceCity,
@@ -495,7 +436,8 @@ export async function getInstagramAudienceInsights(
             followerCountry,
             followerGenderAge,
             followerReach,
-            nonFollowerReach
+            nonFollowerReach,
+            _rawResponses
         };
     } catch (error) {
         console.error('[Instagram] Error fetching audience insights:', error);
@@ -520,6 +462,7 @@ export interface InstagramAccountInsights {
     profileViews: number;
     websiteClicks: number;
     followerCount: number;
+    _rawResponses?: any[];
 }
 
 export async function getInstagramAccountInsights(
@@ -527,70 +470,72 @@ export async function getInstagramAccountInsights(
 ): Promise<InstagramAccountInsights> {
     const { accessToken, userId } = credentials;
     try {
+        const _rawResponses: any[] = [];
+        const capture = async (res: Response, label: string) => {
+            try {
+                const clone = res.clone();
+                const data = await clone.json();
+                _rawResponses.push({ label, url: res.url, status: res.status, data });
+            } catch (e) {
+                _rawResponses.push({ label, url: res.url, status: res.status, error: 'Failed to parse JSON' });
+            }
+        };
+
         let reach = 0;
         let impressions = 0;
         let profileViews = 0;
-
-        // 1. Fetch Reach (supports days_28)
-        try {
-            const reachRes = await fetch(
-                `https://graph.facebook.com/v24.0/${userId}/insights?metric=reach&period=days_28&access_token=${accessToken}`
-            );
-            if (reachRes.ok) {
-                const data = await reachRes.json();
-                reach = data.data?.[0]?.values?.[0]?.value || 0;
-            } else {
-                console.warn(`[Instagram] Failed to fetch reach:`, await reachRes.json());
-            }
-        } catch (e) {
-            console.error('[Instagram] Error fetching reach:', e);
-        }
-
-        // 2. Fetch Views & Profile Views (Incompatible with days_28, require metric_type=total_value)
-        try {
-            // Using period=day and metric_type=total_value as requested
-            const metrics = 'views,profile_views';
-            const otherRes = await fetch(
-                `https://graph.facebook.com/v24.0/${userId}/insights?metric=${metrics}&metric_type=total_value&period=day&access_token=${accessToken}`
-            );
-
-            if (otherRes.ok) {
-                const data = await otherRes.json();
-                (data.data || []).forEach((m: any) => {
-                    let val = 0;
-                    // Check for total_value first (if API returns it aggregated)
-                    if (m.total_value) {
-                        val = typeof m.total_value === 'object' ? (m.total_value.value || 0) : m.total_value;
-                    }
-                    // Fallback to summing values array if total_value isn't present
-                    else if (m.values && Array.isArray(m.values)) {
-                        val = m.values.reduce((acc: number, cur: any) => acc + (cur.value || 0), 0);
-                    }
-
-                    if (m.name === 'views' || m.name === 'impressions') impressions = val;
-                    if (m.name === 'profile_views') profileViews = val;
-                });
-            } else {
-                console.warn(`[Instagram] Failed to fetch views/profile_views:`, await otherRes.json());
-            }
-        } catch (e) {
-            console.error('[Instagram] Error fetching other insights:', e);
-        }
-
-        // Follower count is fetched separately as it's often not in the same metric set
-        const profileRes = await fetch(`https://graph.facebook.com/v24.0/${userId}?fields=followers_count&access_token=${accessToken}`);
+        let websiteClicks = 0;
         let followerCount = 0;
+
+        // 1. Fetch Follower Count via profile field (verified working)
+        const profileRes = await fetch(`https://graph.facebook.com/v24.0/${userId}?fields=followers_count&access_token=${accessToken}`);
+        await capture(profileRes, 'profile_followers_direct');
         if (profileRes.ok) {
             const profileData = await profileRes.json();
             followerCount = profileData.followers_count || 0;
         }
 
+        // 2. Fetch Daily Metrics (Reach, Profile Views, Website Clicks) manually aggregate over ~30 days.
+        // v24 Working URL for Reach/Views/Clicks: metric=reach,profile_views,website_clicks&period=day&metric_type=total_value
+        const until = Math.floor(Date.now() / 1000);
+        const since = until - (30 * 24 * 60 * 60);
+
+        const dailyUrl = `https://graph.facebook.com/v24.0/${userId}/insights?metric=reach,profile_views,website_clicks&period=day&metric_type=total_value&since=${since}&until=${until}&access_token=${accessToken}`;
+        const dailyRes = await fetch(dailyUrl);
+        await capture(dailyRes, 'account_insights_daily_reach_views');
+
+        if (dailyRes.ok) {
+            const data = await dailyRes.json();
+            const items = data.data || [];
+
+            const getVal = (name: string) => {
+                const m = items.find((i: any) => i.name === name);
+                if (!m) return 0;
+                if (m.total_value?.value !== undefined) return m.total_value.value;
+                return (m.values || []).reduce((acc: number, v: any) => acc + (v.value || 0), 0);
+            };
+
+            reach = getVal('reach');
+            profileViews = getVal('profile_views');
+            websiteClicks = getVal('website_clicks');
+
+            // Impressions proxy: Use reach if impressions is not allowed at account level for period=day
+            impressions = reach;
+        }
+
+        // 3. Optional: Follows and Unfollows for growth metrics
+        const growthUrl = `https://graph.facebook.com/v24.0/${userId}/insights?metric=follows_and_unfollows&period=day&metric_type=total_value&since=${since}&until=${until}&access_token=${accessToken}`;
+        const growthRes = await fetch(growthUrl);
+        await capture(growthRes, 'account_insights_daily_growth');
+        // (Just capturing for debug/raw data for now)
+
         return {
             reach,
             impressions,
             profileViews,
-            websiteClicks: 0, // Not all accounts have this
-            followerCount
+            websiteClicks,
+            followerCount,
+            _rawResponses
         };
     } catch (error) {
         console.error('[Instagram] Error fetching account insights:', error);

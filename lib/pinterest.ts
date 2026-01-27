@@ -603,8 +603,16 @@ export async function getPinterestAudienceInsights(
     let demographics = { ages: {}, genders: {}, locations: {}, devices: {} };
 
     // Store raw API responses for debugging
-    let rawUserAccountResponse: any = null;
-    let rawAudienceInsightsResponse: any = null;
+    const _rawResponses: any[] = [];
+    const capture = async (res: Response, label: string) => {
+        try {
+            const clone = res.clone();
+            const data = await clone.json();
+            _rawResponses.push({ label, url: res.url, status: res.status, data });
+        } catch (e) {
+            _rawResponses.push({ label, url: res.url, status: res.status, error: 'Failed to parse JSON' });
+        }
+    };
 
     // STEP 1: Fetch follower count (CRITICAL - must succeed)
     try {
@@ -615,7 +623,7 @@ export async function getPinterestAudienceInsights(
 
         if (userResponse.ok) {
             const userData = await userResponse.json();
-            rawUserAccountResponse = userData; // Capture raw response
+            await capture(userResponse.clone(), 'user_account'); // Using clone because json() might have been consumed if we weren't careful, but capture does it correctly too.
             totalFollowers = userData.follower_count || 0;
             console.log(`[Pinterest] ✅ Follower count: ${totalFollowers}`);
         } else {
@@ -659,7 +667,7 @@ export async function getPinterestAudienceInsights(
 
             if (insightsResponse.ok) {
                 const data = await insightsResponse.json();
-                rawAudienceInsightsResponse = data; // Capture raw response
+                await capture(insightsResponse, 'audience_insights');
 
                 // Pinterest API returns demographics as arrays with {key, name, ratio}
                 // Convert to our expected format: Record<string, number>
@@ -722,10 +730,7 @@ export async function getPinterestAudienceInsights(
         categories,
         demographics,
         totalFollowers,
-        _rawApiResponses: {
-            userAccount: rawUserAccountResponse,
-            audienceInsights: rawAudienceInsightsResponse
-        }
+        _rawResponses
     };
 
     console.log('[Pinterest] 📦 Final result captured with raw responses');

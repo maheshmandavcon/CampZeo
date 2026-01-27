@@ -710,8 +710,8 @@ export async function getFacebookPostInsights(
         let reach = 0;
 
         try {
-            // Facebook 2025/2026: 'impressions' is moving to 'views'
-            const metrics = 'post_impressions,post_impressions_unique,post_engaged_users,views,views_unique';
+            // User requested: post_impressions, post_reach, post_engaged_users, post_reactions
+            const metrics = 'post_impressions,post_reach,post_engaged_users,post_reactions,post_impressions_unique';
             const insightsResponse = await fetch(
                 `https://graph.facebook.com/v24.0/${postId}/insights?metric=${metrics}&access_token=${accessToken}`
             );
@@ -720,17 +720,15 @@ export async function getFacebookPostInsights(
                 const insightsData = await insightsResponse.json();
                 const data = insightsData.data || [];
 
-                // Impressions / Views
-                const impressionsMetric = data.find((m: any) => m.name === 'post_impressions' || m.name === 'views');
-                // Reach / Unique Views
-                const reachMetric = data.find((m: any) => m.name === 'post_impressions_unique' || m.name === 'views_unique');
+                const impressionsMetric = data.find((m: any) => m.name === 'post_impressions');
+                const reachMetric = data.find((m: any) => m.name === 'post_reach' || m.name === 'post_impressions_unique');
+                const engagedUsersMetric = data.find((m: any) => m.name === 'post_engaged_users');
+                const reactionsMetric = data.find((m: any) => m.name === 'post_reactions');
 
-                if (impressionsMetric) {
-                    impressions = impressionsMetric.values[0]?.value || 0;
-                }
-                if (reachMetric) {
-                    reach = reachMetric.values[0]?.value || 0;
-                }
+                if (impressionsMetric) impressions = impressionsMetric.values[0]?.value || 0;
+                if (reachMetric) reach = reachMetric.values[0]?.value || 0;
+                // If the user specifically wants engaged users or reactions, we could store them too,
+                // but for now they contribute to 'engagement' if not already summed.
             } else {
                 console.warn(`[Facebook] Insights call failed for ${postId}, status: ${insightsResponse.status}`);
             }
@@ -775,6 +773,10 @@ export interface FacebookAudienceInsights {
     reachedByGenderAge: Record<string, number>;
     fanReach: number;
     nonFanReach: number;
+    // New fields from user request
+    fanAdds?: number;
+    fanRemoves?: number;
+    _rawResponses?: any[];
 }
 
 export async function getFacebookPageAudience(
@@ -782,11 +784,23 @@ export async function getFacebookPageAudience(
 ): Promise<FacebookAudienceInsights> {
     const { accessToken, pageId } = credentials;
 
+    const _rawResponses: any[] = [];
+    const capture = async (res: Response, label: string) => {
+        try {
+            const clone = res.clone();
+            const data = await clone.json();
+            _rawResponses.push({ label, url: res.url, status: res.status, data });
+        } catch (e) {
+            _rawResponses.push({ label, url: res.url, status: res.status, error: 'Failed to parse JSON' });
+        }
+    };
+
     try {
         // 1. Fetch Total Follower Count
         const pageResponse = await fetch(
             `https://graph.facebook.com/v24.0/${pageId}?fields=followers_count&access_token=${accessToken}`
         );
+        await capture(pageResponse, 'page_profile');
 
         let totalFollowers = 0;
         if (pageResponse.ok) {
@@ -799,6 +813,7 @@ export async function getFacebookPageAudience(
         const fanResponse = await fetch(
             `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${fanMetrics}&period=lifetime&access_token=${accessToken}`
         );
+        await capture(fanResponse, 'fan_demographics');
 
         let fansByCity: Record<string, number> = {};
         let fansByCountry: Record<string, number> = {};
@@ -816,6 +831,7 @@ export async function getFacebookPageAudience(
         const reachDemographicsResponse = await fetch(
             `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${reachMetricsList}&period=days_28&access_token=${accessToken}`
         );
+        await capture(reachDemographicsResponse, 'reach_demographics_28d');
 
         let reachedByCity: Record<string, number> = {};
         let reachedByCountry: Record<string, number> = {};
@@ -833,14 +849,33 @@ export async function getFacebookPageAudience(
         const reachSplitResponse = await fetch(
             `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${reachSplitMetrics}&period=days_28&access_token=${accessToken}`
         );
+        await capture(reachSplitResponse, 'reach_split_28d');
 
         let fanReach = 0;
         let totalUniqueReach = 0;
 
         if (reachSplitResponse.ok) {
-            const data = await reachSplitResponse.json();
+            const data = await reachSplitResponse.ok ? await reachSplitResponse.json() : { data: [] };
             fanReach = data.data?.find((m: any) => m.name === 'page_posts_impressions_fan_unique')?.values[0]?.value || 0;
             totalUniqueReach = data.data?.find((m: any) => m.name === 'page_posts_impressions_unique')?.values[0]?.value || 0;
+        }
+
+        // 4. Fetch Fan Adds/Removes (User requested metrics from separate URL logic)
+        let fanAdds = 0;
+        let fanRemoves = 0;
+        try {
+            const fanGrowthMetrics = 'page_fan_adds,page_fan_removes';
+            const growthRes = await fetch(
+                `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${fanGrowthMetrics}&period=lifetime&access_token=${accessToken}`
+            );
+            await capture(growthRes, 'fan_growth_lifetime');
+            if (growthRes.ok) {
+                const growthData = await growthRes.json();
+                fanAdds = growthData.data?.find((m: any) => m.name === 'page_fan_adds')?.values[0]?.value || 0;
+                fanRemoves = growthData.data?.find((m: any) => m.name === 'page_fan_removes')?.values[0]?.value || 0;
+            }
+        } catch (e) {
+            console.error('[Facebook] Error fetching fan growth:', e);
         }
 
         return {
@@ -852,7 +887,10 @@ export async function getFacebookPageAudience(
             reachedByCountry,
             reachedByGenderAge,
             fanReach,
-            nonFanReach: Math.max(0, totalUniqueReach - fanReach)
+            nonFanReach: Math.max(0, totalUniqueReach - fanReach),
+            fanAdds,
+            fanRemoves,
+            _rawResponses
         };
 
     } catch (error) {
@@ -876,6 +914,11 @@ export interface FacebookAccountInsights {
     impressions: number;
     engagement: number;
     followerCount: number;
+    // New fields from user request
+    pageViews?: number;
+    pageLikes?: number;
+    engagedUsers?: number;
+    _rawResponses?: any[];
 }
 
 export async function getFacebookAccountInsights(
@@ -883,36 +926,59 @@ export async function getFacebookAccountInsights(
 ): Promise<FacebookAccountInsights> {
     const { accessToken, pageId } = credentials;
     try {
-        // Try to fetch metrics individually or in a safer way to avoid total failure due to one invalid metric
-        const metrics = ['page_impressions', 'page_impressions_unique', 'page_post_engagements'];
-        const items: any[] = [];
-
-        for (const metric of metrics) {
+        const _rawResponses: any[] = [];
+        const capture = async (res: Response, label: string) => {
             try {
-                const response = await fetch(
-                    `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${metric}&period=days_28&access_token=${accessToken}`
-                );
-
-                if (response.ok) {
-                    const resData = await response.json();
-                    if (resData.data && resData.data[0]) {
-                        items.push(resData.data[0]);
-                    }
-                } else {
-                    const err = await response.json();
-                    console.warn(`[Facebook] Metric ${metric} failed for ${pageId}:`, JSON.stringify(err));
-                }
+                const clone = res.clone();
+                const data = await clone.json();
+                _rawResponses.push({ label, url: res.url, status: res.status, data });
             } catch (e) {
-                console.warn(`[Facebook] Error fetching metric ${metric}:`, e);
+                _rawResponses.push({ label, url: res.url, status: res.status, error: 'Failed to parse JSON' });
             }
+        };
+
+        // Fetch metrics using robust v24-safe metrics
+        const accountInsightsMetrics = 'page_impressions_unique,page_post_engagements';
+        const insightsUrl = `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${accountInsightsMetrics}&period=days_28&access_token=${accessToken}`;
+
+        let pageViews = 0;
+        let pageLikes = 0; // page_fan_adds is deprecated/unreliable in v24
+        let reach = 0;
+        let engagedUsers = 0;
+        let impressions = 0;
+        let engagement = 0;
+
+        const insightsRes = await fetch(insightsUrl);
+        await capture(insightsRes, 'account_insights_combined_28d');
+        if (insightsRes.ok) {
+            const data = await insightsRes.json();
+            const items = data.data || [];
+
+            const reachValues = items.find((m: any) => m.name === 'page_impressions_unique')?.values || [];
+            reach = reachValues[reachValues.length - 1]?.value || 0;
+
+            const engagementValues = items.find((m: any) => m.name === 'page_post_engagements')?.values || [];
+            engagement = engagementValues[engagementValues.length - 1]?.value || 0;
+
+            impressions = reach; // Proxy reach as impressions if impressions metric is deprecated
         }
 
-        const impressions = items.find((m: any) => m.name === 'page_impressions')?.values[0]?.value || 0;
-        const reach = items.find((m: any) => m.name === 'page_impressions_unique')?.values[0]?.value || 0;
-        const engagement = items.find((m: any) => m.name === 'page_post_engagements')?.values[0]?.value || 0;
+        // Separate call for page_views (daily only in v24)
+        try {
+            const viewsRes = await fetch(`https://graph.facebook.com/v24.0/${pageId}/insights?metric=page_views_total&period=day&access_token=${accessToken}`);
+            await capture(viewsRes, 'page_views_day');
+            if (viewsRes.ok) {
+                const viewsData = await viewsRes.json();
+                const values = viewsData.data?.[0]?.values || [];
+                pageViews = values.reduce((acc: number, v: any) => acc + (v.value || 0), 0);
+            }
+        } catch (e) {
+            console.warn('[Facebook] Failed to fetch page views:', e);
+        }
 
-        // Follower count (fans)
+        // Follower count (fans) - Always use profile field in v24
         const pageRes = await fetch(`https://graph.facebook.com/v24.0/${pageId}?fields=followers_count&access_token=${accessToken}`);
+        await capture(pageRes, 'page_profile_follower_v24');
         let followerCount = 0;
         if (pageRes.ok) {
             const pageData = await pageRes.json();
@@ -923,10 +989,14 @@ export async function getFacebookAccountInsights(
             reach,
             impressions,
             engagement,
-            followerCount
+            followerCount,
+            pageViews,
+            pageLikes,
+            engagedUsers,
+            _rawResponses
         };
     } catch (error) {
         console.error('[Facebook] Error fetching account insights:', error);
-        return { reach: 0, impressions: 0, engagement: 0, followerCount: 0 };
+        return { reach: 0, impressions: 0, engagement: 0, followerCount: 0, pageViews: 0, pageLikes: 0, engagedUsers: 0 };
     }
 }

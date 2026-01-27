@@ -21,7 +21,9 @@ export type UnifiedMetricName =
     | "follower_count"
     | "profile_view_count"
     | "watch_time_count"
-    | "subscriber_count";
+    | "subscriber_count"
+    | "engaged_user_count"
+    | "account_like_count";
 
 interface MetricPoint {
     metricName: UnifiedMetricName;
@@ -173,9 +175,12 @@ export class SocialNormalizerService {
                 const accountInsights = await getFacebookAccountInsights(creds);
                 const accountMetrics: MetricPoint[] = [
                     { metricName: "follower_count", value: accountInsights.followerCount, rawMetricName: "fans" },
-                    { metricName: "reach_count", value: accountInsights.reach, rawMetricName: "page_impressions_unique_28d" },
+                    { metricName: "reach_count", value: accountInsights.reach, rawMetricName: "page_reach_28d" },
                     { metricName: "impression_count", value: accountInsights.impressions, rawMetricName: "page_impressions_28d" },
                     { metricName: "engagement_count", value: accountInsights.engagement, rawMetricName: "page_post_engagements_28d" },
+                    { metricName: "profile_view_count", value: accountInsights.pageViews || 0, rawMetricName: "page_views_28d" },
+                    { metricName: "account_like_count", value: accountInsights.pageLikes || 0, rawMetricName: "page_likes_28d" },
+                    { metricName: "engaged_user_count", value: accountInsights.engagedUsers || 0, rawMetricName: "page_engaged_users_28d" },
                 ];
 
                 await this.storeMetrics(orgId, "FACEBOOK", "ACCOUNT", accountMetrics);
