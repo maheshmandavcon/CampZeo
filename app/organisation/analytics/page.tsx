@@ -27,7 +27,8 @@ import {
     Video,
     Bot,
     X,
-    Sparkles
+    Sparkles,
+    Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
@@ -45,10 +46,14 @@ import {
     Legend,
     ResponsiveContainer,
     AreaChart,
-    Area
+    Area,
+    FunnelChart,
+    Funnel,
+    LabelList
 } from 'recharts';
 import * as XLSX from 'xlsx';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { exportChartToPDF } from '@/lib/chart-export';
 
 interface PostInsight {
     likes: number;
@@ -145,6 +150,14 @@ export default function AnalyticsPage() {
     const [isSyncingAnalytics, setIsSyncingAnalytics] = useState(false);
     const hasSynced = useRef(false); // Prevent duplicate sync in StrictMode
 
+    // Funnel Data State
+    const [funnelData, setFunnelData] = useState<any[]>([]);
+    const [loadingFunnel, setLoadingFunnel] = useState(true);
+
+    // Chart Refs for PDF Export
+    const funnelChartRef = useRef<HTMLDivElement>(null);
+    const engagementTrendsChartRef = useRef<HTMLDivElement>(null);
+
     // Fetch platforms
     useEffect(() => {
         const fetchPlatforms = async () => {
@@ -237,7 +250,35 @@ export default function AnalyticsPage() {
         };
 
         syncAnalyticsOnLoad();
+        syncAnalyticsOnLoad();
     }, []); // Run once on mount
+
+    // Fetch Funnel Data
+    useEffect(() => {
+        const fetchFunnelData = async () => {
+            setLoadingFunnel(true);
+            try {
+                let url = '/api/Analytics/funnel';
+                if (startDate || endDate) {
+                    const params = new URLSearchParams();
+                    if (startDate) params.append('startDate', startDate);
+                    if (endDate) params.append('endDate', endDate);
+                    url += `?${params.toString()}`;
+                }
+                const res = await fetch(url);
+                if (res.ok) {
+                    const data = await res.json();
+                    setFunnelData(data.funnel || []);
+                }
+            } catch (error) {
+                console.error('Error fetching funnel data:', error);
+            } finally {
+                setLoadingFunnel(false);
+            }
+        };
+
+        fetchFunnelData();
+    }, [startDate, endDate]);
 
     const handleSync = async (post: Post) => {
         setSyncing(post.id);
@@ -582,6 +623,26 @@ export default function AnalyticsPage() {
         }));
     };
 
+    // PDF Export Handlers
+    const handleExportFunnelChart = async () => {
+        try {
+            await exportChartToPDF(funnelChartRef, 'marketing-funnel-chart', 'Marketing Funnel');
+            toast.success('Funnel chart exported to PDF');
+        } catch (error) {
+            toast.error('Failed to export chart');
+        }
+    };
+
+    const handleExportEngagementChart = async () => {
+        try {
+            const chartTitle = `${selectedPlatform} Engagement Trends`;
+            await exportChartToPDF(engagementTrendsChartRef, `${selectedPlatform}-engagement-trends`, chartTitle);
+            toast.success('Engagement chart exported to PDF');
+        } catch (error) {
+            toast.error('Failed to export chart');
+        }
+    };
+
     const isEmailPlatform = ['EMAIL', 'SMS', 'WHATSAPP'].includes(selectedPlatform?.toUpperCase() || '');
 
     return (
@@ -594,6 +655,50 @@ export default function AnalyticsPage() {
                         View insights and performance metrics for your posts
                     </p>
                 </div>
+
+                {/* Funnel Chart Section */}
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-start justify-between">
+                            <div>
+                                <CardTitle>Marketing Funnel</CardTitle>
+                                <CardDescription>Conversion from Reach to New Contacts</CardDescription>
+                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleExportFunnelChart}
+                                disabled={loadingFunnel}
+                                className="cursor-pointer"
+                            >
+                                <Download className="size-4 mr-2" />
+                                Export PDF
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {loadingFunnel ? (
+                            <div className="flex items-center justify-center h-[300px]">
+                                <Loader2 className="size-8 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : (
+                            <div ref={funnelChartRef} className="h-[400px] w-full" style={{ width: '100%', height: '400px' }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <FunnelChart>
+                                        <Tooltip />
+                                        <Funnel
+                                            dataKey="value"
+                                            data={funnelData}
+                                            isAnimationActive
+                                        >
+                                            <LabelList position="right" fill="#000" stroke="none" dataKey="name" />
+                                        </Funnel>
+                                    </FunnelChart>
+                                </ResponsiveContainer>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
 
                 {/* Platform Selection */}
                 <Card>
@@ -660,11 +765,20 @@ export default function AnalyticsPage() {
                                                 <div className="size-2 rounded-full bg-purple-500" />
                                                 {isEmailPlatform ? 'Opened' : 'Reach'}
                                             </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={handleExportEngagementChart}
+                                                className="cursor-pointer ml-2"
+                                            >
+                                                <Download className="size-4 mr-2" />
+                                                Export PDF
+                                            </Button>
                                         </div>
                                     </div>
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="h-[250px] w-full mt-2">
+                                    <div ref={engagementTrendsChartRef} className="h-[250px] w-full mt-2" style={{ width: '100%', height: '250px' }}>
                                         <ResponsiveContainer width="100%" height="100%">
                                             <AreaChart data={getChartData()}>
                                                 <defs>

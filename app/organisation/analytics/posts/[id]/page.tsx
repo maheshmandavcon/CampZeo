@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -19,7 +19,8 @@ import {
     Image as ImageIcon,
     Send,
     CheckCircle,
-    MousePointerClick
+    MousePointerClick,
+    Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
@@ -41,6 +42,7 @@ import {
     Area
 } from 'recharts';
 import React from 'react';
+import { exportChartToPDF } from '@/lib/chart-export';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
@@ -70,6 +72,9 @@ export default function PostDetailsPage({ params }: { params: Promise<{ id: stri
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
     const [chartMetric, setChartMetric] = useState<'engagement' | 'reach'>('engagement');
+
+    // Chart Ref for PDF Export
+    const performanceChartRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const fetchPostDetails = async () => {
@@ -156,6 +161,17 @@ export default function PostDetailsPage({ params }: { params: Promise<{ id: stri
     }
 
     const isEmailPlatform = ['EMAIL', 'SMS', 'WHATSAPP'].includes(post.platform?.toUpperCase() || '');
+
+    // PDF Export Handler
+    const handleExportPerformanceChart = async () => {
+        try {
+            const chartTitle = `${post.platform} Post Performance - ${post.id}`;
+            await exportChartToPDF(performanceChartRef, `post-${post.id}-performance`, chartTitle);
+            toast.success('Performance chart exported to PDF');
+        } catch (error) {
+            toast.error('Failed to export chart');
+        }
+    };
 
     return (
         <div className="min-h-screen bg-background">
@@ -366,23 +382,34 @@ export default function PostDetailsPage({ params }: { params: Promise<{ id: stri
                                                 Historical engagement trends for this post
                                             </CardDescription>
                                         </div>
-                                        <div className="flex bg-muted p-1 rounded-md text-xs">
-                                            <button
-                                                onClick={() => setChartMetric('engagement')}
-                                                className={`px-3 py-1.5 rounded-sm transition-all ${chartMetric === 'engagement' ? 'bg-background shadow-sm' : 'hover:bg-background/50'}`}
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex bg-muted p-1 rounded-md text-xs">
+                                                <button
+                                                    onClick={() => setChartMetric('engagement')}
+                                                    className={`px-3 py-1.5 rounded-sm transition-all ${chartMetric === 'engagement' ? 'bg-background shadow-sm' : 'hover:bg-background/50'}`}
+                                                >
+                                                    {isEmailPlatform ? 'Sent' : 'Interactions'}
+                                                </button>
+                                                <button
+                                                    onClick={() => setChartMetric('reach')}
+                                                    className={`px-3 py-1.5 rounded-sm transition-all ${chartMetric === 'reach' ? 'bg-background shadow-sm' : 'hover:bg-background/50'}`}
+                                                >
+                                                    {isEmailPlatform ? 'Opened' : 'Reach/ER'}
+                                                </button>
+                                            </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={handleExportPerformanceChart}
+                                                className="cursor-pointer"
                                             >
-                                                {isEmailPlatform ? 'Sent' : 'Interactions'}
-                                            </button>
-                                            <button
-                                                onClick={() => setChartMetric('reach')}
-                                                className={`px-3 py-1.5 rounded-sm transition-all ${chartMetric === 'reach' ? 'bg-background shadow-sm' : 'hover:bg-background/50'}`}
-                                            >
-                                                {isEmailPlatform ? 'Opened' : 'Reach/ER'}
-                                            </button>
+                                                <Download className="size-4 mr-2" />
+                                                Export PDF
+                                            </Button>
                                         </div>
                                     </CardHeader>
                                     <CardContent>
-                                        <div className="h-[400px] w-full">
+                                        <div ref={performanceChartRef} className="h-[400px] w-full" style={{ width: '100%', height: '400px' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <AreaChart data={historicalData}>
                                                     <defs>

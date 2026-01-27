@@ -173,22 +173,60 @@ export async function PUT(
             }
         }
 
+        // Create audit trails for changes
+        const auditRecords = [];
+        if (subject !== undefined && subject !== existingPost.subject) {
+            auditRecords.push({ postId: postIdNum, fieldChanged: 'subject', oldValue: existingPost.subject, newValue: subject, changedBy: user.id });
+        }
+        if (message !== undefined && message !== existingPost.message) {
+            auditRecords.push({ postId: postIdNum, fieldChanged: 'message', oldValue: existingPost.message, newValue: message, changedBy: user.id });
+        }
+        if (type !== undefined && type !== existingPost.type) {
+            auditRecords.push({ postId: postIdNum, fieldChanged: 'type', oldValue: existingPost.type, newValue: type, changedBy: user.id });
+        }
+        if (scheduledPostTime !== undefined) {
+            const oldTime = existingPost.scheduledPostTime?.toISOString();
+            const newTime = new Date(scheduledPostTime).toISOString();
+            if (oldTime !== newTime) {
+                auditRecords.push({ postId: postIdNum, fieldChanged: 'scheduledPostTime', oldValue: oldTime, newValue: newTime, changedBy: user.id });
+            }
+        }
+        if (body.category !== undefined && body.category !== existingPost.category) {
+            auditRecords.push({ postId: postIdNum, fieldChanged: 'category', oldValue: existingPost.category, newValue: body.category, changedBy: user.id });
+        }
+        if (body.status !== undefined && body.status !== existingPost.status) {
+            auditRecords.push({ postId: postIdNum, fieldChanged: 'status', oldValue: existingPost.status, newValue: body.status, changedBy: user.id });
+        }
+        if (body.approvalStatus !== undefined && body.approvalStatus !== existingPost.approvalStatus) {
+            auditRecords.push({ postId: postIdNum, fieldChanged: 'approvalStatus', oldValue: existingPost.approvalStatus, newValue: body.approvalStatus, changedBy: user.id });
+        }
+
         // Update post
         const post = await prisma.campaignPost.update({
             where: { id: postIdNum },
             data: {
-                subject,
-                message,
-                type,
-                senderEmail,
-                scheduledPostTime: scheduledPostTime ? new Date(scheduledPostTime) : null,
+                subject: subject !== undefined ? subject : undefined,
+                message: message !== undefined ? message : undefined,
+                type: type !== undefined ? type : undefined,
+                senderEmail: senderEmail !== undefined ? senderEmail : undefined,
+                category: body.category !== undefined ? body.category : undefined,
+                status: body.status !== undefined ? body.status : undefined,
+                approvalStatus: body.approvalStatus !== undefined ? body.approvalStatus : undefined,
+                scheduledPostTime: scheduledPostTime ? new Date(scheduledPostTime) : (scheduledPostTime === null ? null : undefined),
                 videoUrl: videoUrl || (mediaUrls && mediaUrls.length > 0 ? mediaUrls[0] : null),
                 mediaUrls: mediaUrls || existingPost.mediaUrls || [],
                 metadata: metadata,
             },
         });
 
-        await logInfo("Campaign post updated", { postId: post.id, campaignId, updatedBy: user.id });
+        // Save audits
+        if (auditRecords.length > 0) {
+            await prisma.postAudit.createMany({
+                data: auditRecords as any
+            });
+        }
+
+        await logInfo("Campaign post updated", { postId: post.id, campaignId, updatedBy: user.id, fieldsChanged: auditRecords.length });
         return NextResponse.json({ post });
     } catch (error: any) {
         console.error('Error updating post:', error);
