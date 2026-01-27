@@ -25,7 +25,8 @@ export async function refreshUserTokens(clerkId: string) {
     const results: any = {
         youtube: { refreshed: false },
         pinterest: { refreshed: false },
-        linkedin: { refreshed: false }
+        linkedin: { refreshed: false },
+        facebook: { refreshed: false, message: "Facebook tokens must be refreshed manually by re-connecting." }
     };
 
     // 1. YouTube Refresh
