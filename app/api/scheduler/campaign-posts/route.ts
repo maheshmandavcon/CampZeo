@@ -164,17 +164,40 @@ export async function GET(request: NextRequest) {
                     let errorMessage = result.error || 'Unknown error';
                     if (typeof errorMessage === 'object') {
                         try {
-                            errorMessage = (errorMessage as any).message || JSON.stringify(errorMessage);
+                            const errorObj = errorMessage as any;
+                            // Prefer the human-readable message, falling back to other known fields
+                            errorMessage = errorObj.message ||
+                                errorObj.error?.message ||
+                                errorObj.error_description ||
+                                JSON.stringify(errorMessage);
                         } catch (e) {
                             errorMessage = 'Technical error occurred';
                         }
                     }
 
+                    // Deep sanitation: Strip technical JSON-like fragments and sensitive data
+                    if (typeof errorMessage === 'string') {
+                        // 1. Mask tokens
+                        errorMessage = errorMessage.replace(/\b[A-Za-z0-9-_]{20,}\b/g, '[TOKEN]');
+
+                        // 2. Remove technical metadata often found in social API errors
+                        errorMessage = errorMessage
+                            .replace(/,?\s*"(type|code|error_subcode|error_user_msg|fbtrace_id|help_center_id|is_silent)":\s*("[^"]*"|[^,}\s]*)/g, '')
+                            .replace(/\{"error":\{"message":"/g, '')
+                            .replace(/"\}\}/g, '')
+                            .replace(/\{\s*}/g, '')
+                            .trim();
+
+                        // Clean up any double commas or trailing commas that might remain
+                        errorMessage = errorMessage.replace(/,\s*,/g, ',').replace(/^,|,$/g, '').trim();
+                    }
+
                     // Refine message for token/credential issues
-                    const isAuthError = errorMessage.toLowerCase().includes('credential') ||
-                        errorMessage.toLowerCase().includes('token') ||
-                        errorMessage.toLowerCase().includes('expired') ||
-                        errorMessage.toLowerCase().includes('unauthorized');
+                    const lowerMsg = errorMessage.toLowerCase();
+                    const isAuthError = lowerMsg.includes('credential') ||
+                        lowerMsg.includes('token') ||
+                        lowerMsg.includes('expired') ||
+                        lowerMsg.includes('unauthorized');
 
                     let displayMessage = `Failed to send scheduled ${post.type} post: ${errorMessage}`;
 

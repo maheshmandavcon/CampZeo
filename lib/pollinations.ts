@@ -93,19 +93,56 @@ export async function generateContent(
 }
 
 /**
+ * Supported image generation models from Pollinations.ai
+ */
+export const IMAGE_MODELS = [
+    { id: 'flux', name: 'Flux (Best Quality)', description: 'Latest state-of-the-art model for high quality images' },
+    { id: 'turbo', name: 'Turbo (Fastest)', description: 'Real-time generation, good for quick drafts' },
+    { id: 'sdxl', name: 'SDXL', description: 'Stable Diffusion XL for artistic and varied styles' },
+    { id: 'nanobanana', name: 'Gemini (NanoBanana)', description: 'Based on Gemini 2.5 Flash, great for complex prompts' },
+    { id: 'seedream', name: 'Seedream', description: 'ByteDance ARK powered high-quality generation' },
+];
+
+/**
  * Generate image using Pollinations.ai
  * Returns the image URL directly (no generation wait time needed as it streams)
  */
 export async function generateImage(
     prompt: string,
-    style?: string
+    style?: string,
+    options: {
+        model?: string;
+        width?: number;
+        height?: number;
+        seed?: number;
+        enhance?: boolean;
+        nologo?: boolean;
+    } = {}
 ): Promise<{ success: boolean; imageData?: string; error?: string }> {
     try {
+        const {
+            model = 'flux',
+            width = 1024,
+            height = 1024,
+            seed = Math.floor(Math.random() * 1000000),
+            enhance = true,
+            nologo = true
+        } = options;
+
         const enhancedPrompt = style ? `${prompt} ${style} style` : prompt;
-        // Construct the URL. Pollinations generates image on the fly.
-        // We add a random seed to ensure new images on same prompt if needed
-        const seed = Math.floor(Math.random() * 1000000);
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}`;
+
+        // Construct the URL using the new Pollinations.ai endpoint
+        let imageUrl = `https://pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?`;
+
+        const params = new URLSearchParams();
+        params.append('model', model);
+        params.append('width', width.toString());
+        params.append('height', height.toString());
+        params.append('seed', seed.toString());
+        if (enhance) params.append('enhance', 'true');
+        if (nologo) params.append('nologo', 'true');
+
+        imageUrl += params.toString();
 
         return {
             success: true,

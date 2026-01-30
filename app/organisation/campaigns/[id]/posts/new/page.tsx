@@ -83,7 +83,6 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [campaignContacts, setCampaignContacts] = useState<any[]>([]);
     const [loadingContacts, setLoadingContacts] = useState(true);
     const [contentType, setContentType] = useState('POST'); // For Facebook/Instagram: POST or REEL
-    // const [loadingContacts, setLoadingContacts] = useState(true); // Duplicate declaration removed
     const [loadingTemplates, setLoadingTemplates] = useState(false);
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('none');
 
@@ -1168,7 +1167,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                     Loading pages...
                                                 </div>
                                             ) : facebookPages.length === 0 ? (
-                                                <p className="text-xs text-red-500">No Facebook Pages found. Make sure you've connected your account and granted permissions.</p>
+                                                <p className="text-xs text-red-500">No Facebook Pages found. Make sure you&apos;ve connected your account and granted permissions.</p>
                                             ) : (
                                                 <Select
                                                     value={selectedFacebookPageId}

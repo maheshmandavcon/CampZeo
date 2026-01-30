@@ -158,6 +158,44 @@ export default function OrganisationDashboard() {
     return date.toLocaleDateString();
   };
 
+  const cleanNotificationMessage = (message: string) => {
+    if (!message) return "";
+
+    // 1. If it looks like JSON, try to parse and extract message
+    if (message.includes('{"') || message.includes('{"error"')) {
+      try {
+        const jsonStart = message.indexOf('{');
+        const prefix = message.substring(0, jsonStart);
+        const jsonStr = message.substring(jsonStart);
+        const parsed = JSON.parse(jsonStr);
+
+        const errorMessage = parsed.message || parsed.error?.message || parsed.error_description || "Technical error";
+        return `${prefix}${errorMessage}`.trim();
+      } catch (e) {
+        // Fallback to regex cleaning if JSON parse fails
+      }
+    }
+
+    // 2. Sanitation: Mask tokens
+    let cleaned = message.replace(/\b[A-Za-z0-9-_]{20,}\b/g, '[TOKEN]');
+
+    // 3. Robust Deep Clean: Remove technical metadata and JSON fragments
+    cleaned = cleaned
+      // Remove comma-separated keys like , "type":"OAuthException", "code":368, etc.
+      .replace(/,?\s*"(type|code|error_subcode|error_user_msg|fbtrace_id|help_center_id|is_silent)":\s*("[^"]*"|[^,}\s]*)/g, '')
+      // Remove common prefix fragments
+      .replace(/\{"error":\{"message":"/g, '')
+      .replace(/"\}\}/g, '')
+      .replace(/\{\s*}/g, '')
+      .replace(/\\"/g, '"') // Unescape quotes if any
+      .trim();
+
+    // 4. Final Polish: Clean up trailing punctuation or markers leftover from stripping
+    cleaned = cleaned.replace(/,\s*,/g, ',').replace(/^,|,$/g, '').trim();
+
+    return cleaned;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
@@ -297,8 +335,10 @@ export default function OrganisationDashboard() {
                             <div className={`p-2 rounded-full mt-1 ${notif.isSuccess ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
                               <Megaphone className="size-4" />
                             </div>
-                            <div className="flex-1 space-y-1">
-                              <p className="text-sm font-medium leading-none">{notif.message}</p>
+                            <div className="flex-1 space-y-1 overflow-hidden">
+                              <p className="text-sm font-medium leading-tight line-clamp-2" title={cleanNotificationMessage(notif.message)}>
+                                {cleanNotificationMessage(notif.message)}
+                              </p>
                               <div className="flex items-center gap-2">
                                 <p className="text-xs text-muted-foreground">
                                   {formatDate(notif.createdAt)}

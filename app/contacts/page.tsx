@@ -294,14 +294,14 @@ export default function ContactListPage() {
                                     setCurrentPage(1);
                                 }}
                             >
-                                <SelectTrigger className="w-[200px] border  border-gray-200">
+                                <SelectTrigger className="w-[200px] border border-gray-200">
                                     <SelectValue placeholder="Filter by campaign" />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent className="max-w-[300px]">
                                     <SelectItem value="all">All Campaigns</SelectItem>
                                     {campaigns.map((campaign) => (
                                         <SelectItem key={campaign.id} value={campaign.id.toString()}>
-                                            {campaign.name}
+                                            <span className="block truncate">{campaign.name}</span>
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -573,7 +573,7 @@ export default function ContactListPage() {
 
             {/* Quick View Modal */}
             <Dialog open={showQuickView} onOpenChange={setShowQuickView}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Contact Details</DialogTitle>
                         <DialogDescription>View contact information and associations</DialogDescription>
@@ -581,28 +581,28 @@ export default function ContactListPage() {
                     {quickViewContact && (
                         <div className="space-y-6">
                             {/* Basic Info */}
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-sm font-medium text-muted-foreground">Name</label>
-                                    <p className="mt-1 text-sm font-medium">
+                                    <p className="mt-1 text-sm font-medium break-words">
                                         {quickViewContact.contactName || 'Not provided'}
                                     </p>
                                 </div>
                                 <div>
                                     <label className="text-sm font-medium text-muted-foreground">Email</label>
-                                    <p className="mt-1 text-sm">
+                                    <p className="mt-1 text-sm break-words">
                                         {quickViewContact.contactEmail || 'Not provided'}
                                     </p>
                                 </div>
                                 <div>
                                     <label className="text-sm font-medium text-muted-foreground">Mobile</label>
-                                    <p className="mt-1 text-sm">
+                                    <p className="mt-1 text-sm break-words">
                                         {quickViewContact.contactMobile || 'Not provided'}
                                     </p>
                                 </div>
                                 <div>
                                     <label className="text-sm font-medium text-muted-foreground">WhatsApp</label>
-                                    <p className="mt-1 text-sm">
+                                    <p className="mt-1 text-sm break-words">
                                         {quickViewContact.contactWhatsApp || 'Not provided'}
                                     </p>
                                 </div>
@@ -616,7 +616,7 @@ export default function ContactListPage() {
                                 <div className="mt-2 flex flex-wrap gap-2">
                                     {quickViewContact.campaigns.length > 0 ? (
                                         quickViewContact.campaigns.map((campaign) => (
-                                            <Badge key={campaign.id} variant="secondary">
+                                            <Badge key={campaign.id} variant="secondary" className="max-w-full h-auto py-1 px-2 whitespace-normal break-words">
                                                 {campaign.name}
                                             </Badge>
                                         ))

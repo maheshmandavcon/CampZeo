@@ -77,8 +77,9 @@ export default function PricingPage() {
                                         </CardContent>
                                         <CardFooter>
                                             {isTrial ? (
-                                                // Free Trial: Redirect to /sign-up page
-                                                <Link href="/sign-up" className="w-full">
+                                                // Free Trial: Redirect to purchase page with planId\
+                                                //  <Link href={`/purchase?planId=${plan.id}`} className="w-full"></Link>
+                                                <Link href="/coming-soon" className="w-full">
                                                     <Button
                                                         className="w-full"
                                                         variant="outline"
@@ -89,37 +90,38 @@ export default function PricingPage() {
                                                     </Button>
                                                 </Link>
                                             ) : isSignedIn ? (
-                                                // Paid Plan + Signed In: Go to onboarding
+                                                // Paid Plan + Signed In: Go to purchase
                                                 <Button
                                                     className="w-full"
                                                     variant={isPopular ? "default" : "outline"}
                                                     size="lg"
-                                                    onClick={() => router.push('/onboarding')}
+                                                    onClick={() => router.push("/coming-soon")}
                                                 >
+                                                      {/* onClick={() => router.push(`/purchase?planId=${plan.id}`)} */}
                                                     Purchase Now
                                                     <ArrowRight className="ml-2 size-4" />
                                                 </Button>
                                             ) : (
                                                 // Paid Plan + Not Signed In: Show Clerk modal
-                                                <SignUpButton
-                                                    mode="modal"
-                                                    forceRedirectUrl="/onboarding"
-                                                    unsafeMetadata={{
-                                                        selectedPlanId: plan.id,
-                                                        selectedPlanName: plan.name,
-                                                        planPrice: plan.price,
-                                                        isTrial: false
-                                                    }}
+                                                //    <SignUpButton
+                                                //     mode="modal"
+                                                //     forceRedirectUrl={`/purchase?planId=${plan.id}`}
+                                                //     unsafeMetadata={{
+                                                //         selectedPlanId: plan.id,
+                                                //         selectedPlanName: plan.name,
+                                                //         planPrice: plan.price,
+                                                //         isTrial: false
+                                                //     }}
+                                                // ></SignUpButton>
+                                                <Button
+                                                    className="w-full"
+                                                    variant={isPopular ? "default" : "outline"}
+                                                    size="lg"
+                                                    onClick={() => router.push("/coming-soon")}
                                                 >
-                                                    <Button
-                                                        className="w-full"
-                                                        variant={isPopular ? "default" : "outline"}
-                                                        size="lg"
-                                                    >
-                                                        Purchase Now
-                                                        <ArrowRight className="ml-2 size-4" />
-                                                    </Button>
-                                                </SignUpButton>
+                                                    Purchase Now
+                                                    <ArrowRight className="ml-2 size-4" />
+                                                </Button>
                                             )}
                                         </CardFooter>
                                     </Card>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { format, isToday, isSameDay, startOfWeek, endOfWeek, eachDayOfInterval, addDays, isAfter, isTomorrow, startOfDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +10,12 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Calendar as CalendarIcon, Mail, MessageSquare, Facebook, Instagram, Linkedin, Youtube, ChevronLeft, ChevronRight, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LayoutDashboard, ChartBar, Download as DownloadIcon } from "lucide-react";
+import InsightsView from "./InsightsView";
+import ExportView from "./ExportView";
+
+import { toast } from "sonner";
 
 interface Post {
     id: number;
@@ -18,6 +24,11 @@ interface Post {
     type: string;
     scheduledPostTime: string;
     mediaUrls?: string[];
+    isPostSent: boolean;
+    campaign?: {
+        id: number;
+        name: string;
+    };
 }
 
 interface CalendarViewProps {
@@ -25,10 +36,17 @@ interface CalendarViewProps {
 }
 
 export default function CalendarView({ posts }: CalendarViewProps) {
+    const [localPosts, setLocalPosts] = useState<Post[]>(posts);
     const [currentDate, setCurrentDate] = useState(new Date());
     const [view, setView] = useState<'month' | 'week' | 'day'>('month');
     const [selectedPost, setSelectedPost] = useState<Post | null>(null);
     const [showDetailSlider, setShowDetailSlider] = useState(false);
+    const [draggedOverDate, setDraggedOverDate] = useState<Date | null>(null);
+
+    // Sync local posts when props change
+    useEffect(() => {
+        setLocalPosts(posts);
+    }, [posts]);
 
     // Get platform configuration
     const getPlatformConfig = (platform: string) => {
@@ -84,7 +102,7 @@ export default function CalendarView({ posts }: CalendarViewProps) {
 
     // Get posts for a specific day
     const getPostsForDay = (date: Date) => {
-        return posts.filter(post =>
+        return localPosts.filter(post =>
             isSameDay(new Date(post.scheduledPostTime), date)
         ).sort((a, b) =>
             new Date(a.scheduledPostTime).getTime() - new Date(b.scheduledPostTime).getTime()
@@ -102,7 +120,7 @@ export default function CalendarView({ posts }: CalendarViewProps) {
             later: [] as Post[]
         };
 
-        posts.forEach(post => {
+        localPosts.forEach(post => {
             const postDate = new Date(post.scheduledPostTime);
             if (isToday(postDate)) {
                 categorized.today.push(post);
@@ -119,6 +137,78 @@ export default function CalendarView({ posts }: CalendarViewProps) {
 
         return categorized;
     }, [posts]);
+
+    // Drag and Drop Handlers
+    const handleDragStart = (e: React.DragEvent, post: Post) => {
+        if (post.isPostSent) {
+            e.preventDefault();
+            return;
+        }
+        e.dataTransfer.setData("postId", post.id.toString());
+        e.dataTransfer.effectAllowed = "move";
+    };
+
+    const handleDragOver = (e: React.DragEvent, date: Date) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (!draggedOverDate || !isSameDay(draggedOverDate, date)) {
+            setDraggedOverDate(date);
+        }
+    };
+
+    const handleDrop = async (e: React.DragEvent, targetDate: Date) => {
+        e.preventDefault();
+        setDraggedOverDate(null);
+        const postIdStr = e.dataTransfer.getData("postId");
+        if (!postIdStr) return;
+
+        const postId = parseInt(postIdStr);
+        const post = localPosts.find(p => p.id === postId);
+
+        if (!post) return;
+
+        // Edge case: reschedule to past
+        if (startOfDay(targetDate) < startOfDay(new Date())) {
+            toast.error("Cannot reschedule posts to the past");
+            return;
+        }
+
+        // Keep the same time
+        const originalTime = new Date(post.scheduledPostTime);
+        const newScheduledTime = new Date(targetDate);
+        newScheduledTime.setHours(originalTime.getHours(), originalTime.getMinutes(), originalTime.getSeconds());
+
+        if (isSameDay(originalTime, newScheduledTime)) {
+            return;
+        }
+
+        // Optimistic update
+        const previousPosts = [...localPosts];
+        setLocalPosts(prev => prev.map(p =>
+            p.id === postId ? { ...p, scheduledPostTime: newScheduledTime.toISOString() } : p
+        ));
+
+        try {
+            const response = await fetch(`/api/campaigns/${post.campaign?.id}/posts/${post.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    scheduledPostTime: newScheduledTime.toISOString()
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to reschedule post');
+            }
+
+            toast.success(`Post rescheduled to ${format(newScheduledTime, 'MMM d, h:mm a')}`);
+        } catch (err: any) {
+            console.error(err);
+            toast.error(err.message || "Failed to reschedule post");
+            setLocalPosts(previousPosts); // Rollback
+        }
+    };
 
     // Handle post click
     const handlePostClick = (post: Post) => {
@@ -167,8 +257,11 @@ export default function CalendarView({ posts }: CalendarViewProps) {
             return (
                 <Card
                     key={post.id}
+                    draggable={!post.isPostSent}
+                    onDragStart={(e) => handleDragStart(e, post)}
                     className={cn(
                         "cursor-pointer hover:shadow-lg transition-all border-l-4 overflow-hidden mb-3",
+                        post.isPostSent && "opacity-60 grayscale-[0.5]",
                         config.borderColor
                     )}
                     onClick={() => handlePostClick(post)}
@@ -226,8 +319,11 @@ export default function CalendarView({ posts }: CalendarViewProps) {
         return (
             <Card
                 key={post.id}
+                draggable={!post.isPostSent}
+                onDragStart={(e) => handleDragStart(e, post)}
                 className={cn(
                     "cursor-pointer hover:shadow-md transition-all border-l-4 overflow-hidden mb-2",
+                    post.isPostSent && "opacity-60 grayscale-[0.5]",
                     config.borderColor
                 )}
                 onClick={() => handlePostClick(post)}
@@ -275,342 +371,391 @@ export default function CalendarView({ posts }: CalendarViewProps) {
     const calendarDays = getCalendarDays();
 
     return (
-        <div className="flex gap-6">
-            {/* Main Calendar */}
-            <div className="flex-1 space-y-4">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <h2 className="text-2xl font-bold ">
-                            {view === 'month' && format(currentDate, 'MMMM yyyy')}
-                            {view === 'week' && `Week of ${format(startOfWeek(currentDate), 'MMM d, yyyy')}`}
-                            {view === 'day' && format(currentDate, 'MMMM d, yyyy')}
-                        </h2>
-                    </div>
+        <Tabs defaultValue="planner" className="w-full h-full space-y-6">
+            <div className="flex items-center justify-between border-b pb-4">
+                <TabsList>
+                    <TabsTrigger value="planner" className="gap-2 cursor-pointer">
+                        <CalendarIcon className="size-4" />
+                        Planner
+                    </TabsTrigger>
+                    <TabsTrigger value="insights" className="gap-2 cursor-pointer">
+                        <ChartBar className="size-4" />
+                        Insights
+                    </TabsTrigger>
+                    <TabsTrigger value="export" className="gap-2 cursor-pointer">
+                        <DownloadIcon className="size-4" />
+                        Export
+                    </TabsTrigger>
+                </TabsList>
+            </div>
 
-                    {/* View Toggle */}
-                    <div className="flex gap-2">
-                        <div className="flex items-center gap-1">
-                            <Button variant="outline" size="icon" className="cursor-pointer" onClick={goToPrevious}>
-                                <ChevronLeft className="w-4 h-4" />
-                            </Button>
-                            <Button variant="outline" size="sm" className="cursor-pointer" onClick={goToToday}>
-                                Today
-                            </Button>
-                            <Button variant="outline" size="icon" className="cursor-pointer" onClick={goToNext}>
-                                <ChevronRight className="w-4 h-4" />
-                            </Button>
-                        </div>
-                        <Button
-                            variant={view === 'month' ? 'default' : 'outline'}
-                            size="sm" className="cursor-pointer"
-                            onClick={() => setView('month')}
-                        >
-                            Month
-                        </Button>
-                        <Button
-                            variant={view === 'week' ? 'default' : 'outline'}
-                            size="sm" className="cursor-pointer"
-                            onClick={() => setView('week')}
-                        >
-                            Week
-                        </Button>
-                        <Button
-                            variant={view === 'day' ? 'default' : 'outline'}
-                            size="sm" className="cursor-pointer"
-                            onClick={() => setView('day')}
-                        >
-                            Day
-                        </Button>
-                    </div>
-                </div>
-
-                {/* Calendar Grid - Fixed Height */}
-                <div className="bg-white rounded-lg border shadow-sm" style={{ height: '600px' }}>
-                    {/* Day Headers */}
-                    <div className={cn("grid border-b bg-gray-50", view === 'month' ? 'grid-cols-7' : view === 'week' ? 'grid-cols-7' : 'grid-cols-1')}>
-                        {view === 'month' && ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                            <div key={day} className="p-2 text-center text-sm font-semibold text-gray-700 border-r last:border-r-0">
-                                {day}
+            <TabsContent value="planner" className="mt-0">
+                <div className="flex gap-6">
+                    {/* Main Calendar */}
+                    <div className="flex-1 space-y-4">
+                        {/* Header */}
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <h2 className="text-2xl font-bold ">
+                                    {view === 'month' && format(currentDate, 'MMMM yyyy')}
+                                    {view === 'week' && `Week of ${format(startOfWeek(currentDate), 'MMM d, yyyy')}`}
+                                    {view === 'day' && format(currentDate, 'MMMM d, yyyy')}
+                                </h2>
                             </div>
-                        ))}
-                        {view === 'week' && calendarDays.map((day, index) => (
-                            <div key={index} className="p-2 text-center border-r last:border-r-0">
-                                <div className="text-xs text-gray-500">{format(day, 'EEE')}</div>
-                                <div className={cn("text-lg font-bold", isToday(day) && "text-blue-600")}>{format(day, 'd')}</div>
-                            </div>
-                        ))}
-                        {view === 'day' && (
-                            <div className="p-3 text-center">
-                                <div className="text-sm text-gray-500">{format(currentDate, 'EEEE')}</div>
-                                <div className="text-2xl font-bold">{format(currentDate, 'MMMM d, yyyy')}</div>
-                            </div>
-                        )}
-                    </div>
 
-                    {/* Calendar Days */}
-                    <div className={cn("grid", view === 'month' ? 'grid-cols-7' : view === 'week' ? 'grid-cols-7' : 'grid-cols-1')} style={{ height: view === 'day' ? 'calc(600px - 65px)' : 'calc(600px - 41px)' }}>
-                        {calendarDays.map((day, index) => {
-                            const dayPosts = getPostsForDay(day);
-                            const isCurrentMonth = view !== 'month' || day.getMonth() === currentDate.getMonth();
-                            const isCurrentDay = isToday(day);
-
-                            return (
-                                <div
-                                    key={index}
-                                    className={cn(
-                                        "border-r border-b last:border-r-0 p-1.5 overflow-hidden",
-                                        !isCurrentMonth && "bg-gray-50/50",
-                                        isCurrentDay && "bg-blue-50/30"
-                                    )}
+                            {/* View Toggle */}
+                            <div className="flex gap-2">
+                                <div className="flex items-center gap-1">
+                                    <Button variant="outline" size="icon" className="cursor-pointer" onClick={goToPrevious}>
+                                        <ChevronLeft className="w-4 h-4" />
+                                    </Button>
+                                    <Button variant="outline" size="sm" className="cursor-pointer" onClick={goToToday}>
+                                        Today
+                                    </Button>
+                                    <Button variant="outline" size="icon" className="cursor-pointer" onClick={goToNext}>
+                                        <ChevronRight className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                                <Button
+                                    variant={view === 'month' ? 'default' : 'outline'}
+                                    size="sm" className="cursor-pointer"
+                                    onClick={() => setView('month')}
                                 >
-                                    {view === 'month' && (
-                                        <div className={cn(
-                                            "text-sm font-semibold mb-1 px-1",
-                                            isCurrentDay && "text-blue-600",
-                                            !isCurrentMonth && "text-gray-400"
-                                        )}>
-                                            {format(day, 'd')}
+                                    Month
+                                </Button>
+                                <Button
+                                    variant={view === 'week' ? 'default' : 'outline'}
+                                    size="sm" className="cursor-pointer"
+                                    onClick={() => setView('week')}
+                                >
+                                    Week
+                                </Button>
+                                <Button
+                                    variant={view === 'day' ? 'default' : 'outline'}
+                                    size="sm" className="cursor-pointer"
+                                    onClick={() => setView('day')}
+                                >
+                                    Day
+                                </Button>
+                            </div>
+                        </div>
+
+                        {/* Calendar Grid - Fixed Height */}
+                        <div className="bg-white rounded-lg border shadow-sm" style={{ height: '600px' }}>
+                            {/* Day Headers */}
+                            <div className={cn("grid border-b bg-gray-50", view === 'month' ? 'grid-cols-7' : view === 'week' ? 'grid-cols-7' : 'grid-cols-1')}>
+                                {view === 'month' && ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                                    <div key={day} className="p-2 text-center text-sm font-semibold text-gray-700 border-r last:border-r-0">
+                                        {day}
+                                    </div>
+                                ))}
+                                {view === 'week' && calendarDays.map((day, index) => (
+                                    <div key={index} className="p-2 text-center border-r last:border-r-0">
+                                        <div className="text-xs text-gray-500">{format(day, 'EEE')}</div>
+                                        <div className={cn("text-lg font-bold", isToday(day) && "text-blue-600")}>{format(day, 'd')}</div>
+                                    </div>
+                                ))}
+                                {view === 'day' && (
+                                    <div className="p-3 text-center">
+                                        <div className="text-sm text-gray-500">{format(currentDate, 'EEEE')}</div>
+                                        <div className="text-2xl font-bold">{format(currentDate, 'MMMM d, yyyy')}</div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Calendar Days */}
+                            <div className={cn("grid", view === 'month' ? 'grid-cols-7' : view === 'week' ? 'grid-cols-7' : 'grid-cols-1')} style={{ height: view === 'day' ? 'calc(600px - 65px)' : 'calc(600px - 41px)' }}>
+                                {calendarDays.map((day, index) => {
+                                    const dayPosts = getPostsForDay(day);
+                                    const isCurrentMonth = view !== 'month' || day.getMonth() === currentDate.getMonth();
+                                    const isCurrentDay = isToday(day);
+
+                                    return (
+                                        <div
+                                            key={index}
+                                            onDragOver={(e) => handleDragOver(e, day)}
+                                            onDragLeave={() => setDraggedOverDate(null)}
+                                            onDrop={(e) => handleDrop(e, day)}
+                                            className={cn(
+                                                "border-r border-b last:border-r-0 p-1.5 overflow-hidden transition-all duration-200",
+                                                !isCurrentMonth && "bg-gray-50/50",
+                                                isCurrentDay && "bg-blue-50/30",
+                                                draggedOverDate && isSameDay(draggedOverDate, day) && "bg-blue-100/50 ring-2 ring-blue-400 ring-inset z-10 scale-[1.01] shadow-md"
+                                            )}
+                                        >
+                                            {view === 'month' && (
+                                                <div className={cn(
+                                                    "text-sm font-semibold mb-1 px-1",
+                                                    isCurrentDay && "text-blue-600",
+                                                    !isCurrentMonth && "text-gray-400"
+                                                )}>
+                                                    {format(day, 'd')}
+                                                </div>
+                                            )}
+
+                                            <ScrollArea className={view === 'month' ? "h-[calc(100%-24px)]" : "h-full"}>
+                                                <div className="space-y-1">
+                                                    {dayPosts.map(post => renderPostCard(post, view === 'day'))}
+                                                </div>
+                                            </ScrollArea>
                                         </div>
-                                    )}
-
-                                    <ScrollArea className={view === 'month' ? "h-[calc(100%-24px)]" : "h-full"}>
-                                        <div className="space-y-1">
-                                            {dayPosts.map(post => renderPostCard(post, view === 'day'))}
-                                        </div>
-                                    </ScrollArea>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-
-            {/* Upcoming Sidebar */}
-            <div className="w-80 space-y-4 bg-white rounded-lg border p-5  shadow-sm">
-                <h3 className="text-lg font-semibold">Upcoming</h3>
-                <ScrollArea className="h-[600px]">
-                    <div className="space-y-6">
-                        {/* Today */}
-                        {upcomingPosts.today.length > 0 && (
-                            <div>
-                                <h4 className="text-sm font-medium text-muted-foreground mb-2">Today</h4>
-                                <div className="space-y-2">
-                                    {upcomingPosts.today.map(post => {
-                                        const config = getPlatformConfig(post.type);
-                                        return (
-                                            <Card
-                                                key={post.id}
-                                                className="cursor-pointer w-[80%] hover:shadow-md transition-shadow"
-                                                onClick={() => handlePostClick(post)}
-                                            >
-                                                <CardContent className="p-3">
-                                                    <div className="flex items-start gap-2">
-                                                        <div className={cn("flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0", config.bgColor, config.textColor)}>
-                                                            {getPlatformIcon(post.type, "w-4 h-4")}
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-sm font-medium truncate">
-                                                                {post.subject || post.message?.substring(0, 30) || 'Untitled Post'}
-                                                            </p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {format(new Date(post.scheduledPostTime), 'h:mm a')}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-                                        );
-                                    })}
-                                </div>
+                                    );
+                                })}
                             </div>
-                        )}
-
-                        {/* Tomorrow */}
-                        {upcomingPosts.tomorrow.length > 0 && (
-                            <div>
-                                <h4 className="text-sm font-medium text-muted-foreground mb-2">Tomorrow</h4>
-                                <div className="space-y-2">
-                                    {upcomingPosts.tomorrow.map(post => {
-                                        const config = getPlatformConfig(post.type);
-                                        return (
-                                            <Card
-                                                key={post.id}
-                                                className="cursor-pointer w-[80%] hover:shadow-md transition-shadow"
-                                                onClick={() => handlePostClick(post)}
-                                            >
-                                                <CardContent className="p-3">
-                                                    <div className="flex items-start gap-2">
-                                                        <div className={cn("flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0", config.bgColor, config.textColor)}>
-                                                            {getPlatformIcon(post.type, "w-4 h-4")}
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-sm font-medium truncate">
-                                                                {post.subject || post.message?.substring(0, 30) || 'Untitled Post'}
-                                                            </p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {format(new Date(post.scheduledPostTime), 'h:mm a')}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Later */}
-                        {upcomingPosts.later.length > 0 && (
-                            <div>
-                                <h4 className="text-sm font-medium text-muted-foreground mb-2">Later</h4>
-                                <div className="space-y-2">
-                                    {upcomingPosts.later.slice(0, 5).map(post => {
-                                        const config = getPlatformConfig(post.type);
-                                        return (
-                                            <Card
-                                                key={post.id}
-                                                className="cursor-pointer w-[80%] hover:shadow-md transition-shadow"
-                                                onClick={() => handlePostClick(post)}
-                                            >
-                                                <CardContent className="p-3">
-                                                    <div className="flex items-start gap-2">
-                                                        <div className={cn("flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0", config.bgColor, config.textColor)}>
-                                                            {getPlatformIcon(post.type, "w-4 h-4")}
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-sm font-medium truncate">
-                                                                {post.subject || post.message?.substring(0, 30) || 'Untitled Post'}
-                                                            </p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {format(new Date(post.scheduledPostTime), 'MMM d, h:mm a')}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {upcomingPosts.today.length === 0 && upcomingPosts.tomorrow.length === 0 && upcomingPosts.later.length === 0 && (
-                            <p className="text-sm text-muted-foreground text-center py-8">No upcoming posts</p>
-                        )}
-                    </div>
-                </ScrollArea>
-            </div>
-
-            {/* Detail Slider */}
-            <Sheet open={showDetailSlider} onOpenChange={setShowDetailSlider}>
-                <SheetContent className="w-[450px] sm:w-[500px] overflow-y-auto p-0">
-                    <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
-                        <div className="flex items-center gap-3">
-                            {selectedPost && (
-                                <div className={cn("p-2 rounded-lg", getPlatformConfig(selectedPost.type).bgColor)}>
-                                    {getPlatformIcon(selectedPost.type, "w-5 h-5")}
-                                </div>
-                            )}
-                            <SheetTitle className="text-xl font-bold">Post Details</SheetTitle>
                         </div>
                     </div>
 
-                    {selectedPost && (
-                        <div className="px-6 py-6 space-y-8">
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-500 uppercase tracking-wide">Platform</label>
-                                <p className={cn("text-lg font-semibold", getPlatformConfig(selectedPost.type).textColor)}>
-                                    {selectedPost.type}
-                                </p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-500 uppercase tracking-wide">Scheduled Time</label>
-                                <p className="text-base font-semibold text-gray-900">
-                                    {format(new Date(selectedPost.scheduledPostTime), 'MMMM d, yyyy h:mm a')}
-                                </p>
-                            </div>
-
-                            {selectedPost.mediaUrls && selectedPost.mediaUrls.length > 0 && (
-                                <div className="space-y-3">
-                                    <label className="text-sm font-medium text-gray-500 uppercase tracking-wide">
-                                        Media ({selectedPost.mediaUrls.length})
-                                    </label>
-                                    <div className="grid grid-cols-1 gap-3">
-                                        {selectedPost.mediaUrls.map((url, index) => {
-                                            const isVideo = url.match(/\.(mp4|webm|ogg|mov)$/i);
-                                            return (
-                                                <div
-                                                    key={index}
-                                                    className="relative w-full rounded-xl overflow-hidden border-2 border-gray-200 bg-gray-50 shadow-sm hover:shadow-md transition-shadow"
-                                                    style={{ aspectRatio: '1/1' }}
-                                                >
-                                                    {isVideo ? (
-                                                        <video
-                                                            src={url}
-                                                            className="w-full h-full object-cover"
-                                                            controls
-                                                            preload="metadata"
-                                                        />
-                                                    ) : (
-                                                        <Image
-                                                            src={url}
-                                                            alt={`Media ${index + 1}`}
-                                                            fill
-                                                            className="object-cover"
-                                                            unoptimized
-                                                        />
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
+                    {/* Upcoming Sidebar */}
+                    <div className="w-80 space-y-4 bg-white rounded-lg border p-5  shadow-sm">
+                        <h3 className="text-lg font-semibold">Upcoming</h3>
+                        <ScrollArea className="h-[600px]">
+                            <div className="space-y-6">
+                                {/* Today */}
+                                {upcomingPosts.today.length > 0 && (
+                                    <div>
+                                        <h4 className="text-sm font-medium text-muted-foreground mb-2">Today</h4>
+                                        <div className="space-y-2">
+                                            {upcomingPosts.today.map(post => {
+                                                const config = getPlatformConfig(post.type);
+                                                return (
+                                                    <Card
+                                                        key={post.id}
+                                                        draggable={!post.isPostSent}
+                                                        onDragStart={(e) => handleDragStart(e, post)}
+                                                        className={cn(
+                                                            "cursor-pointer w-[80%] hover:shadow-md transition-shadow",
+                                                            post.isPostSent && "opacity-60 grayscale-[0.5]"
+                                                        )}
+                                                        onClick={() => handlePostClick(post)}
+                                                    >
+                                                        <CardContent className="p-3">
+                                                            <div className="flex items-start gap-2">
+                                                                <div className={cn("flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0", config.bgColor, config.textColor)}>
+                                                                    {getPlatformIcon(post.type, "w-4 h-4")}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-sm font-medium truncate">
+                                                                        {post.subject || post.message?.substring(0, 30) || 'Untitled Post'}
+                                                                    </p>
+                                                                    <p className="text-xs text-muted-foreground">
+                                                                        {format(new Date(post.scheduledPostTime), 'h:mm a')}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
 
-                            {selectedPost.subject && (
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-gray-500 uppercase tracking-wide">Subject</label>
-                                    <p className="text-lg font-bold text-gray-900 leading-relaxed">
-                                        {selectedPost.subject}
-                                    </p>
-                                </div>
-                            )}
+                                {/* Tomorrow */}
+                                {upcomingPosts.tomorrow.length > 0 && (
+                                    <div>
+                                        <h4 className="text-sm font-medium text-muted-foreground mb-2">Tomorrow</h4>
+                                        <div className="space-y-2">
+                                            {upcomingPosts.tomorrow.map(post => {
+                                                const config = getPlatformConfig(post.type);
+                                                return (
+                                                    <Card
+                                                        key={post.id}
+                                                        draggable={!post.isPostSent}
+                                                        onDragStart={(e) => handleDragStart(e, post)}
+                                                        className={cn(
+                                                            "cursor-pointer w-[80%] hover:shadow-md transition-shadow",
+                                                            post.isPostSent && "opacity-60 grayscale-[0.5]"
+                                                        )}
+                                                        onClick={() => handlePostClick(post)}
+                                                    >
+                                                        <CardContent className="p-3">
+                                                            <div className="flex items-start gap-2">
+                                                                <div className={cn("flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0", config.bgColor, config.textColor)}>
+                                                                    {getPlatformIcon(post.type, "w-4 h-4")}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-sm font-medium truncate">
+                                                                        {post.subject || post.message?.substring(0, 30) || 'Untitled Post'}
+                                                                    </p>
+                                                                    <p className="text-xs text-muted-foreground">
+                                                                        {format(new Date(post.scheduledPostTime), 'h:mm a')}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
 
-                            {selectedPost.message && (
-                                <div className="space-y-3">
-                                    <label className="text-sm font-medium text-gray-500 uppercase tracking-wide">Message</label>
-                                    <div className="bg-gray-50 rounded-xl border border-gray-200 p-5">
-                                        <p className="text-base text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                            {selectedPost.message}
+                                {/* Later */}
+                                {upcomingPosts.later.length > 0 && (
+                                    <div>
+                                        <h4 className="text-sm font-medium text-muted-foreground mb-2">Later</h4>
+                                        <div className="space-y-2">
+                                            {upcomingPosts.later.slice(0, 5).map(post => {
+                                                const config = getPlatformConfig(post.type);
+                                                return (
+                                                    <Card
+                                                        key={post.id}
+                                                        draggable={!post.isPostSent}
+                                                        onDragStart={(e) => handleDragStart(e, post)}
+                                                        className={cn(
+                                                            "cursor-pointer w-[80%] hover:shadow-md transition-shadow",
+                                                            post.isPostSent && "opacity-60 grayscale-[0.5]"
+                                                        )}
+                                                        onClick={() => handlePostClick(post)}
+                                                    >
+                                                        <CardContent className="p-3">
+                                                            <div className="flex items-start gap-2">
+                                                                <div className={cn("flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0", config.bgColor, config.textColor)}>
+                                                                    {getPlatformIcon(post.type, "w-4 h-4")}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-sm font-medium truncate">
+                                                                        {post.subject || post.message?.substring(0, 30) || 'Untitled Post'}
+                                                                    </p>
+                                                                    <p className="text-xs text-muted-foreground">
+                                                                        {format(new Date(post.scheduledPostTime), 'MMM d, h:mm a')}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {upcomingPosts.today.length === 0 && upcomingPosts.tomorrow.length === 0 && upcomingPosts.later.length === 0 && (
+                                    <p className="text-sm text-muted-foreground text-center py-8">No upcoming posts</p>
+                                )}
+                            </div>
+                        </ScrollArea>
+                    </div>
+
+                    {/* Detail Slider */}
+                    <Sheet open={showDetailSlider} onOpenChange={setShowDetailSlider}>
+                        <SheetContent className="w-[450px] sm:w-[500px] overflow-y-auto p-0">
+                            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
+                                <div className="flex items-center gap-3">
+                                    {selectedPost && (
+                                        <div className={cn("p-2 rounded-lg", getPlatformConfig(selectedPost.type).bgColor)}>
+                                            {getPlatformIcon(selectedPost.type, "w-5 h-5")}
+                                        </div>
+                                    )}
+                                    <SheetTitle className="text-xl font-bold">Post Details</SheetTitle>
+                                </div>
+                            </div>
+
+                            {selectedPost && (
+                                <div className="px-6 py-6 space-y-8">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-gray-500 uppercase tracking-wide">Platform</label>
+                                        <p className={cn("text-lg font-semibold", getPlatformConfig(selectedPost.type).textColor)}>
+                                            {selectedPost.type}
                                         </p>
                                     </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-gray-500 uppercase tracking-wide">Scheduled Time</label>
+                                        <p className="text-base font-semibold text-gray-900">
+                                            {format(new Date(selectedPost.scheduledPostTime), 'MMMM d, yyyy h:mm a')}
+                                        </p>
+                                    </div>
+
+                                    {selectedPost.mediaUrls && selectedPost.mediaUrls.length > 0 && (
+                                        <div className="space-y-3">
+                                            <label className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                                                Media ({selectedPost.mediaUrls.length})
+                                            </label>
+                                            <div className="grid grid-cols-1 gap-3">
+                                                {selectedPost.mediaUrls.map((url, index) => {
+                                                    const isVideo = url.match(/\.(mp4|webm|ogg|mov)$/i);
+                                                    return (
+                                                        <div
+                                                            key={index}
+                                                            className="relative w-full rounded-xl overflow-hidden border-2 border-gray-200 bg-gray-50 shadow-sm hover:shadow-md transition-shadow"
+                                                            style={{ aspectRatio: '1/1' }}
+                                                        >
+                                                            {isVideo ? (
+                                                                <video
+                                                                    src={url}
+                                                                    className="w-full h-full object-cover"
+                                                                    controls
+                                                                    preload="metadata"
+                                                                />
+                                                            ) : (
+                                                                <Image
+                                                                    src={url}
+                                                                    alt={`Media ${index + 1}`}
+                                                                    fill
+                                                                    className="object-cover"
+                                                                    unoptimized
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {selectedPost.subject && (
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-gray-500 uppercase tracking-wide">Subject</label>
+                                            <p className="text-lg font-bold text-gray-900 leading-relaxed">
+                                                {selectedPost.subject}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {selectedPost.message && (
+                                        <div className="space-y-3">
+                                            <label className="text-sm font-medium text-gray-500 uppercase tracking-wide">Message</label>
+                                            <div className="bg-gray-50 rounded-xl border border-gray-200 p-5">
+                                                <p className="text-base text-gray-700 leading-relaxed whitespace-pre-wrap">
+                                                    {selectedPost.message}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="pt-4 border-t flex gap-3">
+                                        <Button
+                                            variant="outline"
+                                            className="flex-1"
+                                            onClick={() => setShowDetailSlider(false)}
+                                        >
+                                            Close
+                                        </Button>
+                                        <Button
+                                            className="flex-1"
+                                            disabled={selectedPost.isPostSent}
+                                            onClick={() => {
+                                                window.location.href = `/organisation/campaigns/${selectedPost.campaign?.id}/posts/${selectedPost.id}/edit`;
+                                            }}
+                                        >
+                                            {selectedPost.isPostSent ? 'Sent (Read Only)' : 'Edit Post'}
+                                        </Button>
+                                    </div>
                                 </div>
                             )}
+                        </SheetContent>
+                    </Sheet>
+                </div>
+            </TabsContent>
 
-                            <div className="pt-4 border-t flex gap-3">
-                                <Button
-                                    variant="outline"
-                                    className="flex-1"
-                                    onClick={() => setShowDetailSlider(false)}
-                                >
-                                    Close
-                                </Button>
-                                {/* <Button
-                                    className="flex-1"
-                                    onClick={() => {
-                                        window.location.href = `/organisation/campaigns/${selectedPost.id}/posts/${selectedPost.id}/edit`;
-                                    }}
-                                >
-                                    Edit Post
-                                </Button> */}
-                            </div>
-                        </div>
-                    )}
-                </SheetContent>
-            </Sheet>
-        </div>
+            <TabsContent value="insights" className="mt-0">
+                <InsightsView />
+            </TabsContent>
+
+            <TabsContent value="export" className="mt-0">
+                <ExportView />
+            </TabsContent>
+        </Tabs>
     );
 }

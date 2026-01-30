@@ -11,7 +11,7 @@ import {
   FileStack,
   UserCircle,
   Home,
-  Bell, CurrencyIcon
+  Bell, CurrencyIcon, PieChart
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -30,6 +30,7 @@ const navItems = [
   { href: "/organisation/templates", label: "Templates", icon: FileStack },
   { href: "/organisation/settings", label: "Accounts", icon: UserCircle },
   { href: "/organisation/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/organisation/reports", label: "Reports", icon: PieChart },
   { href: "/organisation/billing", label: "Billing", icon: CurrencyIcon },
 ];
 
@@ -139,7 +140,9 @@ export function OrganisationLayoutWrapper({
           </Button>
           <NotificationBell />
           <SignedIn>
-            <UserButton />
+            <div suppressHydrationWarning>
+              <UserButton />
+            </div>
           </SignedIn>
         </div>
       </header>
@@ -164,7 +167,7 @@ export function OrganisationLayoutWrapper({
         </main>
 
       </div>
-      <footer className="flex-shrink-0 border-t bg-background p-4 text-center text-sm text-muted-foreground">
+      <footer className="flex-shrink-0 border-t bg-background p-4 text-center text-sm text-muted-foreground" suppressHydrationWarning>
         &copy; {new Date().getFullYear()} CampZeo. All rights reserved.
       </footer>
     </div>

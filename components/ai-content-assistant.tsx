@@ -2,12 +2,14 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { IMAGE_MODELS } from '@/lib/pollinations';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Sparkles, Copy, ArrowRight, Image as ImageIcon, Wand2, RefreshCw, Check } from 'lucide-react';
+import { Loader2, Sparkles, Copy, ArrowRight, Image as ImageIcon, Wand2, RefreshCw, Check, ChevronDown } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
 interface ContentVariation {
@@ -46,6 +48,7 @@ export function AIContentAssistant({
     const [messages, setMessages] = useState<Message[]>([]);
     const [prompt, setPrompt] = useState('');
     const [imagePrompt, setImagePrompt] = useState('');
+    const [selectedModel, setSelectedModel] = useState('flux');
     const [loading, setLoading] = useState(false);
     const [imageLoading, setImageLoading] = useState(false);
     const [generatedImagePrompt, setGeneratedImagePrompt] = useState('');
@@ -156,6 +159,7 @@ export function AIContentAssistant({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     prompt: imagePrompt,
+                    model: selectedModel,
                 }),
             });
 
@@ -438,8 +442,33 @@ export function AIContentAssistant({
                                         value={imagePrompt}
                                         onChange={(e) => setImagePrompt(e.target.value)}
                                         rows={3}
-                                        className="border border-primary/20 rounded-md resize-none"
+                                        className="border border-primary/20 rounded-md resize-none mb-4"
                                     />
+                                </div>
+
+                                <div>
+                                    <h3 className="font-medium mb-2">Select AI Model</h3>
+                                    <Select value={selectedModel} onValueChange={setSelectedModel}>
+                                        <SelectTrigger className="w-full h-11 border-primary/20 hover:border-primary/40 transition-colors">
+                                            <SelectValue>
+                                                <span className="font-medium">
+                                                    {IMAGE_MODELS.find(m => m.id === selectedModel)?.name}
+                                                </span>
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {IMAGE_MODELS.map((model) => (
+                                                <SelectItem key={model.id} value={model.id} className="cursor-pointer py-3 hover:bg-primary/5">
+                                                    <div className="flex flex-col gap-1 items-start">
+                                                        <span className="font-semibold text-sm">{model.name}</span>
+                                                        <span className="text-xs text-muted-foreground leading-relaxed line-clamp-1">
+                                                            {model.description}
+                                                        </span>
+                                                    </div>
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
 
                                 <Button

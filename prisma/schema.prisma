@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
 }
 
 datasource db {
@@ -69,9 +70,23 @@ model Organisation {
   organisationPlatforms OrganisationPlatform[]
   payments              Payment[]
   socialMetricHistory   SocialMetricHistory[]
+  audienceInsights      AudienceInsight[]
   subscriptions         Subscription[]
   users                 User[]
 }
+
+model AudienceInsight {
+  id             Int          @id @default(autoincrement())
+  organisationId Int
+  platform       PlatformType
+  data           Json         // Stores normalized demographics and activity patterns
+  lastUpdated    DateTime     @default(now()) @updatedAt
+  createdAt      DateTime     @default(now())
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@unique([organisationId, platform])
+}
+
 
 model OrganisationPlatform {
   id             Int          @id @default(autoincrement())
@@ -97,23 +112,42 @@ model Campaign {
 }
 
 model CampaignPost {
-  id                   Int          @id @default(autoincrement())
+  id                   Int           @id @default(autoincrement())
   subject              String?
   message              String?
   senderEmail          String?
   type                 PlatformType
-  isAttachedToCampaign Boolean      @default(false)
+  category             String?       // [NEW] Category for insights
+  isAttachedToCampaign Boolean       @default(false)
   campaignId           Int?
   videoUrl             String?
   videoId              String?
   scheduledPostTime    DateTime?
-  isPostSent           Boolean      @default(false)
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
+  publishedDate        DateTime?     // [NEW] Actual publish time
+  status               PostStatus    @default(DRAFT) // [NEW] Draft / Scheduled / Published
+  approvalStatus       String        @default("PENDING") // [NEW] PENDING / APPROVED / REJECTED
+  isPostSent           Boolean       @default(false)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
   mediaUrls            String[]
   metadata             Json?
-  isDeleted            Boolean      @default(false)
-  campaign             Campaign?    @relation(fields: [campaignId], references: [id])
+  liveLink             String?       // [NEW] URL to the live post
+  engagement           Json?         // [NEW] Snapshot of engagement metrics
+  isDeleted            Boolean       @default(false)
+  campaign             Campaign?     @relation(fields: [campaignId], references: [id])
+  audits               PostAudit[]   // [NEW] Relation to audit trail
+}
+
+model PostAudit {
+  id           Int          @id @default(autoincrement())
+  postId       Int
+  post         CampaignPost @relation(fields: [postId], references: [id])
+  fieldChanged String
+  oldValue     String?
+  newValue     String?
+  changedBy    String?
+  changedAt    DateTime     @default(now())
+
 }
 
 model Contact {
@@ -252,6 +286,11 @@ model PostInsight {
   comments       Int      @default(0)
   reach          Int      @default(0)
   impressions    Int      @default(0)
+  saves          Int      @default(0)
+  shares         Int      @default(0)
+  videoViews     Int      @default(0)
+  watchTime      Float    @default(0)
+  averageViewDuration Float @default(0)
   engagementRate Float    @default(0)
   lastUpdated    DateTime
   createdAt      DateTime @default(now())
@@ -388,6 +427,12 @@ model SocialMetricHistory {
   @@index([metricName, recordedAt])
 }
 
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+}
+
 enum UserRole {
   ADMIN_USER
   ORGANISATION_USER
@@ -416,3 +461,5 @@ enum MessageChannel {
   SMS
   WHATSAPP
 }
+
+

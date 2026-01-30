@@ -1,6 +1,24 @@
 import { getSocialMediaUrl, validateMediaUrl, isVideoUrl } from './media-utils';
 import { Buffer } from 'buffer';
 
+async function debugFacebookToken(accessToken: string, logPrefix: string = '[Facebook]'): Promise<void> {
+    try {
+        console.log(`${logPrefix} Debugging Token permissions...`);
+        const response = await fetch(`https://graph.facebook.com/v24.0/debug_token?input_token=${accessToken}&access_token=${accessToken}`);
+
+        if (response.ok) {
+            const data = await response.json();
+            const scopes = data.data?.scopes || [];
+            const isValid = data.data?.is_valid;
+            console.log(`${logPrefix} Token Debug: Valid=${isValid}, Scopes=${JSON.stringify(scopes)}`);
+        } else {
+            console.warn(`${logPrefix} Failed to debug token:`, response.status);
+        }
+    } catch (e) {
+        console.error(`${logPrefix} Token debug error:`, e);
+    }
+}
+
 interface FacebookCredentials {
     accessToken: string;
     pageId: string;
@@ -25,12 +43,18 @@ export async function postToFacebook(
 
     console.log(`[Facebook] Posting to page: ${pageId}, Media Count: ${mediaList.length}, Is Reel: ${options?.isReel || false}`);
 
+    // Strict check: Facebook allows only one video per post
+    const videoCount = mediaList.filter(url => isVideoUrl(url)).length;
+    if (videoCount > 1) {
+        throw new Error('Facebook allows only one video per post. Please remove extra videos.');
+    }
+
     try {
         let postId: string;
 
         if (mediaList.length === 0) {
             // Text-only post
-            const response = await fetch(`https://graph.facebook.com/v18.0/${pageId}/feed`, {
+            const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/feed`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -61,7 +85,7 @@ export async function postToFacebook(
             if (!validation.valid) {
                 console.warn(`[Facebook] ${validation.message} Posting as text-only.`);
                 // Fall back to text-only post
-                const response = await fetch(`https://graph.facebook.com/v18.0/${pageId}/feed`, {
+                const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/feed`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -95,7 +119,7 @@ export async function postToFacebook(
 
                     if (isVideo) {
                         // Regular video post - Single shot is more reliable for simple URL-based uploads
-                        const response = await fetch(`https://graph.facebook.com/v18.0/${pageId}/videos`, {
+                        const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/videos`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -122,7 +146,7 @@ export async function postToFacebook(
                         await waitForFacebookVideoProcessing(data.id, accessToken);
                     } else {
                         // Standard photo post
-                        const response = await fetch(`https://graph.facebook.com/v18.0/${pageId}/photos`, {
+                        const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/photos`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -165,7 +189,7 @@ export async function postToFacebook(
 
                 console.log(`[Facebook] Uploading ${endpoint}: ${validation.url}`);
 
-                const response = await fetch(`https://graph.facebook.com/v18.0/${pageId}/${endpoint}`, {
+                const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/${endpoint}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -192,7 +216,7 @@ export async function postToFacebook(
             }
 
             // Create post with all media (photos and videos)
-            const response = await fetch(`https://graph.facebook.com/v18.0/${pageId}/feed`, {
+            const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/feed`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -220,6 +244,7 @@ export async function postToFacebook(
 
     } catch (error) {
         console.error('Facebook posting error:', error);
+        await debugFacebookToken(accessToken);
         throw error;
     }
 }
@@ -237,7 +262,7 @@ async function postFacebookReel(
     console.log(`[Facebook] Creating Reel (Binary Upload) for video: ${videoUrl}`);
 
     // 1. Initialize Reel Upload
-    const startResponse = await fetch(`https://graph.facebook.com/v18.0/${pageId}/video_reels?upload_phase=start&access_token=${accessToken}`, {
+    const startResponse = await fetch(`https://graph.facebook.com/v24.0/${pageId}/video_reels?upload_phase=start&access_token=${accessToken}`, {
         method: 'POST'
     });
 
@@ -272,31 +297,33 @@ async function postFacebookReel(
     });
 
     if (!uploadRes.ok) {
-        const errorText = await uploadRes.text();
-        throw new Error(`Facebook Reel binary upload error: ${errorText}`);
+        const err = await uploadRes.json();
+        throw new Error(`Failed to upload reel binary: ${JSON.stringify(err)}`);
     }
 
-    // 4. Publish/Finish Reel Upload
-    const finishResponse = await fetch(`https://graph.facebook.com/v18.0/${pageId}/video_reels`, {
+    console.log(`[Facebook] Reel binary uploaded: ${videoId}. Finalizing...`);
+
+    // 4. Finish Reel Upload & Publish
+    const finishResponse = await fetch(`https://graph.facebook.com/v24.0/${pageId}/video_reels`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-            upload_phase: 'finish',
+            access_token: accessToken,
             video_id: videoId,
+            upload_phase: 'finish',
             video_state: 'PUBLISHED',
             description: message,
-            access_token: accessToken,
         }),
     });
 
     if (!finishResponse.ok) {
         const error = await finishResponse.json();
-        throw new Error(`Facebook Reel publishing error: ${JSON.stringify(error)}`);
+        throw new Error(`Facebook Reel finish error: ${JSON.stringify(error)}`);
     }
 
-    // 5. Wait for processing
-    await waitForFacebookVideoProcessing(videoId, accessToken);
-
+    console.log(`[Facebook] Reel published successfully: ${videoId}`);
     return { id: videoId };
 }
 
@@ -316,7 +343,7 @@ async function waitForFacebookVideoProcessing(
     while (Date.now() - startTime < timeout) {
         try {
             const statusResponse = await fetch(
-                `https://graph.facebook.com/v18.0/${videoId}?fields=status&access_token=${accessToken}`
+                `https://graph.facebook.com/v24.0/${videoId}?fields=status&access_token=${accessToken}`
             );
 
             if (statusResponse.ok) {
@@ -329,13 +356,19 @@ async function waitForFacebookVideoProcessing(
                     console.log(`[Facebook] Video processing complete: ${videoId}`);
                     return;
                 } else if (videoStatus === 'error') {
-                    throw new Error(`Video processing failed for ${videoId}`);
+                    console.error(`[Facebook] Video processing error details:`, JSON.stringify(statusData, null, 2));
+                    throw new Error(`Video processing failed for ${videoId}. Status: ${videoStatus}. Details: ${JSON.stringify(statusData)}`);
                 }
             } else {
                 console.warn(`[Facebook] Status check failed for ${videoId}: ${statusResponse.status}`);
             }
         } catch (e) {
             console.error(`[Facebook] Error checking status for ${videoId}`, e);
+            // Don't swallow the specific error thrown above
+            if (e instanceof Error && e.message.includes('Video processing failed')) {
+                await debugFacebookToken(accessToken);
+                throw e;
+            }
         }
 
         await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -356,7 +389,7 @@ export async function createFacebookVideoCollection(
 
     try {
         // Facebook uses "video_collections" endpoint for organizing videos
-        const response = await fetch(`https://graph.facebook.com/v18.0/${pageId}/video_collections`, {
+        const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/video_collections`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -413,7 +446,7 @@ export async function addVideoToFacebookCollection(
             body.description = metadata.description;
         }
 
-        const response = await fetch(`https://graph.facebook.com/v18.0/${collectionId}/videos`, {
+        const response = await fetch(`https://graph.facebook.com/v24.0/${collectionId}/videos`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -466,7 +499,7 @@ async function setFacebookVideoThumbnail(
 
         // Upload thumbnail to Facebook
         const response = await fetch(
-            `https://graph.facebook.com/v18.0/${videoId}/picture?access_token=${accessToken}`,
+            `https://graph.facebook.com/v24.0/${videoId}/picture?access_token=${accessToken}`,
             {
                 method: 'POST',
                 headers: {
@@ -507,7 +540,7 @@ export async function getFacebookPagePosts(
     try {
         const fields = 'id,message,created_time,full_picture,permalink_url,likes.summary(true),comments.summary(true)';
         const response = await fetch(
-            `https://graph.facebook.com/v18.0/${pageId}/feed?fields=${fields}&limit=${limit}&access_token=${accessToken}`,
+            `https://graph.facebook.com/v24.0/${pageId}/feed?fields=${fields}&limit=${limit}&access_token=${accessToken}`,
             { method: 'GET' }
         );
 
@@ -530,7 +563,7 @@ export async function getFacebookPagePosts(
 export async function getFacebookPages(userAccessToken: string) {
     try {
         const response = await fetch(
-            `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token,category,instagram_business_account&access_token=${userAccessToken}`
+            `https://graph.facebook.com/v24.0/me/accounts?fields=id,name,access_token,category,instagram_business_account&access_token=${userAccessToken}`
         );
 
         if (!response.ok) {
@@ -551,6 +584,7 @@ export interface FacebookPostInsights {
     comments: number;
     impressions: number;
     reach: number;
+    engagement: number;
     engagementRate: number;
     isDeleted?: boolean;
     message?: string;
@@ -568,7 +602,7 @@ export async function getFacebookPostInsights(
         // We also handle the case where 'shares' field might not exist on some objects (like Photos).
         let fields = 'likes.summary(true),reactions.summary(true),comments.summary(true),shares,engagement,message,full_picture,permalink_url';
         let postResponse = await fetch(
-            `https://graph.facebook.com/v18.0/${postId}?fields=${fields}&access_token=${accessToken}`
+            `https://graph.facebook.com/v24.0/${postId}?fields=${fields}&access_token=${accessToken}`
         );
 
         if (!postResponse.ok) {
@@ -580,7 +614,7 @@ export async function getFacebookPostInsights(
                 console.log(`[Facebook] Retrying insights for ${postId} without incompatible fields...`);
                 fields = 'likes.summary(true),reactions.summary(true),comments.summary(true),message,full_picture,permalink_url';
                 postResponse = await fetch(
-                    `https://graph.facebook.com/v18.0/${postId}?fields=${fields}&access_token=${accessToken}`
+                    `https://graph.facebook.com/v24.0/${postId}?fields=${fields}&access_token=${accessToken}`
                 );
             }
         }
@@ -608,7 +642,7 @@ export async function getFacebookPostInsights(
                     const pageId = postId.includes('_') ? postId.split('_')[0] : null;
                     if (pageId) {
                         const feedResponse = await fetch(
-                            `https://graph.facebook.com/v18.0/${pageId}/feed?fields=id,likes.summary(true),comments.summary(true)&limit=25&access_token=${accessToken}`
+                            `https://graph.facebook.com/v24.0/${pageId}/feed?fields=id,likes.summary(true),comments.summary(true)&limit=25&access_token=${accessToken}`
                         );
 
                         if (feedResponse.ok) {
@@ -622,6 +656,7 @@ export async function getFacebookPostInsights(
                                     comments: feedPost.comments?.summary?.total_count || 0,
                                     impressions: 0, // Feed doesn't give insights
                                     reach: 0,
+                                    engagement: feedPost.likes?.summary?.total_count + feedPost.comments?.summary?.total_count || 0,
                                     engagementRate: 0,
                                     isDeleted: false
                                 };
@@ -638,6 +673,7 @@ export async function getFacebookPostInsights(
                     comments: 0,
                     impressions: 0,
                     reach: 0,
+                    engagement: 0,
                     engagementRate: 0,
                     isDeleted: true
                 };
@@ -674,9 +710,10 @@ export async function getFacebookPostInsights(
         let reach = 0;
 
         try {
-            const metrics = 'post_impressions,post_impressions_unique,post_engaged_users';
+            // User requested: post_impressions, post_reach, post_engaged_users, post_reactions
+            const metrics = 'post_impressions,post_reach,post_engaged_users,post_reactions,post_impressions_unique';
             const insightsResponse = await fetch(
-                `https://graph.facebook.com/v18.0/${postId}/insights?metric=${metrics}&access_token=${accessToken}`
+                `https://graph.facebook.com/v24.0/${postId}/insights?metric=${metrics}&access_token=${accessToken}`
             );
 
             if (insightsResponse.ok) {
@@ -684,14 +721,16 @@ export async function getFacebookPostInsights(
                 const data = insightsData.data || [];
 
                 const impressionsMetric = data.find((m: any) => m.name === 'post_impressions');
-                const reachMetric = data.find((m: any) => m.name === 'post_impressions_unique');
+                const reachMetric = data.find((m: any) => m.name === 'post_reach' || m.name === 'post_impressions_unique');
+                const engagedUsersMetric = data.find((m: any) => m.name === 'post_engaged_users');
+                const reactionsMetric = data.find((m: any) => m.name === 'post_reactions');
 
-                if (impressionsMetric) {
-                    impressions = impressionsMetric.values[0]?.value || 0;
-                }
-                if (reachMetric) {
-                    reach = reachMetric.values[0]?.value || 0;
-                }
+                if (impressionsMetric) impressions = impressionsMetric.values[0]?.value || 0;
+                if (reachMetric) reach = reachMetric.values[0]?.value || 0;
+                // If the user specifically wants engaged users or reactions, we could store them too,
+                // but for now they contribute to 'engagement' if not already summed.
+            } else {
+                console.warn(`[Facebook] Insights call failed for ${postId}, status: ${insightsResponse.status}`);
             }
         } catch (insightError) {
             console.warn(`[Facebook] Could not fetch (deep) insights for post ${postId}`, insightError);
@@ -709,6 +748,7 @@ export async function getFacebookPostInsights(
             comments,
             impressions,
             reach,
+            engagement: totalEngagements,
             engagementRate,
             isDeleted: false,
             message: postData.message,
@@ -719,5 +759,244 @@ export async function getFacebookPostInsights(
     } catch (error) {
         console.error(`[Facebook] Error fetching insights for ${postId}:`, error);
         throw error;
+    }
+}
+
+export interface FacebookAudienceInsights {
+    fansByCity: Record<string, number>;
+    fansByCountry: Record<string, number>;
+    fansByGenderAge: Record<string, number>;
+    totalFollowers?: number;
+    // New fields for reached audience
+    reachedByCity: Record<string, number>;
+    reachedByCountry: Record<string, number>;
+    reachedByGenderAge: Record<string, number>;
+    fanReach: number;
+    nonFanReach: number;
+    // New fields from user request
+    fanAdds?: number;
+    fanRemoves?: number;
+    _rawResponses?: any[];
+}
+
+export async function getFacebookPageAudience(
+    credentials: FacebookCredentials
+): Promise<FacebookAudienceInsights> {
+    const { accessToken, pageId } = credentials;
+
+    const _rawResponses: any[] = [];
+    const capture = async (res: Response, label: string) => {
+        try {
+            const clone = res.clone();
+            const data = await clone.json();
+            _rawResponses.push({ label, url: res.url, status: res.status, data });
+        } catch (e) {
+            _rawResponses.push({ label, url: res.url, status: res.status, error: 'Failed to parse JSON' });
+        }
+    };
+
+    try {
+        // 1. Fetch Total Follower Count
+        const pageResponse = await fetch(
+            `https://graph.facebook.com/v24.0/${pageId}?fields=followers_count&access_token=${accessToken}`
+        );
+        await capture(pageResponse, 'page_profile');
+
+        let totalFollowers = 0;
+        if (pageResponse.ok) {
+            const pageData = await pageResponse.json();
+            totalFollowers = pageData.followers_count || 0;
+        }
+
+        // 1. Fetch Follower (Fan) Demographics
+        const fanMetrics = 'page_fans_city,page_fans_country,page_fans_gender_age';
+        const fanResponse = await fetch(
+            `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${fanMetrics}&period=lifetime&access_token=${accessToken}`
+        );
+        await capture(fanResponse, 'fan_demographics');
+
+        let fansByCity: Record<string, number> = {};
+        let fansByCountry: Record<string, number> = {};
+        let fansByGenderAge: Record<string, number> = {};
+
+        if (fanResponse.ok) {
+            const data = await fanResponse.json();
+            fansByCity = data.data?.find((m: any) => m.name === 'page_fans_city')?.values[0]?.value || {};
+            fansByCountry = data.data?.find((m: any) => m.name === 'page_fans_country')?.values[0]?.value || {};
+            fansByGenderAge = data.data?.find((m: any) => m.name === 'page_fans_gender_age')?.values[0]?.value || {};
+        }
+
+        // 2. Fetch Reached Audience Demographics
+        const reachMetricsList = 'page_impressions_by_city_unique,page_impressions_by_country_unique,page_impressions_by_age_gender_unique';
+        const reachDemographicsResponse = await fetch(
+            `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${reachMetricsList}&period=days_28&access_token=${accessToken}`
+        );
+        await capture(reachDemographicsResponse, 'reach_demographics_28d');
+
+        let reachedByCity: Record<string, number> = {};
+        let reachedByCountry: Record<string, number> = {};
+        let reachedByGenderAge: Record<string, number> = {};
+
+        if (reachDemographicsResponse.ok) {
+            const data = await reachDemographicsResponse.json();
+            reachedByCity = data.data?.find((m: any) => m.name === 'page_impressions_by_city_unique')?.values[0]?.value || {};
+            reachedByCountry = data.data?.find((m: any) => m.name === 'page_impressions_by_country_unique')?.values[0]?.value || {};
+            reachedByGenderAge = data.data?.find((m: any) => m.name === 'page_impressions_by_age_gender_unique')?.values[0]?.value || {};
+        }
+
+        // 3. Fetch Fan vs Non-Fan Reach
+        const reachSplitMetrics = 'page_posts_impressions_fan_unique,page_posts_impressions_unique';
+        const reachSplitResponse = await fetch(
+            `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${reachSplitMetrics}&period=days_28&access_token=${accessToken}`
+        );
+        await capture(reachSplitResponse, 'reach_split_28d');
+
+        let fanReach = 0;
+        let totalUniqueReach = 0;
+
+        if (reachSplitResponse.ok) {
+            const data = await reachSplitResponse.ok ? await reachSplitResponse.json() : { data: [] };
+            fanReach = data.data?.find((m: any) => m.name === 'page_posts_impressions_fan_unique')?.values[0]?.value || 0;
+            totalUniqueReach = data.data?.find((m: any) => m.name === 'page_posts_impressions_unique')?.values[0]?.value || 0;
+        }
+
+        // 4. Fetch Fan Adds/Removes (User requested metrics from separate URL logic)
+        let fanAdds = 0;
+        let fanRemoves = 0;
+        try {
+            const fanGrowthMetrics = 'page_fan_adds,page_fan_removes';
+            const growthRes = await fetch(
+                `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${fanGrowthMetrics}&period=lifetime&access_token=${accessToken}`
+            );
+            await capture(growthRes, 'fan_growth_lifetime');
+            if (growthRes.ok) {
+                const growthData = await growthRes.json();
+                fanAdds = growthData.data?.find((m: any) => m.name === 'page_fan_adds')?.values[0]?.value || 0;
+                fanRemoves = growthData.data?.find((m: any) => m.name === 'page_fan_removes')?.values[0]?.value || 0;
+            }
+        } catch (e) {
+            console.error('[Facebook] Error fetching fan growth:', e);
+        }
+
+        return {
+            fansByCity,
+            fansByCountry,
+            fansByGenderAge,
+            totalFollowers,
+            reachedByCity,
+            reachedByCountry,
+            reachedByGenderAge,
+            fanReach,
+            nonFanReach: Math.max(0, totalUniqueReach - fanReach),
+            fanAdds,
+            fanRemoves,
+            _rawResponses
+        };
+
+    } catch (error) {
+        console.error('[Facebook] Error fetching audience insights:', error);
+        return {
+            fansByCity: {},
+            fansByCountry: {},
+            fansByGenderAge: {},
+            totalFollowers: 0,
+            reachedByCity: {},
+            reachedByCountry: {},
+            reachedByGenderAge: {},
+            fanReach: 0,
+            nonFanReach: 0
+        };
+    }
+}
+
+export interface FacebookAccountInsights {
+    reach: number;
+    impressions: number;
+    engagement: number;
+    followerCount: number;
+    // New fields from user request
+    pageViews?: number;
+    pageLikes?: number;
+    engagedUsers?: number;
+    _rawResponses?: any[];
+}
+
+export async function getFacebookAccountInsights(
+    credentials: FacebookCredentials
+): Promise<FacebookAccountInsights> {
+    const { accessToken, pageId } = credentials;
+    try {
+        const _rawResponses: any[] = [];
+        const capture = async (res: Response, label: string) => {
+            try {
+                const clone = res.clone();
+                const data = await clone.json();
+                _rawResponses.push({ label, url: res.url, status: res.status, data });
+            } catch (e) {
+                _rawResponses.push({ label, url: res.url, status: res.status, error: 'Failed to parse JSON' });
+            }
+        };
+
+        // Fetch metrics using robust v24-safe metrics
+        const accountInsightsMetrics = 'page_impressions_unique,page_post_engagements';
+        const insightsUrl = `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${accountInsightsMetrics}&period=days_28&access_token=${accessToken}`;
+
+        let pageViews = 0;
+        let pageLikes = 0; // page_fan_adds is deprecated/unreliable in v24
+        let reach = 0;
+        let engagedUsers = 0;
+        let impressions = 0;
+        let engagement = 0;
+
+        const insightsRes = await fetch(insightsUrl);
+        await capture(insightsRes, 'account_insights_combined_28d');
+        if (insightsRes.ok) {
+            const data = await insightsRes.json();
+            const items = data.data || [];
+
+            const reachValues = items.find((m: any) => m.name === 'page_impressions_unique')?.values || [];
+            reach = reachValues[reachValues.length - 1]?.value || 0;
+
+            const engagementValues = items.find((m: any) => m.name === 'page_post_engagements')?.values || [];
+            engagement = engagementValues[engagementValues.length - 1]?.value || 0;
+
+            impressions = reach; // Proxy reach as impressions if impressions metric is deprecated
+        }
+
+        // Separate call for page_views (daily only in v24)
+        try {
+            const viewsRes = await fetch(`https://graph.facebook.com/v24.0/${pageId}/insights?metric=page_views_total&period=day&access_token=${accessToken}`);
+            await capture(viewsRes, 'page_views_day');
+            if (viewsRes.ok) {
+                const viewsData = await viewsRes.json();
+                const values = viewsData.data?.[0]?.values || [];
+                pageViews = values.reduce((acc: number, v: any) => acc + (v.value || 0), 0);
+            }
+        } catch (e) {
+            console.warn('[Facebook] Failed to fetch page views:', e);
+        }
+
+        // Follower count (fans) - Always use profile field in v24
+        const pageRes = await fetch(`https://graph.facebook.com/v24.0/${pageId}?fields=followers_count&access_token=${accessToken}`);
+        await capture(pageRes, 'page_profile_follower_v24');
+        let followerCount = 0;
+        if (pageRes.ok) {
+            const pageData = await pageRes.json();
+            followerCount = pageData.followers_count || 0;
+        }
+
+        return {
+            reach,
+            impressions,
+            engagement,
+            followerCount,
+            pageViews,
+            pageLikes,
+            engagedUsers,
+            _rawResponses
+        };
+    } catch (error) {
+        console.error('[Facebook] Error fetching account insights:', error);
+        return { reach: 0, impressions: 0, engagement: 0, followerCount: 0, pageViews: 0, pageLikes: 0, engagedUsers: 0 };
     }
 }

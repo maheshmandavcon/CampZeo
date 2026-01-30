@@ -54,7 +54,8 @@ import {
     Check,
     Paperclip,
     Globe,
-    Search
+    Search,
+    Download
 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
@@ -287,6 +288,12 @@ export default function CampaignPostsPage() {
         }
     };
 
+    // Handle export posts
+    const handleExport = () => {
+        const platform = activeTab === 'all' ? 'all' : activeTab;
+        window.open(`/api/campaigns/${campaignId}/posts/export?platform=${platform}`, '_blank');
+    };
+
     // Toggle contact selection
     const toggleContact = (contactId: string) => {
         setSelectedContacts(prev =>
@@ -508,6 +515,14 @@ export default function CampaignPostsPage() {
                                             </SelectContent>
                                         </Select>
                                     </div>
+                                    <Button
+                                        variant="outline"
+                                        className="cursor-pointer"
+                                        onClick={handleExport}
+                                    >
+                                        <Download className="size-4 mr-2" />
+                                        Export All
+                                    </Button>
                                 </div>
                             </Tabs>
                         </div>

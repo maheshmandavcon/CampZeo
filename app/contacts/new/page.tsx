@@ -129,6 +129,20 @@ export default function NewContactPage() {
         }
     };
 
+    const handleSelectAllCampaigns = (checked: boolean) => {
+        if (checked) {
+            setFormData({
+                ...formData,
+                campaignIds: campaigns.map(c => c.id),
+            });
+        } else {
+            setFormData({
+                ...formData,
+                campaignIds: [],
+            });
+        }
+    };
+
     return (
         <div className="min-h-screen bg-background">
 
@@ -221,7 +235,25 @@ export default function NewContactPage() {
 
                                     {/* Campaign Association */}
                                     <div className="space-y-3">
-                                        <Label>Associate with Campaigns</Label>
+                                        <div className="flex items-center justify-between">
+                                            <Label>Associate with Campaigns</Label>
+                                            {campaigns.length > 0 && !loadingCampaigns && (
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id="select-all-campaigns"
+                                                        checked={formData.campaignIds.length === campaigns.length && campaigns.length > 0}
+                                                        onCheckedChange={(checked) => handleSelectAllCampaigns(checked as boolean)}
+                                                        className="border-gray-400"
+                                                    />
+                                                    <label
+                                                        htmlFor="select-all-campaigns"
+                                                        className="text-sm font-medium leading-none cursor-pointer"
+                                                    >
+                                                        Select All
+                                                    </label>
+                                                </div>
+                                            )}
+                                        </div>
                                         {loadingCampaigns ? (
                                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                                 <Loader2 className="size-4 animate-spin" />
@@ -254,7 +286,16 @@ export default function NewContactPage() {
                                     </div>
 
                                     {/* Actions */}
-                                    <div className="flex gap-3 pt-4 border-t">
+                                    <div className="flex justify-end gap-3 pt-4 border-t">
+                                        <Button
+                                            type="button"
+                                            className="cursor-pointer"
+                                            variant="outline"
+                                            onClick={() => router.push('/contacts')}
+                                            disabled={loading}
+                                        >
+                                            Cancel
+                                        </Button>
                                         <Button type="submit" className="cursor-pointer" disabled={loading}>
                                             {loading ? (
                                                 <>
@@ -264,15 +305,6 @@ export default function NewContactPage() {
                                             ) : (
                                                 'Create Contact'
                                             )}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            className="cursor-pointer"
-                                            variant="outline"
-                                            onClick={() => router.push('/contacts')}
-                                            disabled={loading}
-                                        >
-                                            Cancel
                                         </Button>
                                     </div>
                                 </CardContent>
