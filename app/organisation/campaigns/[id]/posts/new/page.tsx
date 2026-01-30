@@ -131,6 +131,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [newBoardDescription, setNewBoardDescription] = useState('');
     const [creatingBoard, setCreatingBoard] = useState(false);
     const [socialStatus, setSocialStatus] = useState<any>(null); // New state for social status
+    const [selectedLinkedInUrn, setSelectedLinkedInUrn] = useState<string>(''); // For LinkedIn organization selection
 
     // AI Assistant state
     const [showAIAssistant, setShowAIAssistant] = useState(false);
@@ -543,7 +544,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     thumbnailUrl, // Send thumbnail
                     facebookPageId: selectedFacebookPageId, // NEW: Selected Facebook Page
                     facebookPageAccessToken: selectedFacebookPageAccessToken, // NEW: Selected Facebook Page Access Token
-                    instagramBusinessId: selectedInstagramBusinessId // NEW: Linked Instagram ID
+                    instagramBusinessId: selectedInstagramBusinessId, // NEW: Linked Instagram ID
+                    linkedInUrn: selectedLinkedInUrn // NEW: Selected LinkedIn Author URN
                 }),
             });
 
@@ -1514,17 +1516,48 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                             </Dialog>
                                                         </>
                                                     )}
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="pinterestLink">Destination Link (Optional)</Label>
-                                                    <Input
-                                                        id="pinterestLink"
-                                                        placeholder="https://example.com"
-                                                        value={pinterestLink}
-                                                        onChange={(e) => setPinterestLink(e.target.value)}
-                                                    />
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="pinterestLink">Destination Link (Optional)</Label>
+                                                        <Input
+                                                            id="pinterestLink"
+                                                            placeholder="https://example.com"
+                                                            value={pinterestLink}
+                                                            onChange={(e) => setPinterestLink(e.target.value)}
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {/* LinkedIn Organization Selection */}
+                                    {selectedPlatform === 'LINKEDIN' && (
+                                        <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+                                            <Label className="text-sm font-medium flex items-center gap-2">
+                                                <Linkedin className="size-4 text-blue-700" />
+                                                Post As
+                                            </Label>
+                                            <Select
+                                                value={selectedLinkedInUrn}
+                                                onValueChange={setSelectedLinkedInUrn}
+                                            >
+                                                <SelectTrigger className=''>
+                                                    <SelectValue placeholder="Select author" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value={socialStatus?.linkedin?.urn || 'personal'}>
+                                                        Personal Profile ({user?.fullName || 'You'})
+                                                    </SelectItem>
+                                                    {socialStatus?.linkedin?.organizations?.map((org: any) => (
+                                                        <SelectItem key={org.id} value={org.id}>
+                                                            {org.name} (Organization)
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-[10px] text-muted-foreground">
+                                                Select whether to post to your personal profile or a managed company page.
+                                            </p>
                                         </div>
                                     )}
 

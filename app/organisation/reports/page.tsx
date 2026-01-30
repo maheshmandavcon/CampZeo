@@ -113,6 +113,7 @@ export default function ReportsPage() {
     const [selectedPostId, setSelectedPostId] = useState<string | number | null>(null);
     const [postGraphType, setPostGraphType] = useState<'pie' | 'bar'>('pie');
     const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
+    const [selectedLinkedInOrg, setSelectedLinkedInOrg] = useState<string>('all');
 
     // Demographics State
     const [demoCategory, setDemoCategory] = useState<'country' | 'city' | 'gender' | 'age' | 'trafficSources'>('country');
@@ -137,7 +138,33 @@ export default function ReportsPage() {
                     sourceData[key] = (sourceData[key] || 0) + (row[1] || 0);
                 });
             } else {
-                sourceData = pDemo[demoCategory] || {};
+                if (platformKey === 'linkedin' && selectedLinkedInOrg !== 'all') {
+                    const orgData = (data as any)?.platformDemographics?.linkedin?.organizations?.find((o: any) => o.urn === selectedLinkedInOrg);
+                    if (orgData) {
+                        const orgStats = orgData.data || {};
+                        if (demoCategory === 'country') {
+                            const rawGeo = orgStats.followerGeography || {};
+                            const normalizedGeo: Record<string, number> = {};
+                            Object.entries(rawGeo).forEach(([k, v]) => {
+                                const code = k.startsWith('urn:li:country:') ? k.replace('urn:li:country:', '').toUpperCase() : k;
+                                normalizedGeo[code] = Number(v) || 0;
+                            });
+                            sourceData = normalizedGeo;
+                        } else if (demoCategory === 'industry') {
+                            sourceData = orgStats.followerIndustry || {};
+                        } else if (demoCategory === 'seniority') {
+                            sourceData = orgStats.followerSeniority || {};
+                        } else if (demoCategory === 'function') {
+                            sourceData = orgStats.followerFunction || {};
+                        } else {
+                            sourceData = pDemo[demoCategory] || {};
+                        }
+                    } else {
+                        sourceData = pDemo[demoCategory] || {};
+                    }
+                } else {
+                    sourceData = pDemo[demoCategory] || {};
+                }
             }
         } else if (demoPlatform === 'ALL') {
             if (demoCategory === 'country') sourceData = data?.followerCountry || {};
@@ -164,12 +191,34 @@ export default function ReportsPage() {
                 if (demoCategory === 'age' && key.startsWith('age')) {
                     label = key.replace('age', '');
                 }
-                return { key, label, val: Number(val) || 0 };
+                return { key, label, val: demoPlatform === 'all' ? (Math.floor(Number(val)) || 0) : (Number(val) || 0) };
             })
             .sort((a, b) => b.val - a.val);
 
         return { rows, total };
-    }, [data, demoCategory, demoPlatform]);
+    }, [data, demoCategory, demoPlatform, selectedLinkedInOrg]);
+
+    const filteredPlatformBreakdown = useMemo(() => {
+        if (!data?.platformBreakdown) return [];
+        return data.platformBreakdown.map(p => {
+            if (p.platform === 'LINKEDIN' && selectedLinkedInOrg !== 'all') {
+                const orgData = (data as any)?.platformDemographics?.linkedin?.organizations?.find((o: any) => o.urn === selectedLinkedInOrg);
+                if (orgData) {
+                    return {
+                        ...p,
+                        followers: orgData.data?.followerCounts?.total || 0,
+                        likes: orgData.projectEngagement?.likes || 0,
+                        comments: orgData.projectEngagement?.comments || 0,
+                        posts: orgData.projectEngagement?.posts || 0,
+                        reach: orgData.projectEngagement?.reach || 0,
+                        impressions: orgData.projectEngagement?.impressions || 0,
+                        engagement: (orgData.projectEngagement?.likes || 0) + (orgData.projectEngagement?.comments || 0)
+                    };
+                }
+            }
+            return p;
+        });
+    }, [data, selectedLinkedInOrg]);
 
     const campaignStats = useMemo(() => {
         if (!postData?.campaignMetrics) return [];
@@ -286,6 +335,7 @@ export default function ReportsPage() {
             const params = new URLSearchParams();
             if (campaignId !== 'all') params.append('campaignId', campaignId);
             if (platform !== 'all') params.append('platform', platform);
+            if (platform === 'LINKEDIN' && selectedLinkedInOrg !== 'all') params.append('accountId', selectedLinkedInOrg);
             params.append('page', page.toString());
             params.append('limit', itemsPerPage.toString());
             params.append('sortBy', sortBy);
@@ -322,7 +372,7 @@ export default function ReportsPage() {
 
     useEffect(() => {
         fetchPostPerformance(1);
-    }, [campaignId, platform, sortBy, sortOrder]);
+    }, [campaignId, platform, sortBy, sortOrder, selectedLinkedInOrg]);
 
     const paginatedPosts = postData?.posts || [];
     const totalPages = postData?.totalPages || 0;
@@ -420,7 +470,7 @@ export default function ReportsPage() {
 
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             {[
-                                { label: 'Top Platform', val: data?.platformBreakdown[0]?.platform || 'N/A', icon: Globe, color: 'text-indigo-500' },
+                                { label: 'Top Platform', val: filteredPlatformBreakdown[0]?.platform || 'N/A', icon: Globe, color: 'text-indigo-500' },
                                 { label: 'Avg Efficiency', val: '8.4%', icon: TrendingUp, color: 'text-emerald-500' },
                                 { label: 'Peak Growth', val: '+12%', icon: Users, color: 'text-blue-500' },
                                 { label: 'Sync Status', val: 'Active', icon: Clock, color: 'text-amber-500' }
@@ -436,6 +486,29 @@ export default function ReportsPage() {
                         </div>
                     </div>
 
+                    {/* LinkedIn Organization Selector */}
+                    {/* {(data as any)?.platformDemographics?.linkedin?.organizations?.length > 1 && (
+                        <div className="flex items-center gap-4 p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-slate-100 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
+                            <div className="flex items-center gap-2 text-slate-600 font-bold text-sm">
+                                <Users className="size-4" />
+                                LinkedIn Focus:
+                            </div>
+                            <Select value={selectedLinkedInOrg} onValueChange={setSelectedLinkedInOrg}>
+                                <SelectTrigger className="w-[280px] h-10 rounded-xl bg-white border-slate-200">
+                                    <SelectValue placeholder="Select Organization" />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-xl border-slate-100">
+                                    <SelectItem value="all">All LinkedIn (Aggregate)</SelectItem>
+                                    {(data as any).platformDemographics.linkedin.organizations.map((org: any) => (
+                                        <SelectItem key={org.urn} value={org.urn}>
+                                            {org.name || (org.isDefault ? 'Personal Account' : 'Other Organization')}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )} */}
+
                     <div className="grid gap-8">
                         {/* Platform Distribution Card - Full Width */}
                         <Card className="rounded-3xl border-md shadow-md bg-white/80  backdrop-blur-md">
@@ -449,7 +522,7 @@ export default function ReportsPage() {
                                 {data.platformBreakdown.length > 0 ? (
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart
-                                            data={data.platformBreakdown}
+                                            data={filteredPlatformBreakdown}
                                             margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
                                         >
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
@@ -467,7 +540,7 @@ export default function ReportsPage() {
                                             />
                                             <Legend verticalAlign="top" align="right" wrapperStyle={{ paddingBottom: '20px' }} />
                                             <Bar dataKey="followers" name="Audience (Followers)" radius={[6, 6, 0, 0]}>
-                                                {data.platformBreakdown.map((entry, index) => (
+                                                {filteredPlatformBreakdown.map((entry, index) => (
                                                     <Cell
                                                         key={`cell-aud-${index}`}
                                                         fill={PLATFORM_COLORS[entry.platform]}
@@ -476,7 +549,7 @@ export default function ReportsPage() {
                                                 ))}
                                             </Bar>
                                             <Bar dataKey="engagement" name="Engagement (Interactions)" radius={[6, 6, 0, 0]}>
-                                                {data.platformBreakdown.map((entry, index) => (
+                                                {filteredPlatformBreakdown.map((entry, index) => (
                                                     <Cell
                                                         key={`cell-eng-${index}`}
                                                         fill={PLATFORM_COLORS[entry.platform]}
@@ -496,7 +569,7 @@ export default function ReportsPage() {
 
                         {/* Platform Wise Detail Cards */}
                         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                            {data.platformBreakdown.map((platform) => (
+                            {filteredPlatformBreakdown.map((platform) => (
                                 <Card key={platform.platform} className="rounded-3xl border-md shadow-md bg-white/90  overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
                                     <CardHeader className="p-6 pb-2" style={{ backgroundColor: `${PLATFORM_COLORS[platform.platform]}10` }}>
                                         <div className="flex items-center justify-between">
@@ -504,7 +577,23 @@ export default function ReportsPage() {
                                                 <div className="size-3 rounded-full" style={{ backgroundColor: PLATFORM_COLORS[platform.platform] }} />
                                                 {platform.platform}
                                             </CardTitle>
-                                            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest border-slate-200">Live</Badge>
+                                            {platform.platform === 'LINKEDIN' && (data as any)?.platformDemographics?.linkedin?.organizations?.length > 1 ? (
+                                                <Select value={selectedLinkedInOrg} onValueChange={setSelectedLinkedInOrg}>
+                                                    <SelectTrigger className="w-[120px] h-7 text-[9px] font-bold rounded-lg bg-white/80 border-slate-200 uppercase tracking-tighter">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="rounded-xl border-slate-100">
+                                                        <SelectItem value="all" className="text-[10px]">Aggregate</SelectItem>
+                                                        {(data as any).platformDemographics.linkedin.organizations.map((org: any) => (
+                                                            <SelectItem key={org.urn} value={org.urn} className="text-[10px]">
+                                                                {org.name || (org.isDefault ? 'Personal' : 'Org')}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            ) : (
+                                                <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest border-slate-200">Live</Badge>
+                                            )}
                                         </div>
                                     </CardHeader>
                                     <CardContent className="p-6 space-y-4">
@@ -809,7 +898,7 @@ export default function ReportsPage() {
                                     ].map((stat, i) => (
                                         <Tooltip key={i} delayDuration={0}>
                                             <TooltipTrigger asChild>
-                                                <Card className="rounded-3xl border-md shadow-md bg-white border-l-4 overflow-hidden cursor-help transition-all hover:shadow-lg" style={{ borderLeftColor: i === 0 ? '#3b82f6' : i === 1 ? '#10b981' : i === 2 ? '#f59e0b' : '#6366f1' }}>
+                                                <Card className="rounded-3xl border-md shadow-md bg-white border-l-4 overflow-hidden cursor-pointer transition-all hover:shadow-lg" style={{ borderLeftColor: i === 0 ? '#3b82f6' : i === 1 ? '#10b981' : i === 2 ? '#f59e0b' : '#6366f1' }}>
                                                     <CardHeader className="pb-2">
                                                         <div className="flex items-center justify-between">
                                                             <stat.icon className={`size-5 ${stat.color}`} />
@@ -1520,14 +1609,16 @@ export default function ReportsPage() {
                                     </div>
                                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                                         <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 w-full sm:w-auto overflow-x-auto no-scrollbar">
-                                            {['ALL', 'INSTAGRAM', 'YOUTUBE', 'PINTEREST'].map((p) => (
+                                            {['ALL', 'LINKEDIN', 'INSTAGRAM', 'YOUTUBE', 'PINTEREST'].map((p) => (
                                                 <button
                                                     key={p}
                                                     onClick={() => {
                                                         setDemoPlatform(p);
-                                                        if (p !== 'YOUTUBE' && demoCategory === 'trafficSources') {
-                                                            setDemoCategory('country');
-                                                        }
+                                                        // Fallback logic for categories not supported by the new platform
+                                                        if (p === 'YOUTUBE' && demoCategory === 'industry') setDemoCategory('country');
+                                                        if (p !== 'YOUTUBE' && demoCategory === 'trafficSources') setDemoCategory('country');
+                                                        if (p !== 'PINTEREST' && (demoCategory === 'interests' || demoCategory === 'devices')) setDemoCategory('country');
+                                                        if (p !== 'LINKEDIN' && (demoCategory === 'industry' || demoCategory === 'seniority' || demoCategory === 'function')) setDemoCategory('country');
                                                     }}
                                                     className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${demoPlatform === p ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-900'}`}
                                                 >
@@ -1536,10 +1627,15 @@ export default function ReportsPage() {
                                             ))}
                                         </div>
                                         <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 w-full sm:w-auto overflow-x-auto no-scrollbar">
-                                            {(['country', 'city', 'gender', 'age', 'trafficSources', 'interests', 'devices'] as const).filter(c =>
+                                            {(['country', 'city', 'gender', 'age', 'trafficSources', 'interests', 'devices', 'industry', 'seniority', 'function'] as const).filter(c =>
                                                 (c !== 'trafficSources' || demoPlatform === 'YOUTUBE') &&
                                                 (c !== 'interests' || demoPlatform === 'PINTEREST') &&
-                                                (c !== 'devices' || demoPlatform === 'PINTEREST')
+                                                (c !== 'devices' || demoPlatform === 'PINTEREST') &&
+                                                (c !== 'industry' || demoPlatform === 'LINKEDIN') &&
+                                                (c !== 'seniority' || demoPlatform === 'LINKEDIN') &&
+                                                (c !== 'function' || demoPlatform === 'LINKEDIN') &&
+                                                // General fallbacks: LinkedIn doesn't have age/gender in this API
+                                                (demoPlatform !== 'LINKEDIN' || (c !== 'gender' && c !== 'age' && c !== 'city'))
                                             ).map((cat: any) => (
                                                 <button
                                                     key={cat}
@@ -1559,9 +1655,11 @@ export default function ReportsPage() {
                                         <TableHeader>
                                             <TableRow className="bg-slate-50/50 border-none">
                                                 <TableHead className="px-8 py-5 text-slate-500 font-bold uppercase text-[10px] tracking-widest block w-full">{demoCategory} Name</TableHead>
-                                                <TableHead className="py-5 text-right text-slate-500 font-bold uppercase text-[10px] tracking-widest">
-                                                    {demoPlatform === 'YOUTUBE' ? 'Subscribers' : demoPlatform === 'PINTEREST' ? 'Rate' : 'Followers'}
-                                                </TableHead>
+                                                {demoPlatform !== 'PINTEREST' && (
+                                                    <TableHead className="py-5 text-right text-slate-500 font-bold uppercase text-[10px] tracking-widest">
+                                                        {demoPlatform === 'YOUTUBE' ? 'Subscribers' : 'Followers'}
+                                                    </TableHead>
+                                                )}
                                                 <TableHead className="px-8 py-5 text-right text-slate-500 font-bold uppercase text-[10px] tracking-widest">Share</TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -1572,7 +1670,7 @@ export default function ReportsPage() {
                                                 if (rows.length === 0) {
                                                     return (
                                                         <TableRow>
-                                                            <TableCell colSpan={3} className="h-40 text-center text-slate-400 font-medium">
+                                                            <TableCell colSpan={demoPlatform === 'PINTEREST' ? 2 : 3} className="h-40 text-center text-slate-400 font-medium">
                                                                 <div className="flex flex-col items-center gap-2">
                                                                     <span>Not enough reach to generate demographic data yet.</span>
                                                                     <span className="text-xs opacity-70">Continue growing your audience to unlock this insight.</span>
@@ -1590,9 +1688,11 @@ export default function ReportsPage() {
                                                                 {row.label}
                                                             </div>
                                                         </TableCell>
-                                                        <TableCell className="text-right font-mono text-xs font-bold">
-                                                            {row.val.toLocaleString()}
-                                                        </TableCell>
+                                                        {demoPlatform !== 'PINTEREST' && (
+                                                            <TableCell className="text-right font-mono text-xs font-bold">
+                                                                {row.val < 1 ? 0 : row.val.toLocaleString()}
+                                                            </TableCell>
+                                                        )}
                                                         <TableCell className="px-8 text-right">
                                                             <Badge variant="secondary" className="font-mono text-[10px]">
                                                                 {total > 0 ? ((row.val / total) * 100).toFixed(1) : 0}%
@@ -1620,10 +1720,23 @@ export default function ReportsPage() {
                                 <div className="w-full flex-col overflow-y-auto" >
                                     {(() => {
                                         const { rows } = demoSourceData;
+                                        if (rows.length === 0) {
+                                            return (
+                                                <div className="h-[300px] flex flex-col items-center justify-center text-center space-y-4">
+                                                    <div className="size-16 rounded-full bg-white/10 flex items-center justify-center">
+                                                        <BarChart3 className="size-8 text-white/40" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-white">Not enough data</p>
+                                                        <p className="text-[10px] text-white/50 uppercase tracking-widest">To build a visual breakdown</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
                                         const chartData = rows.map(r => ({ name: r.label, value: r.val }));
 
                                         // Render Bar Charts for Country, City, Age, Traffic Sources, and Interests
-                                        if (['country', 'city', 'age', 'trafficSources', 'interests'].includes(demoCategory)) {
+                                        if (['country', 'city', 'age', 'trafficSources', 'interests', 'industry', 'seniority', 'function'].includes(demoCategory)) {
                                             const dynamicHeight = Math.max(300, chartData.length * 50);
                                             return (
                                                 <div style={{ height: dynamicHeight, overflow: "hidden" }}>

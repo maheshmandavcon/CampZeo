@@ -164,6 +164,13 @@ export async function PUT(
             };
         }
 
+        if (type === 'LINKEDIN') {
+            metadata = {
+                ...metadata,
+                linkedInUrn: body.linkedInUrn || metadata.linkedInUrn
+            };
+        }
+
         if (scheduledPostTime) {
             const scheduledDate = new Date(scheduledPostTime);
             if (scheduledDate < campaign.startDate || scheduledDate > campaign.endDate) {
