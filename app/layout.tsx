@@ -59,6 +59,7 @@ export default function RootLayout({
         <ClerkProvider
           signInFallbackRedirectUrl="/onboarding"
           signUpFallbackRedirectUrl="/onboarding"
+          dynamic
         >
           {children}
           <Toaster />

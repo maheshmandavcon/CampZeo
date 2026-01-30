@@ -158,8 +158,13 @@ export async function postToPinterest(
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(`Pinterest API error: ${JSON.stringify(error)}`);
+            let errorData: any = { message: 'Unknown error' };
+            try {
+                errorData = await response.json();
+            } catch (e) {
+                errorData = { message: await response.text() };
+            }
+            throw new Error(`Pinterest API error: ${JSON.stringify(errorData)}`);
         }
 
         const data = await response.json();
@@ -463,8 +468,13 @@ export async function getPinterestAdAccounts(accessToken: string) {
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            console.warn(`[Pinterest] Failed to fetch ad accounts: ${JSON.stringify(error)}`);
+            let errorData: any = { message: 'Unknown error' };
+            try {
+                errorData = await response.json();
+            } catch (e) {
+                errorData = { message: await response.text() };
+            }
+            console.warn(`[Pinterest] Failed to fetch ad accounts: ${JSON.stringify(errorData)}`);
             return [];
         }
 
@@ -605,12 +615,14 @@ export async function getPinterestAudienceInsights(
     // Store raw API responses for debugging
     const _rawResponses: any[] = [];
     const capture = async (res: Response, label: string) => {
+        const clone = res.clone();
         try {
-            const clone = res.clone();
             const data = await clone.json();
             _rawResponses.push({ label, url: res.url, status: res.status, data });
         } catch (e) {
-            _rawResponses.push({ label, url: res.url, status: res.status, error: 'Failed to parse JSON' });
+            const text = await res.clone().text();
+            console.warn(`[Pinterest] ⚠️ Failed to parse JSON from ${label}:`, text.substring(0, 500));
+            _rawResponses.push({ label, url: res.url, status: res.status, error: 'Failed to parse JSON', rawBody: text });
         }
     };
 
@@ -622,8 +634,8 @@ export async function getPinterestAudienceInsights(
         });
 
         if (userResponse.ok) {
+            await capture(userResponse.clone(), 'user_account');
             const userData = await userResponse.json();
-            await capture(userResponse.clone(), 'user_account'); // Using clone because json() might have been consumed if we weren't careful, but capture does it correctly too.
             totalFollowers = userData.follower_count || 0;
             console.log(`[Pinterest] ✅ Follower count: ${totalFollowers}`);
         } else {
@@ -634,95 +646,125 @@ export async function getPinterestAudienceInsights(
         console.error('[Pinterest] ❌ Exception in user account fetch:', error);
     }
 
-    // STEP 2: Fetch ad accounts (needed for demographics)
-    let adAccounts: any[] = [];
+    // STEP 2: Fetch Audience Insights (Using Ad Account specific endpoint for better demographics)
     try {
-        console.log('[Pinterest] 🏢 Fetching ad accounts...');
-        adAccounts = await getPinterestAdAccounts(accessToken);
-        console.log(`[Pinterest] Found ${adAccounts.length} ad account(s)`);
+        console.log('[Pinterest] 📉 Fetching audience analytics via ad accounts...');
 
-        if (adAccounts.length === 0) {
-            console.warn('[Pinterest] ⚠️ No ad accounts - demographics unavailable');
+        const adAccRes = await fetch('https://api.pinterest.com/v5/ad_accounts', {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        await capture(adAccRes, 'ad_accounts_list');
+
+        if (adAccRes.ok) {
+            const adAccData = await adAccRes.json();
+            const adAccounts = adAccData.items || [];
+
+            if (adAccounts.length > 0) {
+                for (const account of adAccounts) {
+                    console.log(`[Pinterest] Fetching insights for ad account: ${account.id}`);
+
+                    const params = new URLSearchParams({
+                        audience_insight_type: 'YOUR_TOTAL_AUDIENCE'
+                    });
+
+                    const insightsResponse = await fetch(`https://api.pinterest.com/v5/ad_accounts/${account.id}/audience_insights?${params}`, {
+                        headers: { 'Authorization': `Bearer ${accessToken}` },
+                    });
+
+                    // Capture regardless of OK
+                    await capture(insightsResponse, `audience_insights_${account.id}`);
+
+                    if (insightsResponse.ok) {
+                        const data = await insightsResponse.clone().json();
+
+                        // Parse Data and merge if multi-account (though usually one primary)
+                        if (data.categories && Array.isArray(data.categories)) {
+                            data.categories.forEach((cat: any) => {
+                                const key = cat.name || cat.key || 'Unknown';
+                                const ratio = cat.ratio || cat.percentage || 0;
+                                categories[key] = Math.max(categories[key] || 0, ratio);
+                            });
+                        }
+
+                        if (data.demographics) {
+                            const normalizeMetric = (source: any) => {
+                                const target: Record<string, number> = {};
+                                if (Array.isArray(source)) {
+                                    source.forEach((item: any) => {
+                                        const k = item.name || item.key;
+                                        const v = item.ratio || item.percentage || 0;
+                                        if (k) target[k] = v;
+                                    });
+                                }
+                                return target;
+                            };
+
+                            const merge = (target: any, source: any) => {
+                                if (!source) return;
+                                Object.entries(normalizeMetric(source)).forEach(([k, v]) => {
+                                    target[k] = Math.max(target[k] || 0, v);
+                                });
+                            };
+
+                            merge(demographics.ages, data.demographics.ages || data.demographics.age);
+                            merge(demographics.genders, data.demographics.genders || data.demographics.gender);
+                            merge(demographics.locations, data.demographics.countries || demographics.locations);
+
+                            if (data.demographics.metros) {
+                                const metros = normalizeMetric(data.demographics.metros);
+                                Object.entries(metros).forEach(([k, v]) => {
+                                    (demographics as any).cities = (demographics as any).cities || {};
+                                    (demographics as any).cities[k] = Math.max((demographics as any).cities[k] || 0, v);
+                                });
+                            }
+
+                            merge(demographics.devices, data.demographics.devices || data.demographics.device);
+                        }
+                    } else {
+                        const errorText = await insightsResponse.text();
+                        console.warn(`[Pinterest] ⚠️ Audience insights failed for account ${account.id} (${insightsResponse.status}):`, errorText);
+                        if (insightsResponse.status === 403 || insightsResponse.status === 400) {
+                            console.warn('[Pinterest] Potential Scope (ads:read) issue or Privacy Threshold reached.');
+                        }
+                    }
+                }
+            } else {
+                console.log('[Pinterest] ⚠️ No ad accounts found in list.');
+            }
+        }
+
+        // Fallback or secondary check
+        console.log('[Pinterest] 📉 Fetching general audience/overview fallback...');
+        const fallbackRes = await fetch('https://api.pinterest.com/v5/analytics/audience/overview', {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        await capture(fallbackRes, 'audience_insights_overview_fallback');
+
+        if (fallbackRes.ok) {
+            const data = await fallbackRes.json();
+            if (data.demographics) {
+                const normalizeMetric = (source: any) => {
+                    const target: Record<string, number> = {};
+                    if (Array.isArray(source)) {
+                        source.forEach((item: any) => {
+                            const k = item.name || item.key;
+                            const v = item.ratio || item.percentage || 0;
+                            if (k) target[k] = v;
+                        });
+                    }
+                    return target;
+                };
+                Object.assign(demographics.ages, normalizeMetric(data.demographics.ages || data.demographics.age));
+                Object.assign(demographics.genders, normalizeMetric(data.demographics.genders || data.demographics.gender));
+                Object.assign(demographics.locations, normalizeMetric(data.demographics.countries || data.demographics.locations));
+
+                if (data.demographics.metros) {
+                    (demographics as any).cities = normalizeMetric(data.demographics.metros);
+                }
+            }
         }
     } catch (error) {
-        console.error('[Pinterest] ❌ Exception fetching ad accounts:', error);
-    }
-
-    // STEP 3: Fetch audience insights (optional demographics)
-    if (adAccounts.length > 0) {
-        try {
-            const adAccountId = adAccounts[0].id;
-            console.log(`[Pinterest] 📈 Fetching insights for account: ${adAccountId}`);
-
-            const params = new URLSearchParams({
-                audience_insight_type: 'YOUR_TOTAL_AUDIENCE'
-            });
-
-            const insightsResponse = await fetch(
-                `https://api.pinterest.com/v5/ad_accounts/${adAccountId}/audience_insights?${params}`,
-                {
-                    headers: { 'Authorization': `Bearer ${accessToken}` },
-                }
-            );
-
-            if (insightsResponse.ok) {
-                const data = await insightsResponse.json();
-                await capture(insightsResponse, 'audience_insights');
-
-                // Pinterest API returns demographics as arrays with {key, name, ratio}
-                // Convert to our expected format: Record<string, number>
-
-                // Categories (if present)
-                if (data.categories && Array.isArray(data.categories)) {
-                    categories = data.categories.reduce((acc: Record<string, number>, cat: any) => {
-                        acc[cat.name || cat.key] = cat.ratio || 0;
-                        return acc;
-                    }, {});
-                }
-
-                // Demographics
-                if (data.demographics) {
-                    // Ages: [{key: "18-24", name: "18-24", ratio: 0.259}, ...]
-                    if (Array.isArray(data.demographics.ages)) {
-                        demographics.ages = data.demographics.ages.reduce((acc: Record<string, number>, age: any) => {
-                            acc[age.key || age.name] = age.ratio || 0;
-                            return acc;
-                        }, {});
-                    }
-
-                    // Genders: [{key: "Female", name: "Female", ratio: 0.68}, ...]
-                    if (Array.isArray(data.demographics.genders)) {
-                        demographics.genders = data.demographics.genders.reduce((acc: Record<string, number>, gender: any) => {
-                            acc[gender.key || gender.name] = gender.ratio || 0;
-                            return acc;
-                        }, {});
-                    }
-
-                    // Countries: [{key: "us", name: "United States", ratio: 0.666}, ...]
-                    if (Array.isArray(data.demographics.countries)) {
-                        demographics.locations = data.demographics.countries.reduce((acc: Record<string, number>, country: any) => {
-                            acc[country.key || country.name] = country.ratio || 0;
-                            return acc;
-                        }, {});
-                    }
-
-                    // Devices: [{key: "IPHONE", name: "iPhone", ratio: 0.61}, ...]
-                    if (Array.isArray(data.demographics.devices)) {
-                        demographics.devices = data.demographics.devices.reduce((acc: Record<string, number>, device: any) => {
-                            acc[device.key || device.name] = device.ratio || 0;
-                            return acc;
-                        }, {});
-                    }
-                }
-
-                console.log('[Pinterest] ✅ Demographics fetched and parsed successfully');
-            } else {
-                const errorText = await insightsResponse.text();
-                console.warn(`[Pinterest] ⚠️ Insights fetch failed (${insightsResponse.status}):`, errorText);
-            }
-        } catch (error) {
-            console.error('[Pinterest] ❌ Exception fetching insights:', error);
-        }
+        console.error('[Pinterest] ❌ Exception fetching audience analytics:', error);
     }
 
     // FINAL: Return all collected data including raw responses
@@ -737,4 +779,82 @@ export async function getPinterestAudienceInsights(
 
     return result;
 }
+
+/**
+ * Pinterest Asynchronous Reporting for Organic Demographics
+ */
+export async function getPinterestOrganicDemographicReport(
+    accessToken: string,
+    adAccountId: string,
+    targetingTypes: ('AGE_BUCKET' | 'GENDER' | 'LOCATION' | 'DEVICE')[] = ['AGE_BUCKET', 'GENDER', 'LOCATION']
+) {
+    const endDate = new Date().toISOString().split('T')[0];
+    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    try {
+        console.log(`[Pinterest] 📊 Starting Organic Report for Account ${adAccountId}...`);
+
+        // 1. Create Report
+        const createRes = await fetch(`https://api.pinterest.com/v5/ad_accounts/${adAccountId}/reports`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                start_date: startDate,
+                end_date: endDate,
+                columns: ['IMPRESSION', 'CLICKTHROUGH', 'SAVE', 'PIN_CLICK'],
+                targeting_types: targetingTypes,
+                content_type: 'ORGANIC', // AS REQUESTED: Exclude ad data
+                granularity: 'TOTAL'
+            })
+        });
+
+        if (!createRes.ok) {
+            const error = await createRes.json();
+            throw new Error(`Failed to create Pinterest report: ${JSON.stringify(error)}`);
+        }
+
+        const { token } = await createRes.json();
+        console.log(`[Pinterest] Report token received: ${token}. Polling...`);
+
+        // 2. Poll for Status (Wait max ~30 seconds)
+        let status = 'IN_PROGRESS';
+        let reportUrl = '';
+        let attempts = 0;
+
+        while (status !== 'FINISHED' && status !== 'FAILED' && attempts < 10) {
+            await new Promise(r => setTimeout(r, 3000));
+            attempts++;
+
+            const statusRes = await fetch(`https://api.pinterest.com/v5/ad_accounts/${adAccountId}/reports?token=${token}`, {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+
+            if (statusRes.ok) {
+                const data = await statusRes.json();
+                status = data.report_status;
+                reportUrl = data.url;
+                console.log(`[Pinterest] Report status (Attempt ${attempts}): ${status}`);
+            }
+        }
+
+        if (status === 'FINISHED' && reportUrl) {
+            console.log(`[Pinterest] Report finished. Downloading from: ${reportUrl}`);
+            const reportDataRes = await fetch(reportUrl);
+            if (reportDataRes.ok) {
+                return await reportDataRes.json();
+            }
+        }
+
+        console.warn(`[Pinterest] Report failed or timed out. Status: ${status}`);
+        return null;
+
+    } catch (error) {
+        console.error('[Pinterest] Report Error:', error);
+        return null;
+    }
+}
+
 

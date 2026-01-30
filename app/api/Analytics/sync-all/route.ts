@@ -136,6 +136,7 @@ export async function GET(request: NextRequest) {
                     reach: insight.reach,
                     impressions: insight.impressions,
                     engagementRate: insight.engagementRate,
+                    isDeleted: insight.isDeleted,
                     lastUpdated: insight.lastUpdated
                 } : null
             };
@@ -155,6 +156,7 @@ export async function GET(request: NextRequest) {
                     reach: insight.reach,
                     impressions: insight.impressions,
                     engagementRate: insight.engagementRate,
+                    isDeleted: insight.isDeleted,
                     lastUpdated: insight.lastUpdated
                 } : null
             };

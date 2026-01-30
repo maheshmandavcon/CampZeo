@@ -140,7 +140,9 @@ export function OrganisationLayoutWrapper({
           </Button>
           <NotificationBell />
           <SignedIn>
-            <UserButton />
+            <div suppressHydrationWarning>
+              <UserButton />
+            </div>
           </SignedIn>
         </div>
       </header>
@@ -165,7 +167,7 @@ export function OrganisationLayoutWrapper({
         </main>
 
       </div>
-      <footer className="flex-shrink-0 border-t bg-background p-4 text-center text-sm text-muted-foreground">
+      <footer className="flex-shrink-0 border-t bg-background p-4 text-center text-sm text-muted-foreground" suppressHydrationWarning>
         &copy; {new Date().getFullYear()} CampZeo. All rights reserved.
       </footer>
     </div>

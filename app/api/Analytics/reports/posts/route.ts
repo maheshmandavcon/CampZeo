@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
 import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
+import { AudienceNormalizerService } from "@/lib/audience-normalizer";
 
 export async function GET(req: NextRequest) {
     try {
@@ -28,109 +29,69 @@ export async function GET(req: NextRequest) {
         const platform = searchParams.get('platform');
         const page = parseInt(searchParams.get('page') || '1');
         const limit = parseInt(searchParams.get('limit') || '5');
-        const skip = (page - 1) * limit;
+        const sortBy = searchParams.get('sortBy') || 'publishedAt'; // 'publishedAt', 'likes', 'reach', 'engagement'
+        const sortOrder = searchParams.get('sortOrder') || 'desc';   // 'asc', 'desc'
 
-        // 1. Fetch campaigns for filter dropdown
+        // 1. Fetch campaigns for filter dropdown (including deleted ones)
         const campaigns = await prisma.campaign.findMany({
-            where: { organisationId: orgId, isDeleted: false },
-            select: { id: true, name: true }
+            where: { organisationId: orgId },
+            select: { id: true, name: true, isDeleted: true }
         });
 
-        // 2. Optimized Fetching: Fetch campaign post IDs for the organization
-        const activeCampaignPostIds = await prisma.campaignPost.findMany({
+        // 2. Fetch ALL potential transactions first (Filtered by Campaign/Platform) used for stats & list
+        // We do this to allow accurate sorting by Engagement which lives in a different table
+
+        // Get Campaign Post IDs first (Filter by Campaign)
+        const campaignPostQuery = {
             where: {
-                isDeleted: false,
                 ...(campaignId && campaignId !== 'all' ? { campaignId: parseInt(campaignId) } : { campaign: { organisationId: orgId } })
             },
-            select: { id: true }
-        }).then(posts => posts.map(p => p.id));
-
-        // 3. Fetch paginated transactions for these posts
-        const transactions = await prisma.postTransaction.findMany({
-            where: {
-                published: true,
-                ...(platform && platform !== 'all' ? { platform } : {}),
-                refId: { in: activeCampaignPostIds }
-            },
-            orderBy: { publishedAt: 'desc' },
-            take: limit,
-            skip: skip
-        });
-
-        // Get total count for pagination
-        const totalCount = await prisma.postTransaction.count({
-            where: {
-                published: true,
-                ...(platform && platform !== 'all' ? { platform } : {}),
-                refId: { in: activeCampaignPostIds }
-            }
-        });
-
-        // 4. Fetch related details for the current page
-        const platformPostIds = transactions.map(t => t.postId);
-        const transactionRefIds = transactions.map(t => t.refId);
-
-        const [insights, detailedCampaignPosts] = await Promise.all([
-            prisma.postInsight.findMany({
-                where: { postId: { in: platformPostIds }, isDeleted: false }
-            }),
-            prisma.campaignPost.findMany({
-                where: { id: { in: transactionRefIds } },
-                include: { campaign: true }
-            })
-        ]);
-
-        // 5. Fetch Aggregate Stats (Always for the filtered context, not just current page)
-        // For performance in reporting, we might want to aggregate all insights linked to the organization's posts
-        const allTransactionsForStats = await prisma.postTransaction.findMany({
-            where: {
-                published: true,
-                ...(platform && platform !== 'all' ? { platform } : {}),
-                refId: { in: activeCampaignPostIds }
-            },
-            select: { postId: true }
-        });
-        const allPlatformPostIds = allTransactionsForStats.map(t => t.postId);
-
-        const aggregateInsights = await prisma.postInsight.aggregate({
-            where: {
-                postId: { in: allPlatformPostIds },
-                isDeleted: false
-            },
-            _sum: {
-                likes: true,
-                comments: true,
-                reach: true,
-                impressions: true,
-                saves: true,
-                shares: true,
-                videoViews: true
-            }
-        });
-
-        const totalStats = {
-            likes: aggregateInsights._sum.likes || 0,
-            comments: aggregateInsights._sum.comments || 0,
-            reach: aggregateInsights._sum.reach || 0,
-            impressions: aggregateInsights._sum.impressions || 0,
-            saves: aggregateInsights._sum.saves || 0,
-            shares: aggregateInsights._sum.shares || 0,
-            videoViews: aggregateInsights._sum.videoViews || 0
+            select: { id: true, campaignId: true } // Need campaignId for mapping later
         };
+        const matchingCampaignPosts = await prisma.campaignPost.findMany(campaignPostQuery);
+        const refIds = matchingCampaignPosts.map(p => p.id);
 
-        // 6. Map data for frontend
-        const posts = transactions.map(t => {
-            const insight = insights.find(i => i.postId === t.postId);
-            const campaignPost = detailedCampaignPosts.find(cp => cp.id === t.refId);
+        // Get Transactions (Filter by Platform) using the refIds
+        const allTransactions = await prisma.postTransaction.findMany({
+            where: {
+                published: true,
+                ...(platform && platform !== 'all' ? { platform } : {}),
+                refId: { in: refIds }
+            },
+            select: {
+                id: true,
+                postId: true,
+                refId: true,
+                publishedAt: true,
+                platform: true,
+                message: true,
+                postType: true,
+                mediaUrls: true
+            }
+        });
+
+        // 3. Fetch Insights for ALL these transactions
+        const allPostIds = allTransactions.map(t => t.postId);
+        const allInsights = await prisma.postInsight.findMany({
+            where: { postId: { in: allPostIds } }
+        });
+
+        // 4. Combine Data in Memory
+        let combinedData = allTransactions.map(t => {
+            const insight = allInsights.find(i => i.postId === t.postId);
+            const cp = matchingCampaignPosts.find(c => c.id === t.refId);
+            const campaign = campaigns.find(c => c.id === cp?.campaignId);
+
             return {
                 id: t.id,
                 postId: t.postId,
                 platform: t.platform,
                 message: t.message,
-                subject: campaignPost?.subject || '',
+                subject: '', // Not in transaction schema, assuming handled by UI or joined if needed
                 postType: t.postType,
                 mediaUrls: t.mediaUrls,
-                campaignName: campaignPost?.campaign?.name || 'No Campaign',
+                campaignName: campaign?.name || 'No Campaign',
+                campaignId: cp?.campaignId,
                 likes: insight?.likes || 0,
                 comments: insight?.comments || 0,
                 reach: insight?.reach || 0,
@@ -139,11 +100,78 @@ export async function GET(req: NextRequest) {
                 shares: insight?.shares || 0,
                 videoViews: insight?.videoViews || 0,
                 engagementRate: insight?.engagementRate || 0,
-                publishedAt: t.publishedAt
+                publishedAt: t.publishedAt,
+                isDeleted: campaign?.isDeleted || insight?.isDeleted || false,
+                engagement: (insight?.likes || 0) + (insight?.comments || 0)
             };
         });
 
-        // 7. Fetch Engagement Trends (Daily, last 14 days)
+        // 5. SORTING Logic
+        combinedData.sort((a, b) => {
+            let valA: any = a[sortBy as keyof typeof a];
+            let valB: any = b[sortBy as keyof typeof b];
+
+            if (sortBy === 'publishedAt') {
+                valA = new Date(a.publishedAt || 0).getTime();
+                valB = new Date(b.publishedAt || 0).getTime();
+            }
+
+            if (sortOrder === 'asc') {
+                return valA > valB ? 1 : -1;
+            } else {
+                return valA < valB ? 1 : -1;
+            }
+        });
+
+        // 6. Pagination
+        const totalCount = combinedData.length;
+        const paginatedData = combinedData.slice((page - 1) * limit, page * limit);
+
+
+        // 7. Calculate Aggregates (Total Stats) based on the FULL Filtered List
+        const totalStats = {
+            likes: combinedData.reduce((sum, p) => sum + p.likes, 0),
+            comments: combinedData.reduce((sum, p) => sum + p.comments, 0),
+            reach: combinedData.reduce((sum, p) => sum + p.reach, 0),
+            impressions: combinedData.reduce((sum, p) => sum + p.impressions, 0),
+            saves: combinedData.reduce((sum, p) => sum + p.saves, 0),
+            shares: combinedData.reduce((sum, p) => sum + p.shares, 0),
+            videoViews: combinedData.reduce((sum, p) => sum + p.videoViews, 0)
+        };
+
+        // 8. Calculate Campaign Breakdown Stats
+        // Re-using the logic, but mapped to campaigns
+        const metricsByCampaign = campaigns.map(c => {
+            const campaignPosts = combinedData.filter(p => p.campaignId === c.id);
+            return {
+                id: c.id,
+                name: c.name,
+                likes: campaignPosts.reduce((sum, p) => sum + p.likes, 0),
+                comments: campaignPosts.reduce((sum, p) => sum + p.comments, 0),
+                reach: campaignPosts.reduce((sum, p) => sum + p.reach, 0),
+                impressions: campaignPosts.reduce((sum, p) => sum + p.impressions, 0),
+                engagement: campaignPosts.reduce((sum, p) => sum + p.engagement, 0),
+                isDeleted: c.isDeleted
+            };
+        });
+
+        // Add Unassigned if needed
+        const unassignedPosts = combinedData.filter(p => !p.campaignId);
+        if (unassignedPosts.length > 0) {
+            metricsByCampaign.push({
+                id: 0,
+                name: 'Unassigned',
+                likes: unassignedPosts.reduce((sum, p) => sum + p.likes, 0),
+                comments: unassignedPosts.reduce((sum, p) => sum + p.comments, 0),
+                reach: unassignedPosts.reduce((sum, p) => sum + p.reach, 0),
+                impressions: unassignedPosts.reduce((sum, p) => sum + p.impressions, 0),
+                engagement: unassignedPosts.reduce((sum, p) => sum + p.engagement, 0),
+                isDeleted: false
+            });
+        }
+
+
+        // 9. Trend Data (Keep existing logic, it's efficient enough for 14 days)
         const fourteenDaysAgo = new Date();
         fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
 
@@ -152,8 +180,7 @@ export async function GET(req: NextRequest) {
             where: {
                 organisationId: orgId,
                 metricName: 'engagement_count',
-                postId: { in: allPlatformPostIds }, // ONLY posts sent from our platform
-                ...(platform && platform !== 'all' ? { platform: platform as any } : {}),
+                postId: { in: allPostIds }, // Use all IDs from the filter
                 recordedAt: { gte: fourteenDaysAgo }
             },
             _sum: { value: true },
@@ -165,21 +192,29 @@ export async function GET(req: NextRequest) {
             engagement: t._sum?.value || 0
         }));
 
-        // 8. Get Last Sync Timestamp
+        // 10. Last Sync
         const lastSyncRecord = await prisma.postInsight.findFirst({
             where: { isDeleted: false },
             orderBy: { updatedAt: 'desc' },
             select: { updatedAt: true }
         });
 
+        // 11. Calculate filtered heatmap
+        const activityHeatmap = AudienceNormalizerService.calculateRealHeatmap(
+            allTransactions.map(t => ({ postId: t.postId, publishedAt: t.publishedAt })),
+            allInsights
+        );
+
         return NextResponse.json({
             campaigns,
+            campaignMetrics: metricsByCampaign,
             totalStats,
-            posts,
+            posts: paginatedData,
             trends,
             totalCount,
             totalPages: Math.ceil(totalCount / limit),
-            lastSync: lastSyncRecord?.updatedAt || new Date()
+            lastSync: lastSyncRecord?.updatedAt || new Date(),
+            activityHeatmap
         });
 
     } catch (error) {
