@@ -39,7 +39,8 @@ export default function LandingPage() {
             Start your free 14-day trial today.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button className="cursor-pointer" size="lg" onClick={() => router.push("/sign-up")}>
+            <Button className="cursor-pointer" size="lg" onClick={() => router.push("/coming-soon")}>
+             {/* <Button className="cursor-pointer" size="lg" onClick={() => router.push("/sign-up")}> */}
               Start Free Trial
               <ArrowRight className="ml-2 size-4" />
             </Button>
@@ -279,8 +280,9 @@ export default function LandingPage() {
                 size="lg"
                 variant="outline"
                 className="bg-transparent border-white text-white cursor-pointer hover:bg-white/50 hover:text-red-500 text-base font-semibold h-12 px-8"
-                onClick={() => router.push("/sign-up")}
+                onClick={() => router.push("/coming-soon")}
               >
+                 {/* onClick={() => router.push("/sign-up")} */}
                 Start Free Trial
               </Button>
             </div>
@@ -301,41 +303,41 @@ export default function LandingPage() {
                 The all-in-one platform for modern social media management and analytics. Helping users to measur the impact of their social media campaigns and make data-driven decisions to improve their audience engagement strategy.
               </p>
             </div>
-<div className="grid grid-cols-3 md:grid-cols-3">
+            <div className="grid grid-cols-3 md:grid-cols-3">
 
 
-            {/* Product */}
-            <div>
-              <h3 className="font-semibold text-foreground mb-4">Product</h3>
-              <ul className="space-y-3 text-sm text-muted-foreground">
-                <li><a href="#features" className="hover:text-primary transition-colors">Features</a></li>
-                <li><Link href="/pricing" className="hover:text-primary transition-colors">Pricing</Link></li>
-                <li><Link href="/pricing" className="hover:text-primary transition-colors">Enterprise</Link></li>
-              </ul>
-            </div>
+              {/* Product */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-4">Product</h3>
+                <ul className="space-y-3 text-sm text-muted-foreground">
+                  <li><a href="#features" className="hover:text-primary transition-colors">Features</a></li>
+                  <li><Link href="/pricing" className="hover:text-primary transition-colors">Pricing</Link></li>
+                  <li><Link href="/pricing" className="hover:text-primary transition-colors">Enterprise</Link></li>
+                </ul>
+              </div>
 
-            {/* Resources */}
-            <div>
-              <h3 className="font-semibold text-foreground mb-4">Resources</h3>
-              <ul className="space-y-3 text-sm text-muted-foreground">
-                <li><Link href="#" className="hover:text-primary transition-colors">Blog</Link></li>
-                <li><Link href="#" className="hover:text-primary transition-colors">Documentation</Link></li>
-                <li><Link href="#" className="hover:text-primary transition-colors">Community</Link></li>
-              </ul>
-            </div>
+              {/* Resources */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-4">Resources</h3>
+                <ul className="space-y-3 text-sm text-muted-foreground">
+                  <li><Link href="#" className="hover:text-primary transition-colors">Blog</Link></li>
+                  <li><Link href="#" className="hover:text-primary transition-colors">Documentation</Link></li>
+                  <li><Link href="#" className="hover:text-primary transition-colors">Community</Link></li>
+                </ul>
+              </div>
 
-            {/* Legal */}
-            <div>
-              <h3 className="font-semibold text-foreground mb-4">Legal</h3>
-              <ul className="space-y-3 text-sm text-muted-foreground">
-                <li><Link href="/privacy-policy" className="hover:text-primary transition-colors">Privacy Policy</Link></li>
-                <li><Link href="/terms-of-service" className="hover:text-primary transition-colors">Terms of Service</Link></li>
-                <li><Link href="/cookies" className="hover:text-primary transition-colors">Cookie Policy</Link></li>
-                <li><Link href="/contact" className="hover:text-primary transition-colors">Contact Us</Link></li>
-              </ul>
+              {/* Legal */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-4">Legal</h3>
+                <ul className="space-y-3 text-sm text-muted-foreground">
+                  <li><Link href="/privacy-policy" className="hover:text-primary transition-colors">Privacy Policy</Link></li>
+                  <li><Link href="/terms-of-service" className="hover:text-primary transition-colors">Terms of Service</Link></li>
+                  <li><Link href="/cookies" className="hover:text-primary transition-colors">Cookie Policy</Link></li>
+                  <li><Link href="/contact" className="hover:text-primary transition-colors">Contact Us</Link></li>
+                </ul>
+              </div>
             </div>
           </div>
-</div>
           {/* Bottom Bar */}
           <div className="pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
             <p>© 2025 Campzeo. All rights reserved.</p>

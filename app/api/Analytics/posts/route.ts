@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
         const { searchParams } = new URL(req.url);
         const campaignId = searchParams.get('campaignId');
         const platform = searchParams.get('platform');
+        const page = parseInt(searchParams.get('page') || '1');
+        const limit = parseInt(searchParams.get('limit') || '12');
+        const skip = (page - 1) * limit;
 
         // 1. Fetch campaigns for filter dropdown
         const campaigns = await prisma.campaign.findMany({
@@ -42,7 +45,16 @@ export async function GET(req: NextRequest) {
             select: { id: true }
         }).then(posts => posts.map(p => p.id));
 
-        // Fetch transactions for these posts
+        // Get total count for pagination
+        const totalCount = await prisma.postTransaction.count({
+            where: {
+                published: true,
+                ...(platform ? { platform } : {}),
+                refId: { in: activeCampaignPostIds }
+            }
+        });
+
+        // Fetch transactions for these posts with pagination
         const transactions = await prisma.postTransaction.findMany({
             where: {
                 published: true,
@@ -50,7 +62,8 @@ export async function GET(req: NextRequest) {
                 refId: { in: activeCampaignPostIds }
             },
             orderBy: { publishedAt: 'desc' },
-            take: 200
+            skip,
+            take: limit
         });
 
         // 3. Fetch related details
@@ -59,7 +72,10 @@ export async function GET(req: NextRequest) {
 
         const [insights, detailedCampaignPosts] = await Promise.all([
             prisma.postInsight.findMany({
-                where: { postId: { in: platformPostIds }, isDeleted: false }
+                where: {
+                    postId: { in: platformPostIds }
+                    // Removed isDeleted: false to show historical data for deleted posts
+                }
             }),
             prisma.campaignPost.findMany({
                 where: { id: { in: transactionRefIds } },
@@ -67,14 +83,25 @@ export async function GET(req: NextRequest) {
             })
         ]);
 
-        // Aggregation
-        const totalStats = insights.reduce((acc, curr) => {
+        // Aggregation - Total stats should probably be calculated based on all insights if we want a global view, 
+        // but here it seems it's used for the current view. 
+        // We'll keep it as is (based on current page) or consider if it should be global.
+        // Actually, let's calculate global stats separately to be more useful.
+        const allInsights = await prisma.postInsight.findMany({
+            where: {
+                postId: { in: platformPostIds }
+            }
+        });
+
+        const totalStats = allInsights.reduce((acc, curr) => {
             acc.likes += curr.likes;
             acc.comments += curr.comments;
             acc.reach += curr.reach;
             acc.impressions += curr.impressions;
+            acc.watchTime += curr.watchTime || 0;
+            acc.averageViewDuration += curr.averageViewDuration || 0;
             return acc;
-        }, { likes: 0, comments: 0, reach: 0, impressions: 0 });
+        }, { likes: 0, comments: 0, reach: 0, impressions: 0, watchTime: 0, averageViewDuration: 0 });
 
         // Map insights back to posts for the table
         const posts = transactions.map(t => {
@@ -94,6 +121,8 @@ export async function GET(req: NextRequest) {
                     comments: insight?.comments || 0,
                     reach: insight?.reach || 0,
                     impressions: insight?.impressions || 0,
+                    watchTime: insight?.watchTime || 0,
+                    averageViewDuration: insight?.averageViewDuration || 0,
                     engagementRate: insight?.engagementRate || 0,
                     isDeleted: insight?.isDeleted || false,
                     lastUpdated: insight?.updatedAt?.toISOString() || null
@@ -130,7 +159,6 @@ export async function GET(req: NextRequest) {
 
         // 5. Get Last Sync Timestamp
         const lastSyncRecord = await prisma.postInsight.findFirst({
-            where: { isDeleted: false },
             orderBy: { updatedAt: 'desc' },
             select: { updatedAt: true }
         });
@@ -140,8 +168,8 @@ export async function GET(req: NextRequest) {
             totalStats,
             posts,
             trends,
-            totalCount: posts.length,
-            totalPages: 1,
+            totalCount,
+            totalPages: Math.ceil(totalCount / limit),
             lastSync: lastSyncRecord?.updatedAt || new Date()
         });
 

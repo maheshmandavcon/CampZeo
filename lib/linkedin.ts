@@ -214,6 +214,7 @@ export interface LinkedInPostInsights {
     reach: number;
     engagement: number;
     engagementRate: number;
+    shares?: number;
     isDeleted?: boolean;
     text?: string;
     media?: any[];
@@ -310,10 +311,10 @@ export async function getLinkedInPostInsights(
         // Fetch reach/impressions (statistics)
         let impressions = 0;
         let reach = 0;
+        let shares = 0;
 
         try {
             const authorUrn = postData?.author || '';
-            // Check if author is person or organization
             const isOrg = authorUrn.includes(':organization:');
             let statsUrl = '';
 
@@ -323,6 +324,7 @@ export async function getLinkedInPostInsights(
                 statsUrl = `https://api.linkedin.com/v2/memberShareStatistics?shares=List(${encodedUrn})`;
             }
 
+            console.log(`[LinkedIn] Fetching stats from: ${statsUrl}`);
             const statsResponse = await fetch(statsUrl, {
                 headers: {
                     "Authorization": `Bearer ${accessToken}`,
@@ -333,11 +335,18 @@ export async function getLinkedInPostInsights(
 
             if (statsResponse.ok) {
                 const statsData = await statsResponse.json();
+                console.log(`[LinkedIn] Stats Data for ${urn}:`, JSON.stringify(statsData, null, 2));
                 const element = statsData.elements?.[0];
                 if (element) {
                     impressions = element.totalShareStatistics?.impressionCount || 0;
-                    reach = element.totalShareStatistics?.uniqueImpressionsCount || impressions; // Fallback to impressions if unique is 0
+                    reach = element.totalShareStatistics?.uniqueImpressionsCount || impressions;
+                    shares = element.totalShareStatistics?.shareCount || 0;
+                } else {
+                    console.log(`[LinkedIn] No stats elements found in response for ${urn}`);
                 }
+            } else {
+                const errText = await statsResponse.text();
+                console.warn(`[LinkedIn] Stats API failed for ${urn}: ${statsResponse.status} ${statsResponse.statusText}`, errText);
             }
         } catch (e) {
             console.warn(`[LinkedIn] Could not fetch statistics for ${urn}`, e);
@@ -353,6 +362,7 @@ export async function getLinkedInPostInsights(
             comments,
             impressions,
             reach,
+            shares,
             engagement: totalEngagements,
             engagementRate,
             isDeleted: false
