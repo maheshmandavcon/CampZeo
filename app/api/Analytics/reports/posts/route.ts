@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
         const { searchParams } = new URL(req.url);
         const campaignId = searchParams.get('campaignId');
         const platform = searchParams.get('platform');
+        const accountId = searchParams.get('accountId');
         const page = parseInt(searchParams.get('page') || '1');
         const limit = parseInt(searchParams.get('limit') || '5');
         const sortBy = searchParams.get('sortBy') || 'publishedAt'; // 'publishedAt', 'likes', 'reach', 'engagement'
@@ -56,6 +57,7 @@ export async function GET(req: NextRequest) {
             where: {
                 published: true,
                 ...(platform && platform !== 'all' ? { platform } : {}),
+                ...(accountId && accountId !== 'all' ? { accountId } : {}),
                 refId: { in: refIds }
             },
             select: {

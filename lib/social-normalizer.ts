@@ -208,10 +208,43 @@ export class SocialNormalizerService {
         let failed = 0;
         try {
             console.log(`[SocialNormalizer] Syncing LinkedIn account metrics...`);
+            const { getLinkedInAudienceInsights, getLinkedInUserOrganizations } = await import("./linkedin");
 
-            // Only sync account-level metrics (when available)
-            // Post-level metrics are synced via syncCampaignPosts for CampZeo-created posts only
-            // LinkedIn account-level insights API is not yet implemented
+            // Fetch all admin organizations
+            const organizations = await getLinkedInUserOrganizations(creds.accessToken);
+
+            // Add the default authorUrn if not already in the list
+            if (creds.authorUrn && !organizations.find(o => o.id === creds.authorUrn)) {
+                organizations.unshift({ id: creds.authorUrn, name: "Default Account" });
+            }
+
+            for (const org of organizations) {
+                try {
+                    const insights = await getLinkedInAudienceInsights({
+                        accessToken: creds.accessToken,
+                        authorUrn: org.id
+                    });
+
+                    if (insights && insights.followerCounts) {
+                        const accountMetrics: MetricPoint[] = [
+                            {
+                                metricName: "follower_count",
+                                value: insights.followerCounts.total,
+                                rawMetricName: `followers_total_${org.id}`
+                            }
+                        ];
+
+                        // Store metrics with organization URN as postId for account level? 
+                        // Or just "ACCOUNT" but we need to distinguish them.
+                        // For now, let's use ACCOUNT_{urn} to differentiate.
+                        await this.storeMetrics(orgId, "LINKEDIN", `ACCOUNT_${org.id}`, accountMetrics);
+                        success++;
+                    }
+                } catch (err) {
+                    console.error(`[SocialNormalizer] Failed to sync LinkedIn metrics for org ${org.id}`, err);
+                    failed++;
+                }
+            }
 
         } catch (err) {
             console.error(`[SocialNormalizer] LinkedIn sync error`, err);
@@ -617,7 +650,7 @@ export class SocialNormalizerService {
             });
 
             // 2. Latest Metrics Storage: Upsert into PostInsight for quick access (Skip for account-level metrics)
-            if (postId === "ACCOUNT") return;
+            if (postId === "ACCOUNT" || postId.startsWith("ACCOUNT_")) return;
 
             const metricsMap = metrics.reduce((acc, m) => {
                 acc[m.metricName] = m.value;
