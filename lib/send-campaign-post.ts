@@ -60,7 +60,10 @@ export async function sendCampaignPost(
 
                 await prisma.campaignPost.update({
                     where: { id: post.id },
-                    data: { isPostSent: true }
+                    data: {
+                        isPostSent: true,
+                        publishedDate: new Date()
+                    }
                 });
 
                 // Extract post ID from LinkedIn response (response is the full post data)
@@ -119,7 +122,10 @@ export async function sendCampaignPost(
 
                 await prisma.campaignPost.update({
                     where: { id: post.id },
-                    data: { isPostSent: true }
+                    data: {
+                        isPostSent: true,
+                        publishedDate: new Date()
+                    }
                 });
 
                 await prisma.postTransaction.create({
@@ -158,23 +164,41 @@ export async function sendCampaignPost(
                 // If using videoUrl logic or isReel is set, treat as video
                 const isVideoContent = (!post.mediaUrls.length && !!post.videoUrl) || (post.metadata as any)?.isReel;
 
-                const platformResponse = await postToInstagram(
-                    {
-                        accessToken: igToken!,
-                        userId: igUserId!,
-                    },
-                    post.message || post.subject || "",
-                    mediaToUse, // Pass the full array or string
-                    {
-                        isReel: (post.metadata as any)?.isReel,
-                        shareToFeed: true,
-                        isVideo: isVideoContent
+                let platformResponse;
+                try {
+                    platformResponse = await postToInstagram(
+                        {
+                            accessToken: igToken!,
+                            userId: igUserId!,
+                        },
+                        post.message || post.subject || "",
+                        mediaToUse, // Pass the full array or string
+                        {
+                            isReel: (post.metadata as any)?.isReel,
+                            shareToFeed: true,
+                            isVideo: isVideoContent
+                        }
+                    );
+                } catch (igError: any) {
+                    // Normalize error message if it's an object or JSON
+                    let errorMsg = igError instanceof Error ? igError.message : String(igError);
+                    try {
+                        // Attempt to parse JSON error if stringified
+                        const parsed = JSON.parse(errorMsg);
+                        errorMsg = parsed.error?.message || parsed.message || errorMsg;
+                    } catch (e) {
+                        // Not JSON, use as is
                     }
-                );
+                    console.error('[Instagram] Post failed:', errorMsg);
+                    throw new Error(errorMsg); // Re-throw to be caught by main handler
+                }
 
                 await prisma.campaignPost.update({
                     where: { id: post.id },
-                    data: { isPostSent: true }
+                    data: {
+                        isPostSent: true,
+                        publishedDate: new Date()
+                    }
                 });
 
                 // Determine post type based on media count and type
@@ -294,7 +318,10 @@ export async function sendCampaignPost(
 
                 await prisma.campaignPost.update({
                     where: { id: post.id },
-                    data: { isPostSent: true }
+                    data: {
+                        isPostSent: true,
+                        publishedDate: new Date()
+                    }
                 });
 
                 await prisma.postTransaction.create({
@@ -379,7 +406,10 @@ export async function sendCampaignPost(
 
                 await prisma.campaignPost.update({
                     where: { id: post.id },
-                    data: { isPostSent: true }
+                    data: {
+                        isPostSent: true,
+                        publishedDate: new Date()
+                    }
                 });
 
                 await prisma.postTransaction.create({
@@ -522,7 +552,10 @@ export async function sendCampaignPost(
         if (successCount > 0) {
             await prisma.campaignPost.update({
                 where: { id: post.id },
-                data: { isPostSent: true }
+                data: {
+                    isPostSent: true,
+                    publishedDate: new Date()
+                }
             });
 
             // Create PostTransaction for Analytics (Email/SMS/WhatsApp)
@@ -566,11 +599,39 @@ export async function sendCampaignPost(
 
     } catch (error) {
         console.error('[sendCampaignPost] Error:', error);
+
+        // Use a type guard or safe access to get the error message
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        console.log(`[sendCampaignPost] Attempting to save failure reason for post ${post.id}: "${errorMessage}"`);
+
+        try {
+            // Update the post with the failure reason
+            const updated = await prisma.campaignPost.update({
+                where: { id: post.id },
+                data: {
+                    failureReason: errorMessage.substring(0, 1000), // Ensure it's not too long just in case
+                    isPostSent: false,
+                }
+            });
+            console.log(`[sendCampaignPost] Successfully saved failure reason. Updated record ID: ${updated.id}`);
+        } catch (dbError: any) {
+            console.error('[sendCampaignPost] Failed to save failure reason:', dbError);
+            // Append DB error to the returned error so it's visible in the UI/API response
+            const dbErrorMsg = dbError instanceof Error ? dbError.message : String(dbError);
+            return {
+                success: false,
+                sent: 0,
+                failed: 1,
+                error: `Original Error: ${errorMessage} | DB Save Error: ${dbErrorMsg}`
+            };
+        }
+
         return {
             success: false,
             sent: 0,
             failed: 1,
-            error: error instanceof Error ? error.message : 'Unknown error'
+            error: errorMessage
         };
     }
 }

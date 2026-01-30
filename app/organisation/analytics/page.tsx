@@ -785,49 +785,6 @@ export default function AnalyticsPage() {
                     </p>
                 </div>
 
-                {/* Funnel Chart Section */}
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <CardTitle>Marketing Funnel</CardTitle>
-                                <CardDescription>Conversion from Reach to New Contacts</CardDescription>
-                            </div>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handleExportFunnelChart}
-                                disabled={loadingFunnel}
-                                className="cursor-pointer"
-                            >
-                                <Download className="size-4 mr-2" />
-                                Export PDF
-                            </Button>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        {loadingFunnel ? (
-                            <div className="flex items-center justify-center h-[300px]">
-                                <Loader2 className="size-8 animate-spin text-muted-foreground" />
-                            </div>
-                        ) : (
-                            <div ref={funnelChartRef} className="h-[400px] w-full" style={{ width: '100%', height: '400px' }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <FunnelChart>
-                                        <Tooltip />
-                                        <Funnel
-                                            dataKey="value"
-                                            data={funnelData}
-                                            isAnimationActive
-                                        >
-                                            <LabelList position="right" fill="#000" stroke="none" dataKey="name" />
-                                        </Funnel>
-                                    </FunnelChart>
-                                </ResponsiveContainer>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
 
                 {/* Platform Selection */}
                 <Card>
