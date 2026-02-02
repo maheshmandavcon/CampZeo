@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { currentUser } from '@clerk/nextjs/server';
 import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
 import { logError, logWarning } from '@/lib/audit-logger';
-import { PlatformType } from '@prisma/client';
+import { PlatformType } from '@/lib/generated/prisma';
 
 export async function GET(
     request: NextRequest,
