@@ -98,7 +98,7 @@ export default function ReportsPage() {
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 5;
+    const itemsPerPage = 6;
 
     // Sorting State
     const [sortBy, setSortBy] = useState<string>('engagement');
@@ -1159,22 +1159,68 @@ export default function ReportsPage() {
                                                                         )}
 
                                                                         {/* Media / Image Display */}
-                                                                        {imageUrl ? (
-                                                                            <div className="w-full aspect-video bg-slate-100 relative overflow-hidden mt-2">
-                                                                                <img
-                                                                                    src={imageUrl}
-                                                                                    alt="Post Media"
-                                                                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                                                                    loading="lazy"
-                                                                                />
-                                                                            </div>
-                                                                        ) : (
-                                                                            !post.message && (
+                                                                        {(() => {
+                                                                            if (!imageUrl) return !post.message && (
                                                                                 <div className="w-full aspect-[3/1] bg-slate-50 flex items-center justify-center text-slate-300 italic text-xs">
                                                                                     No content preview
                                                                                 </div>
-                                                                            )
-                                                                        )}
+                                                                            );
+
+                                                                            const isVid = imageUrl.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
+                                                                            const isYouTube = post.platform === 'YOUTUBE';
+
+                                                                            if (isYouTube) {
+                                                                                let videoId = '';
+                                                                                if (imageUrl.includes('v=')) {
+                                                                                    videoId = imageUrl.split('v=')[1].split('&')[0];
+                                                                                } else if (imageUrl.includes('youtu.be/')) {
+                                                                                    videoId = imageUrl.split('youtu.be/')[1].split('?')[0];
+                                                                                } else if (imageUrl.includes('embed/')) {
+                                                                                    videoId = imageUrl.split('embed/')[1].split('?')[0];
+                                                                                } else if (post.postId && post.platform === 'YOUTUBE') {
+                                                                                    videoId = post.postId;
+                                                                                }
+
+                                                                                if (videoId) {
+                                                                                    return (
+                                                                                        <div className="w-full aspect-video bg-black relative overflow-hidden mt-2">
+                                                                                            <iframe
+                                                                                                src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
+                                                                                                className="w-full h-full border-0"
+                                                                                                allow="autoplay; encrypted-media"
+                                                                                                allowFullScreen
+                                                                                            />
+                                                                                        </div>
+                                                                                    );
+                                                                                }
+                                                                            }
+
+                                                                            if (isVid) {
+                                                                                return (
+                                                                                    <div className="w-full aspect-video bg-black relative overflow-hidden mt-2">
+                                                                                        <video
+                                                                                            src={imageUrl}
+                                                                                            className="w-full h-full object-cover"
+                                                                                            autoPlay
+                                                                                            muted
+                                                                                            loop
+                                                                                            playsInline
+                                                                                        />
+                                                                                    </div>
+                                                                                );
+                                                                            }
+
+                                                                            return (
+                                                                                <div className="w-full aspect-video bg-slate-100 relative overflow-hidden mt-2">
+                                                                                    <img
+                                                                                        src={imageUrl}
+                                                                                        alt="Post Media"
+                                                                                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                                                                        loading="lazy"
+                                                                                    />
+                                                                                </div>
+                                                                            );
+                                                                        })()}
 
                                                                         {/* Content Stats Grid (Footer) */}
                                                                         <div className="p-4 mt-auto">

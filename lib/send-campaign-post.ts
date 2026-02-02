@@ -1,12 +1,67 @@
 import { prisma } from '@/lib/prisma';
+import { del } from '@vercel/blob';
 import { isVideoUrl } from '@/lib/media-utils';
 import { sendCampaignEmail } from '@/lib/email';
-import { postToLinkedIn } from '@/lib/linkedin';
-import { postToFacebook } from '@/lib/facebook';
-import { postToInstagram } from '@/lib/instagram';
-import { postToYouTube, postYouTubeCommunity, createYouTubePlaylist, addVideoToPlaylist } from '@/lib/youtube';
-import { postToPinterest, createPinterestBoard } from '@/lib/pinterest';
+import { postToLinkedIn, getLinkedInPostInsights } from '@/lib/linkedin';
+import { postToFacebook, getFacebookPostInsights } from '@/lib/facebook';
+import { postToInstagram, getInstagramPostInsights } from '@/lib/instagram';
+import { postToYouTube, postYouTubeCommunity, createYouTubePlaylist, addVideoToPlaylist, getYouTubeVideoInsights } from '@/lib/youtube';
+import { postToPinterest, createPinterestBoard, getPinterestPostInsights } from '@/lib/pinterest';
 import { sendSms, sendWhatsapp } from '@/lib/twilio';
+
+/**
+ * Clean up Vercel Storage blobs after successful publication and update DB with platform URLs
+ */
+async function cleanupBlobs(urls: (string | string[] | null | undefined)[]) {
+    const allUrls = urls.flat().filter((url): url is string =>
+        typeof url === 'string' && url.includes('vercel-storage.com')
+    );
+
+    if (allUrls.length > 0) {
+        const urlsToDelete: string[] = [];
+
+        for (const url of allUrls) {
+            try {
+                // Check if any other CampaignPost still references this URL
+                const postCount = await prisma.campaignPost.count({
+                    where: {
+                        OR: [
+                            { videoUrl: url },
+                            { mediaUrls: { has: url } }
+                        ],
+                        isDeleted: false
+                    }
+                });
+
+                // Also check MessageTemplates just in case
+                const templateCount = await prisma.messageTemplate.count({
+                    where: {
+                        mediaUrls: { has: url },
+                        isActive: true
+                    }
+                });
+
+                if (postCount === 0 && templateCount === 0) {
+                    urlsToDelete.push(url);
+                } else {
+                    console.log(`[Cleanup] Skipping deletion of ${url} because it is still referenced (${postCount} posts, ${templateCount} templates)`);
+                }
+            } catch (error) {
+                console.error(`[Cleanup] Error checking references for ${url}:`, error);
+                // If we can't check, safer to skip deletion
+            }
+        }
+
+        if (urlsToDelete.length > 0) {
+            console.log(`[Cleanup] Deleting ${urlsToDelete.length} blobs from Vercel Storage...`);
+            try {
+                await del(urlsToDelete);
+            } catch (error) {
+                console.error('[Cleanup] Failed to delete blobs:', error);
+            }
+        }
+    }
+}
 
 /**
  * Send a campaign post to contacts or social media
@@ -61,16 +116,44 @@ export async function sendCampaignPost(
                     post.mediaUrls.length > 0 ? post.mediaUrls : post.videoUrl
                 );
 
+                // Extract post ID from LinkedIn response (response is the full post data)
+                const linkedInPostId = linkedInResponse?.id || linkedInResponse?.[Object.keys(linkedInResponse)[0]]?.id || JSON.stringify(linkedInResponse);
+
+                let finalMediaUrls = post.mediaUrls;
+                let finalVideoUrl = post.videoUrl;
+                let finalLiveLink = `https://www.linkedin.com/feed/update/${linkedInPostId}`;
+
+                try {
+                    const insights = await getLinkedInPostInsights(linkedInPostId, dbUser.linkedInAccessToken);
+                    if (insights.media && insights.media.length > 0) {
+                        // LinkedIn media array now contains resolved URLs where possible
+                        const resolvedUrls = (insights.media as any[])
+                            .map(m => typeof m === 'string' ? m : (m.originalSrc || m.media || m.image || m.url))
+                            .filter(Boolean);
+
+                        if (resolvedUrls.length > 0) {
+                            // If it's a video post, update the videoUrl (thumbnail)
+                            if (post.videoUrl) {
+                                finalVideoUrl = resolvedUrls[0];
+                            } else {
+                                finalMediaUrls = resolvedUrls;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[LinkedIn] Failed to fetch final URLs:', e);
+                }
+
                 await prisma.campaignPost.update({
                     where: { id: post.id },
                     data: {
                         isPostSent: true,
-                        publishedDate: new Date()
+                        publishedDate: new Date(),
+                        mediaUrls: finalMediaUrls,
+                        videoUrl: finalVideoUrl,
+                        liveLink: finalLiveLink
                     }
                 });
-
-                // Extract post ID from LinkedIn response (response is the full post data)
-                const linkedInPostId = linkedInResponse?.id || linkedInResponse?.[Object.keys(linkedInResponse)[0]]?.id || JSON.stringify(linkedInResponse);
 
                 await prisma.postTransaction.create({
                     data: {
@@ -79,9 +162,9 @@ export async function sendCampaignPost(
                         postId: linkedInPostId,
                         accountId: authorUrn,
                         message: post.message || post.subject || "",
-                        mediaUrls: post.mediaUrls.length > 0 ? post.mediaUrls[0] : post.videoUrl,
-                        postType: (post.mediaUrls.length > 0 || post.videoUrl) ?
-                            ((post.mediaUrls[0] || post.videoUrl || '').match(/\.(mp4|mov|webm)$/i) ? 'VIDEO' : 'IMAGE')
+                        mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
+                        postType: (finalMediaUrls.length > 0 || finalVideoUrl) ?
+                            ((finalMediaUrls[0] || finalVideoUrl || '').match(/\.(mp4|mov|webm)$/i) ? 'VIDEO' : 'IMAGE')
                             : 'TEXT',
                         accessToken: dbUser.linkedInAccessToken,
                         published: true,
@@ -89,6 +172,7 @@ export async function sendCampaignPost(
                     }
                 });
 
+                await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };
             }
 
@@ -123,11 +207,30 @@ export async function sendCampaignPost(
                     { isReel: metadata?.isReel }
                 );
 
+                let finalMediaUrls = post.mediaUrls;
+                let finalVideoUrl = post.videoUrl;
+                let finalLiveLink = post.liveLink || `https://facebook.com/${platformResponse.id}`;
+                try {
+                    const insights = await getFacebookPostInsights(platformResponse.id, fbToken);
+                    if (insights.full_picture) {
+                        finalMediaUrls = [insights.full_picture];
+                        if (post.videoUrl || metadata?.isReel) {
+                            finalVideoUrl = insights.full_picture;
+                        }
+                    }
+                    if (insights.permalink_url) finalLiveLink = insights.permalink_url;
+                } catch (e) {
+                    console.warn('[Facebook] Failed to fetch final URLs:', e);
+                }
+
                 await prisma.campaignPost.update({
                     where: { id: post.id },
                     data: {
                         isPostSent: true,
-                        publishedDate: new Date()
+                        publishedDate: new Date(),
+                        mediaUrls: finalMediaUrls,
+                        videoUrl: finalVideoUrl,
+                        liveLink: finalLiveLink
                     }
                 });
 
@@ -138,14 +241,15 @@ export async function sendCampaignPost(
                         postId: platformResponse.id,
                         accountId: fbPageId,
                         message: post.message || post.subject || "",
-                        mediaUrls: Array.isArray(mediaToUse) ? mediaToUse[0] : (mediaToUse || ""),
-                        postType: metadata?.isReel ? 'REEL' : ((post.mediaUrls.length > 0 || post.videoUrl) ? 'IMAGE' : 'TEXT'),
+                        mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
+                        postType: metadata?.isReel ? 'REEL' : ((finalMediaUrls.length > 0 || finalVideoUrl) ? 'IMAGE' : 'TEXT'),
                         accessToken: fbToken,
                         published: true,
                         publishedAt: new Date(),
                     }
                 });
 
+                await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };
             }
 
@@ -196,23 +300,40 @@ export async function sendCampaignPost(
                     throw new Error(errorMsg); // Re-throw to be caught by main handler
                 }
 
+                let finalMediaUrls = post.mediaUrls;
+                let finalVideoUrl = post.videoUrl;
+                let finalLiveLink = post.liveLink;
+                try {
+                    const insights = await getInstagramPostInsights(platformResponse.id, igToken!);
+                    if (insights.media_url) {
+                        if ((post.metadata as any)?.isReel) finalVideoUrl = insights.media_url;
+                        else finalMediaUrls = [insights.media_url];
+                    }
+                    if (insights.permalink) finalLiveLink = insights.permalink;
+                } catch (e) {
+                    console.warn('[Instagram] Failed to fetch final URLs:', e);
+                }
+
                 await prisma.campaignPost.update({
                     where: { id: post.id },
                     data: {
                         isPostSent: true,
-                        publishedDate: new Date()
+                        publishedDate: new Date(),
+                        mediaUrls: finalMediaUrls,
+                        videoUrl: finalVideoUrl,
+                        liveLink: finalLiveLink
                     }
                 });
 
                 // Determine post type based on media count and type
-                const mediaCount = Array.isArray(post.mediaUrls) ? post.mediaUrls.length : (post.mediaUrls ? 1 : 0);
+                const mediaCount = finalMediaUrls.length;
                 let postType = 'TEXT';
                 if ((post.metadata as any)?.isReel) {
                     postType = 'REEL';
                 } else if (mediaCount > 1) {
                     postType = 'CAROUSEL';
                 } else if (mediaCount === 1) {
-                    const firstMedia = post.mediaUrls[0];
+                    const firstMedia = finalMediaUrls[0];
                     postType = firstMedia?.match(/\.(mp4|mov|webm)$/i) ? 'VIDEO' : 'IMAGE';
                 }
 
@@ -223,7 +344,7 @@ export async function sendCampaignPost(
                         postId: platformResponse.id,
                         accountId: igUserId!,
                         message: post.message || post.subject || "",
-                        mediaUrls: post.mediaUrls.length > 0 ? post.mediaUrls[0] : post.videoUrl,
+                        mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
                         postType,
                         accessToken: igToken!,
                         published: true,
@@ -231,6 +352,7 @@ export async function sendCampaignPost(
                     }
                 });
 
+                await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };
             }
 
@@ -319,11 +441,30 @@ export async function sendCampaignPost(
                     );
                 }
 
+                let finalMediaUrls = post.mediaUrls;
+                let finalVideoUrl = post.videoUrl;
+                let finalLiveLink = `https://www.youtube.com/watch?v=${platformResponse.id}`;
+                try {
+                    const insights = await getYouTubeVideoInsights(platformResponse.id, dbUser.youtubeAccessToken);
+                    if (insights.thumbnails) {
+                        const thumb = insights.thumbnails.maxres || insights.thumbnails.high || insights.thumbnails.default;
+                        if (thumb?.url) {
+                            finalMediaUrls = [thumb.url];
+                            if (post.videoUrl) finalVideoUrl = thumb.url;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[YouTube] Failed to fetch final URLs:', e);
+                }
+
                 await prisma.campaignPost.update({
                     where: { id: post.id },
                     data: {
                         isPostSent: true,
-                        publishedDate: new Date()
+                        publishedDate: new Date(),
+                        mediaUrls: finalMediaUrls,
+                        videoUrl: finalVideoUrl,
+                        liveLink: finalLiveLink
                     }
                 });
 
@@ -334,7 +475,7 @@ export async function sendCampaignPost(
                         postId: platformResponse.id,
                         accountId: 'youtube-channel',
                         message: post.message || post.subject || "",
-                        mediaUrls: post.mediaUrls.length > 0 ? post.mediaUrls[0] : post.videoUrl,
+                        mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
                         postType: media && media.match(/\.(mp4|mov|webm)$/i) ? ((platformResponse as any).isShort || metadata?.postType === 'SHORT' ? 'SHORT' : 'VIDEO') : 'TEXT',
                         accessToken: dbUser.youtubeAccessToken,
                         published: true,
@@ -342,6 +483,7 @@ export async function sendCampaignPost(
                     }
                 });
 
+                await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };
             }
 
@@ -407,11 +549,29 @@ export async function sendCampaignPost(
                     }
                 );
 
+                let finalMediaUrls = post.mediaUrls;
+                let finalVideoUrl = post.videoUrl;
+                let finalLiveLink = `https://www.pinterest.com/pin/${platformResponse.id}`;
+                try {
+                    const insights = await getPinterestPostInsights(platformResponse.id, dbUser.pinterestAccessToken);
+                    if (insights.media?.images?.original?.url) {
+                        finalMediaUrls = [insights.media.images.original.url];
+                        if (post.videoUrl || isVideoPin) {
+                            finalVideoUrl = insights.media.images.original.url;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[Pinterest] Failed to fetch final URLs:', e);
+                }
+
                 await prisma.campaignPost.update({
                     where: { id: post.id },
                     data: {
                         isPostSent: true,
-                        publishedDate: new Date()
+                        publishedDate: new Date(),
+                        mediaUrls: finalMediaUrls,
+                        videoUrl: finalVideoUrl,
+                        liveLink: finalLiveLink
                     }
                 });
 
@@ -422,7 +582,7 @@ export async function sendCampaignPost(
                         postId: platformResponse.id,
                         accountId: 'pinterest-user',
                         message: post.message || post.subject || "",
-                        mediaUrls: Array.isArray(media) ? media[0] : media,
+                        mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
                         postType: isVideoPin ? 'VIDEO' : (Array.isArray(media) && media.length > 1 ? 'CAROUSEL' : 'IMAGE'),
                         accessToken: dbUser.pinterestAccessToken,
                         published: true,
@@ -430,6 +590,7 @@ export async function sendCampaignPost(
                     }
                 });
 
+                await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };
             }
 

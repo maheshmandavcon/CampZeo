@@ -332,23 +332,70 @@ export default function PostDetailsPage({ params }: { params: Promise<{ id: stri
                                     </CardHeader>
                                     <CardContent className="space-y-4">
                                         <div className="relative aspect-video bg-muted rounded-lg overflow-hidden border shadow-inner">
-                                            {post.postType === 'VIDEO' || getCleanMediaUrl(post.mediaUrls).toLowerCase().endsWith('.mp4') ? (
-                                                <div className="flex items-center justify-center h-full bg-slate-900">
-                                                    <Video className="size-12 text-white opacity-80" />
-                                                </div>
-                                            ) : (post.mediaUrls && post.mediaUrls !== '[]') ? (
-                                                <Image
-                                                    src={getCleanMediaUrl(post.mediaUrls)}
-                                                    alt="Post media"
-                                                    fill
-                                                    className="object-cover"
-                                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                                />
-                                            ) : (
-                                                <div className="flex items-center justify-center h-full bg-slate-100">
-                                                    <ImageIcon className="size-12 text-slate-300" />
-                                                </div>
-                                            )}
+                                            {(() => {
+                                                const mediaUrl = getCleanMediaUrl(post.mediaUrls);
+                                                const isYouTube = post.platform === 'YOUTUBE';
+                                                const isVid = post.postType === 'VIDEO' || mediaUrl.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
+
+                                                if (isYouTube) {
+                                                    let videoId = '';
+                                                    if (mediaUrl.includes('v=')) {
+                                                        videoId = mediaUrl.split('v=')[1].split('&')[0];
+                                                    } else if (mediaUrl.includes('youtu.be/')) {
+                                                        videoId = mediaUrl.split('youtu.be/')[1].split('?')[0];
+                                                    } else if (mediaUrl.includes('embed/')) {
+                                                        videoId = mediaUrl.split('embed/')[1].split('?')[0];
+                                                    } else if (post.postId && post.platform === 'YOUTUBE') {
+                                                        videoId = post.postId;
+                                                    }
+
+                                                    if (videoId) {
+                                                        return (
+                                                            <div className="size-full bg-black">
+                                                                <iframe
+                                                                    src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
+                                                                    className="size-full border-0"
+                                                                    allow="autoplay; encrypted-media"
+                                                                    allowFullScreen
+                                                                />
+                                                            </div>
+                                                        );
+                                                    }
+                                                }
+
+                                                if (isVid && mediaUrl) {
+                                                    return (
+                                                        <video
+                                                            src={mediaUrl}
+                                                            className="size-full object-cover"
+                                                            autoPlay
+                                                            muted
+                                                            loop
+                                                            playsInline
+                                                            controls
+                                                        />
+                                                    );
+                                                }
+
+                                                if (mediaUrl && post.mediaUrls !== '[]') {
+                                                    return (
+                                                        <Image
+                                                            src={mediaUrl}
+                                                            alt="Post media"
+                                                            fill
+                                                            className="object-cover"
+                                                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                            unoptimized
+                                                        />
+                                                    );
+                                                }
+
+                                                return (
+                                                    <div className="flex items-center justify-center h-full bg-slate-100">
+                                                        <ImageIcon className="size-12 text-slate-300" />
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                         <div className="bg-muted/30 p-4 rounded-md border">
                                             <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">

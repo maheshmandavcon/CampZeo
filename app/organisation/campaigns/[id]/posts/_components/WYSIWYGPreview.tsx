@@ -53,7 +53,7 @@ export function WYSIWYGPreview({
         setCurrentSlideIndex(0);
     }, [mediaUrls, platform]);
 
-    const isVideo = (url: string) => url.match(/\.(mp4|webm|ogg|mov)$/i);
+    const isVideo = (url: string) => url.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
     const userName = user?.name || "Your Brand";
     const userImage = user?.image;
     const userInitials = userName.substring(0, 2).toUpperCase();
@@ -75,7 +75,14 @@ export function WYSIWYGPreview({
             return (
                 <div className={cn("relative overflow-hidden bg-black", className)}>
                     {isVid ? (
-                        <video src={url} className="size-full object-cover" />
+                        <video
+                            src={url}
+                            className="size-full object-cover"
+                            autoPlay
+                            muted
+                            loop
+                            playsInline
+                        />
                     ) : (
                         <Image
                             src={url}
@@ -86,8 +93,8 @@ export function WYSIWYGPreview({
                         />
                     )}
                     {isVid && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                            <Play className="size-8 text-white/80 fill-current" />
+                        <div className="absolute top-2 right-2 opacity-50">
+                            <Video className="size-4 text-white" />
                         </div>
                     )}
                 </div>
@@ -223,19 +230,49 @@ export function WYSIWYGPreview({
         }
 
         if (platform === "YOUTUBE") {
+            const videoUrl = mediaUrls[0];
+            const isYouTubeUrl = videoUrl?.includes('youtube.com') || videoUrl?.includes('youtu.be');
+
+            // Extract Video ID for iframe if it's a YouTube URL
+            let embedUrl = videoUrl;
+            if (isYouTubeUrl) {
+                let videoId = '';
+                if (videoUrl.includes('v=')) {
+                    videoId = videoUrl.split('v=')[1].split('&')[0];
+                } else if (videoUrl.includes('youtu.be/')) {
+                    videoId = videoUrl.split('youtu.be/')[1].split('?')[0];
+                } else if (videoUrl.includes('embed/')) {
+                    videoId = videoUrl.split('embed/')[1].split('?')[0];
+                }
+
+                if (videoId) {
+                    embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`;
+                }
+            }
+
             return (
                 <div className={cn(
                     "relative flex items-center justify-center bg-black overflow-hidden",
                     isReel ? "aspect-[9/16] mx-auto w-10/12" : "aspect-video"
                 )}>
-                    {isPlayingVideo && isVideo(mediaUrls[0]) ? (
-                        <video
-                            src={mediaUrls[0]}
-                            className="size-full object-cover"
-                            controls
-                            autoPlay
-                            onEnded={() => setIsPlayingVideo(false)}
-                        />
+                    {(isPlayingVideo || isYouTubeUrl) && videoUrl ? (
+                        isYouTubeUrl ? (
+                            <iframe
+                                src={embedUrl}
+                                className="size-full border-0"
+                                allow="autoplay; encrypted-media"
+                                allowFullScreen
+                            />
+                        ) : (
+                            <video
+                                src={videoUrl}
+                                className="size-full object-cover"
+                                controls={!isYouTubeUrl}
+                                autoPlay
+                                muted
+                                onEnded={() => setIsPlayingVideo(false)}
+                            />
+                        )
                     ) : (
                         <>
                             {thumbnailUrl ? (
@@ -247,12 +284,12 @@ export function WYSIWYGPreview({
                                     unoptimized
                                 />
                             ) : (
-                                renderMediaItem(mediaUrls[0], "size-full opacity-80")
+                                renderMediaItem(videoUrl, "size-full opacity-80")
                             )}
                             <button
                                 type="button"
                                 onClick={() => setIsPlayingVideo(true)}
-                                disabled={!mediaUrls.length || !isVideo(mediaUrls[0])}
+                                disabled={!mediaUrls.length || (!isYouTubeUrl && !isVideo(videoUrl))}
                                 className="absolute cursor-pointer inset-0 flex items-center justify-center disabled:cursor-not-allowed group"
                             >
                                 <div className="flex size-14 items-center justify-center rounded-full bg-red-600/90 shadow-lg backdrop-blur-sm transition-transform group-hover:scale-110 disabled:opacity-50">
