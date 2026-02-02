@@ -674,19 +674,44 @@ export default function CalendarView({ posts }: CalendarViewProps) {
                                             </label>
                                             <div className="grid grid-cols-1 gap-3">
                                                 {selectedPost.mediaUrls.map((url, index) => {
-                                                    const isVideo = url.match(/\.(mp4|webm|ogg|mov)$/i);
+                                                    const isYouTube = selectedPost.type === 'YOUTUBE';
+                                                    const isVid = url.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
+
+                                                    let videoId = '';
+                                                    if (isYouTube) {
+                                                        if (url.includes('v=')) {
+                                                            videoId = url.split('v=')[1].split('&')[0];
+                                                        } else if (url.includes('youtu.be/')) {
+                                                            videoId = url.split('youtu.be/')[1].split('?')[0];
+                                                        } else if (url.includes('embed/')) {
+                                                            videoId = url.split('embed/')[1].split('?')[0];
+                                                        } else {
+                                                            videoId = url; // Assume it's the ID if no URL pattern matches
+                                                        }
+                                                    }
+
                                                     return (
                                                         <div
                                                             key={index}
                                                             className="relative w-full rounded-xl overflow-hidden border-2 border-gray-200 bg-gray-50 shadow-sm hover:shadow-md transition-shadow"
-                                                            style={{ aspectRatio: '1/1' }}
+                                                            style={{ aspectRatio: isYouTube ? '16/9' : '1/1' }}
                                                         >
-                                                            {isVideo ? (
+                                                            {isYouTube && videoId ? (
+                                                                <iframe
+                                                                    src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
+                                                                    className="w-full h-full border-0"
+                                                                    allow="autoplay; encrypted-media"
+                                                                    allowFullScreen
+                                                                />
+                                                            ) : isVid ? (
                                                                 <video
                                                                     src={url}
                                                                     className="w-full h-full object-cover"
+                                                                    autoPlay
+                                                                    muted
+                                                                    loop
+                                                                    playsInline
                                                                     controls
-                                                                    preload="metadata"
                                                                 />
                                                             ) : (
                                                                 <Image
