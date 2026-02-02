@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -56,10 +56,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { exportChartToPDF } from '@/lib/chart-export';
 
 interface PostInsight {
-    likes: number;
-    comments: number;
-    reach: number;
-    impressions: number;
+    saves: number;
+    shares: number;
+    videoViews: number;
+    watchTime: number;
+    averageViewDuration: number;
     engagementRate: number;
     isDeleted: boolean;
     lastUpdated: string | null;
@@ -194,7 +195,7 @@ export default function AnalyticsPage() {
     }, []);
 
     // Fetch posts
-    const fetchPosts = async (forceRefresh = false) => {
+    const fetchPosts = useCallback(async (forceRefresh = false) => {
         if (!selectedPlatform) return;
 
         setLoadingPosts(true);
@@ -224,7 +225,7 @@ export default function AnalyticsPage() {
         } finally {
             setLoadingPosts(false);
         }
-    };
+    }, [selectedPlatform, page, startDate, endDate, limit]);
 
     useEffect(() => {
         if (selectedPlatform) {
@@ -233,6 +234,33 @@ export default function AnalyticsPage() {
             setPosts([]);
         }
     }, [selectedPlatform, page, startDate, endDate]);
+
+    const syncAnalyticsOnLoad = useCallback(async (forceFullSync = false) => {
+        setIsSyncingAnalytics(true);
+        try {
+            console.log(`[Analytics Page] Syncing ${forceFullSync ? 'FRESH' : 'cached'} metrics...`);
+            // Professional approach: If not forced, we could have a 'fast' endpoint that only reads DB
+            // but for now we use the existing sync-all. We can add a Param if we want to optimize further.
+            const response = await fetch(`/api/Analytics/sync-all${forceFullSync ? '' : '?skipSync=true'}`);
+            if (!response.ok) throw new Error('Failed to sync analytics');
+
+            const data = await response.json();
+            setAnalyticsCache(data.analytics);
+            setLastSyncedAt(data.syncedAt);
+
+            // Persist to localStorage
+            localStorage.setItem('campzeo_analytics_cache', JSON.stringify(data.analytics));
+            localStorage.setItem('campzeo_analytics_last_sync', data.syncedAt);
+
+            console.log('[Analytics Page] Analytics synced and cached:', data.syncedAt);
+            toast.success(forceFullSync ? 'Full metrics refresh complete' : 'Data loaded from database');
+        } catch (error) {
+            console.error('[Analytics Page] Sync error:', error);
+            toast.error('Failed to sync analytics data');
+        } finally {
+            setIsSyncingAnalytics(false);
+        }
+    }, []);
 
     // Sync analytics data on page load - SMART CACHING
     useEffect(() => {
@@ -261,34 +289,7 @@ export default function AnalyticsPage() {
         if (!hasCache) {
             syncAnalyticsOnLoad();
         }
-    }, []);
-
-    const syncAnalyticsOnLoad = async (forceFullSync = false) => {
-        setIsSyncingAnalytics(true);
-        try {
-            console.log(`[Analytics Page] Syncing ${forceFullSync ? 'FRESH' : 'cached'} metrics...`);
-            // Professional approach: If not forced, we could have a 'fast' endpoint that only reads DB
-            // but for now we use the existing sync-all. We can add a Param if we want to optimize further.
-            const response = await fetch(`/api/Analytics/sync-all${forceFullSync ? '' : '?skipSync=true'}`);
-            if (!response.ok) throw new Error('Failed to sync analytics');
-
-            const data = await response.json();
-            setAnalyticsCache(data.analytics);
-            setLastSyncedAt(data.syncedAt);
-
-            // Persist to localStorage
-            localStorage.setItem('campzeo_analytics_cache', JSON.stringify(data.analytics));
-            localStorage.setItem('campzeo_analytics_last_sync', data.syncedAt);
-
-            console.log('[Analytics Page] Analytics synced and cached:', data.syncedAt);
-            toast.success(forceFullSync ? 'Full metrics refresh complete' : 'Data loaded from database');
-        } catch (error) {
-            console.error('[Analytics Page] Sync error:', error);
-            toast.error('Failed to sync analytics data');
-        } finally {
-            setIsSyncingAnalytics(false);
-        }
-    };
+    }, [syncAnalyticsOnLoad]);
 
 
     // Fetch Funnel Data
@@ -628,6 +629,10 @@ export default function AnalyticsPage() {
         let headers = ['Post/Message', 'Subject', 'Image Name', 'Image Link', 'Published At', 'Platform', 'Type', 'Status'];
         if (isEmailOrSms) {
             headers.push('Sent (Reach)', 'Delivered', 'Opened (Impressions)', 'Delivery Rate');
+        } else if (selectedPlatform === 'YOUTUBE') {
+            headers.push('Likes', 'Comments', 'Watch Time', 'Avg View', 'Engagement Rate');
+        } else if (selectedPlatform === 'PINTEREST') {
+            headers.push('Saves', 'Comments', 'Views', 'Impressions', 'Engagement Rate');
         } else {
             headers.push('Likes', 'Comments', 'Reach', 'Impressions', 'Engagement Rate');
         }
@@ -652,6 +657,22 @@ export default function AnalyticsPage() {
                     post.insight.reach, // Delivered (simplified assumption for now unless detailed)
                     post.insight.impressions, // Opened
                     '100%' // Delivery Rate
+                ];
+            } else if (selectedPlatform === 'YOUTUBE') {
+                rowByType = [
+                    post.insight.likes,
+                    post.insight.comments,
+                    `${(post.insight.watchTime || 0).toFixed(1)}m`,
+                    `${Math.floor((post.insight.averageViewDuration || 0) / 60)}:${Math.floor((post.insight.averageViewDuration || 0) % 60).toString().padStart(2, '0')}`,
+                    `${post.insight.engagementRate.toFixed(2)}%`
+                ];
+            } else if (selectedPlatform === 'PINTEREST') {
+                rowByType = [
+                    post.insight.likes,
+                    post.insight.comments,
+                    post.insight.reach, // Views
+                    post.insight.impressions,
+                    `${post.insight.engagementRate.toFixed(2)}%`
                 ];
             } else {
                 rowByType = [
@@ -717,6 +738,24 @@ export default function AnalyticsPage() {
                     'Opened (Impressions)': post.insight.impressions,
                     'Delivery Rate': '100%'
                 };
+            } else if (selectedPlatform === 'YOUTUBE') {
+                return {
+                    ...baseData,
+                    'Likes': post.insight.likes,
+                    'Comments': post.insight.comments,
+                    'Watch Time (min)': (post.insight.watchTime || 0).toFixed(1),
+                    'Avg View': `${Math.floor((post.insight.averageViewDuration || 0) / 60)}:${Math.floor((post.insight.averageViewDuration || 0) % 60).toString().padStart(2, '0')}`,
+                    'Engagement Rate': `${post.insight.engagementRate.toFixed(2)}%`
+                };
+            } else if (selectedPlatform === 'PINTEREST') {
+                return {
+                    ...baseData,
+                    'Saves': post.insight.likes,
+                    'Comments': post.insight.comments,
+                    'Views': post.insight.reach,
+                    'Impressions': post.insight.impressions,
+                    'Engagement Rate': `${post.insight.engagementRate.toFixed(2)}%`
+                };
             } else {
                 return {
                     ...baseData,
@@ -738,7 +777,7 @@ export default function AnalyticsPage() {
     };
 
     // Chart Data Preparation
-    const getChartData = () => {
+    const getChartData = useMemo(() => {
         if (!posts.length) return [];
         // Sort by date ascending for chart
         const sortedPosts = [...posts].sort((a, b) => new Date(a.publishedAt || 0).getTime() - new Date(b.publishedAt || 0).getTime());
@@ -750,7 +789,7 @@ export default function AnalyticsPage() {
             reach: post.insight.reach,
             impressions: post.insight.impressions
         }));
-    };
+    }, [posts]);
 
     // PDF Export Handlers
     const handleExportFunnelChart = async () => {
@@ -866,7 +905,7 @@ export default function AnalyticsPage() {
                                 <CardContent>
                                     <div ref={engagementTrendsChartRef} className="h-[250px] w-full mt-2" style={{ width: '100%', height: '250px' }}>
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <AreaChart data={getChartData()}>
+                                            <AreaChart data={getChartData}>
                                                 <defs>
                                                     <linearGradient id="colorLikes" x1="0" y1="0" x2="0" y2="1">
                                                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
@@ -906,6 +945,7 @@ export default function AnalyticsPage() {
                                                     fillOpacity={1}
                                                     fill="url(#colorLikes)"
                                                     name={isEmailPlatform ? "Sent" : "Likes"}
+                                                    isAnimationActive={false}
                                                 />
                                                 <Area
                                                     type="monotone"
@@ -915,6 +955,7 @@ export default function AnalyticsPage() {
                                                     fillOpacity={1}
                                                     fill="url(#colorReach)"
                                                     name={isEmailPlatform ? "Opened" : "Reach"}
+                                                    isAnimationActive={false}
                                                 />
                                             </AreaChart>
                                         </ResponsiveContainer>
@@ -1001,10 +1042,15 @@ export default function AnalyticsPage() {
                                                             </>
                                                         ) : (
                                                             <>
-                                                                <TableHead>Likes</TableHead>
+                                                                <TableHead>{selectedPlatform === 'PINTEREST' ? 'Saves' : 'Likes'}</TableHead>
                                                                 <TableHead>Comments</TableHead>
-                                                                <TableHead>Reach</TableHead>
-                                                                <TableHead>Engagement</TableHead>
+                                                                <TableHead>
+                                                                    {selectedPlatform === 'YOUTUBE' ? 'Watch Time' :
+                                                                        selectedPlatform === 'PINTEREST' ? 'Views' : 'Reach'}
+                                                                </TableHead>
+                                                                <TableHead>
+                                                                    {selectedPlatform === 'YOUTUBE' ? 'Avg View' : 'Engagement'}
+                                                                </TableHead>
                                                             </>
                                                         )}
                                                         <TableHead>Published</TableHead>
@@ -1070,9 +1116,15 @@ export default function AnalyticsPage() {
                                                                 <>
                                                                     <TableCell>{post.insight?.likes ?? 0}</TableCell>
                                                                     <TableCell>{post.insight?.comments ?? 0}</TableCell>
-                                                                    <TableCell>{post.insight?.reach ?? 0}</TableCell>
                                                                     <TableCell>
-                                                                        {post.insight?.engagementRate ? `${post.insight.engagementRate.toFixed(2)}%` : '0.00%'}
+                                                                        {selectedPlatform === 'YOUTUBE'
+                                                                            ? `${(post.insight?.watchTime ?? 0).toFixed(1)}m`
+                                                                            : post.insight?.reach ?? 0}
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        {selectedPlatform === 'YOUTUBE'
+                                                                            ? `${Math.floor((post.insight?.averageViewDuration ?? 0) / 60)}:${Math.floor((post.insight?.averageViewDuration ?? 0) % 60).toString().padStart(2, '0')}`
+                                                                            : (post.insight?.engagementRate ? `${post.insight.engagementRate.toFixed(2)}%` : '0.00%')}
                                                                     </TableCell>
                                                                 </>
                                                             )}
@@ -1145,6 +1197,25 @@ export default function AnalyticsPage() {
                                                     >
                                                         Next
                                                     </Button>
+
+                                                    <div className="flex items-center gap-2 ml-4 border-l pl-4">
+                                                        <span className="text-xs text-muted-foreground whitespace-nowrap text-[11px]">Go to:</span>
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            max={totalPages}
+                                                            className="w-12 h-8 border rounded text-center text-xs outline-none focus:ring-1 focus:ring-primary"
+                                                            defaultValue={page}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    const val = parseInt((e.target as HTMLInputElement).value);
+                                                                    if (val >= 1 && val <= totalPages) {
+                                                                        setPage(val);
+                                                                    }
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}

@@ -274,9 +274,9 @@ export async function getInstagramPostInsights(
                     totalInteractions = engagementMetric.values[0]?.value || totalInteractions;
                 }
 
-            shares = Math.max(0, totalInteractions - (likes + comments + saved));
+                shares = Math.max(0, totalInteractions - (likes + comments + saved));
 
-        } else {
+            } else {
                 const fallbackResponse = await fetch(
                     `https://graph.facebook.com/v24.0/${mediaId}/insights?metric=impressions,reach,saved&access_token=${accessToken}`
                 );
@@ -360,7 +360,8 @@ export interface InstagramAudienceInsights {
     // New fields for detailed reports
     followerCity: Record<string, number>;
     followerCountry: Record<string, number>;
-    followerGenderAge: Record<string, number>;
+    followerGender: Record<string, number>;
+    followerAge: Record<string, number>;
     followerReach: number;
     nonFollowerReach: number;
     _rawResponses?: any[];
@@ -394,22 +395,31 @@ export async function getInstagramAudienceInsights(
         // 1. Follower Demographics (Strict v24 - split calls)
         const followerCity: Record<string, number> = {};
         const followerCountry: Record<string, number> = {};
-        const followerGenderAge: Record<string, number> = {};
+        const followerGender: Record<string, number> = {};
+        const followerAge: Record<string, number> = {};
 
         const breakdowns = ['city', 'country', 'gender', 'age'];
         for (const breakdown of breakdowns) {
             try {
-                // v24 strict demographics: one breakdown per request, NO metric_type
-                const url = `https://graph.facebook.com/v24.0/${userId}/insights?metric=follower_demographics&period=lifetime&breakdown=${breakdown}&access_token=${accessToken}`;
+                // v24 strict demographics: one breakdown per request, ensure metric_type is included as requested
+                const url = `https://graph.facebook.com/v24.0/${userId}/insights?metric=follower_demographics&period=lifetime&metric_type=total_value&breakdown=${breakdown}&access_token=${accessToken}`;
                 const res = await fetch(url);
                 await capture(res, `follower_demographics_${breakdown}`);
 
                 if (res.ok) {
                     const data = await res.json();
-                    const value = data.data?.[0]?.values?.[0]?.value || {};
-                    if (breakdown === 'city') Object.assign(followerCity, value);
-                    else if (breakdown === 'country') Object.assign(followerCountry, value);
-                    else Object.assign(followerGenderAge, value);
+                    // Structure: data.data[0].total_value.breakdowns[0].results
+                    const results = data.data?.[0]?.total_value?.breakdowns?.[0]?.results || [];
+
+                    results.forEach((item: any) => {
+                        const label = item.dimension_values?.[0] || 'Unknown';
+                        const val = item.value || 0;
+
+                        if (breakdown === 'city') followerCity[label] = val;
+                        else if (breakdown === 'country') followerCountry[label] = val;
+                        else if (breakdown === 'gender') followerGender[label] = val;
+                        else if (breakdown === 'age') followerAge[label] = val;
+                    });
                 }
             } catch (e) {
                 console.error(`[Instagram] Error fetching follower demographics (${breakdown}):`, e);
@@ -419,7 +429,7 @@ export async function getInstagramAudienceInsights(
         // Audience demographics (legacy/mapped from followers for UI stability)
         const audienceCity = followerCity;
         const audienceCountry = followerCountry;
-        const audienceGenderAge = followerGenderAge;
+        const audienceGenderAge = { ...followerGender, ...followerAge }; // Legacy mix if needed, but we rely on new fields
         const audienceLocale: Record<string, number> = {};
 
         // 2. Reach Breakdown (Not supported for IG accounts)
@@ -434,7 +444,8 @@ export async function getInstagramAudienceInsights(
             totalFollowers,
             followerCity,
             followerCountry,
-            followerGenderAge,
+            followerGender,
+            followerAge,
             followerReach,
             nonFollowerReach,
             _rawResponses
@@ -449,7 +460,8 @@ export async function getInstagramAudienceInsights(
             totalFollowers: 0,
             followerCity: {},
             followerCountry: {},
-            followerGenderAge: {},
+            followerGender: {},
+            followerAge: {},
             followerReach: 0,
             nonFollowerReach: 0
         };

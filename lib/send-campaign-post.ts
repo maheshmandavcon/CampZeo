@@ -49,10 +49,13 @@ export async function sendCampaignPost(
                     throw new Error('LinkedIn credentials not found or expired. Please reconnect your account.');
                 }
 
+                const metadata = (post.metadata || {}) as any;
+                const authorUrn = metadata?.linkedInUrn || dbUser.linkedInAuthUrn;
+
                 const linkedInResponse = await postToLinkedIn(
                     {
                         accessToken: dbUser.linkedInAccessToken,
-                        authorUrn: dbUser.linkedInAuthUrn,
+                        authorUrn: authorUrn,
                     },
                     post.message || post.subject || "",
                     post.mediaUrls.length > 0 ? post.mediaUrls : post.videoUrl
@@ -74,7 +77,7 @@ export async function sendCampaignPost(
                         refId: post.id,
                         platform: 'LINKEDIN',
                         postId: linkedInPostId,
-                        accountId: dbUser.linkedInAuthUrn,
+                        accountId: authorUrn,
                         message: post.message || post.subject || "",
                         mediaUrls: post.mediaUrls.length > 0 ? post.mediaUrls[0] : post.videoUrl,
                         postType: (post.mediaUrls.length > 0 || post.videoUrl) ?

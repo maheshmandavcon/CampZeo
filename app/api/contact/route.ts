@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
         // Send to office email
         const successOffice = await sendEmail({
             to: "surya@mandavconsultancy.com",
+            cc: "mahesh@mandavconsultancy.com",
             subject: `Contact Form: ${subject}`,
             html: html,
             replyTo: email

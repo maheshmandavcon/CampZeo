@@ -457,6 +457,8 @@ export interface YouTubeVideoInsights {
     engagement: number;
     engagementRate: number;
     views: number;
+    estimatedMinutesWatched: number;
+    averageViewDuration: number;
     isDeleted?: boolean;
     title?: string;
     description?: string;
@@ -480,7 +482,6 @@ export async function getYouTubeVideoInsights(
 
         if (!response.ok) {
             const error = await response.json();
-            // 404 is rare for List endpoint, usually returns empty items
             throw new Error(`Failed to fetch video details: ${JSON.stringify(error)}`);
         }
 
@@ -488,7 +489,6 @@ export async function getYouTubeVideoInsights(
         const item = data.items?.[0];
 
         if (!item) {
-            // If items array is empty, video is deleted or private/not accessible
             return {
                 likes: 0,
                 comments: 0,
@@ -497,6 +497,8 @@ export async function getYouTubeVideoInsights(
                 engagement: 0,
                 engagementRate: 0,
                 views: 0,
+                estimatedMinutesWatched: 0,
+                averageViewDuration: 0,
                 isDeleted: true
             };
         }
@@ -506,11 +508,33 @@ export async function getYouTubeVideoInsights(
         const comments = parseInt(stats.commentCount || '0');
         const views = parseInt(stats.viewCount || '0');
 
-        // YouTube API doesn't provide reach/impressions via the public Data API for individual videos easily.
-        // It requires YouTube Analytics API which is much more complex and requires meaningful reporting.
-        // We will map 'views' to 'impressions' for now as a proxy.
+        // Fetch Analytics Data (Watch Time, Average Duration)
+        let estimatedMinutesWatched = 0;
+        let averageViewDuration = 0;
+
+        try {
+            // Analytics API requires a date range. We'll use a broad range (lifetime proxy)
+            const endDate = new Date().toISOString().split('T')[0];
+            const startDate = '2005-01-01'; // Beginning of YouTube
+
+            const analyticsUrl = `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=${startDate}&endDate=${endDate}&metrics=estimatedMinutesWatched,averageViewDuration&dimensions=video&filters=video==${videoId}`;
+            const analyticsRes = await fetch(analyticsUrl, {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+
+            if (analyticsRes.ok) {
+                const analyticsData = await analyticsRes.json();
+                if (analyticsData.rows && analyticsData.rows.length > 0) {
+                    estimatedMinutesWatched = analyticsData.rows[0][1] || 0;
+                    averageViewDuration = analyticsData.rows[0][2] || 0;
+                }
+            }
+        } catch (e) {
+            console.warn(`[YouTube] Analytics fetch failed for video ${videoId}:`, e);
+        }
+
         const impressions = views;
-        const reach = views; // Proxy
+        const reach = views;
 
         // Engagement rate
         const totalEngagements = likes + comments;
@@ -524,6 +548,8 @@ export async function getYouTubeVideoInsights(
             engagement: totalEngagements,
             engagementRate,
             views,
+            estimatedMinutesWatched,
+            averageViewDuration,
             isDeleted: false,
             title: item.snippet?.title,
             description: item.snippet?.description,
@@ -533,6 +559,36 @@ export async function getYouTubeVideoInsights(
     } catch (error) {
         console.error(`[YouTube] Error fetching insights for ${videoId}:`, error);
         throw error;
+    }
+}
+
+/**
+ * Fetch traffic sources for a video
+ */
+export async function getYouTubeTrafficSources(
+    videoId: string,
+    accessToken: string
+) {
+    try {
+        const endDate = new Date().toISOString().split('T')[0];
+        const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // Last 30 days
+
+        const url = `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=${startDate}&endDate=${endDate}&metrics=views&dimensions=insightTrafficSourceType&filters=video==${videoId}`;
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            console.warn(`[YouTube] Traffic sources fetch failed:`, error);
+            return [];
+        }
+
+        const data = await response.json();
+        return data.rows || [];
+    } catch (error) {
+        console.error(`[YouTube] Traffic sources error:`, error);
+        return [];
     }
 }
 
@@ -582,8 +638,9 @@ export interface YouTubeAudienceInsights {
         ageGroup: Record<string, number>; // Percentage
         gender: Record<string, number>;   // Percentage
         country: Record<string, number>;  // Percentage
+        city: Record<string, number>;     // Percentage
     };
-    totalSubscribers?: number;
+    totalSubscribers: number;
     _rawResponses?: any[];
 }
 
@@ -591,6 +648,13 @@ export async function getYouTubeAudienceInsights(
     credentials: YouTubeCredentials
 ): Promise<YouTubeAudienceInsights> {
     const { accessToken } = credentials;
+
+    // Default result
+    const result: YouTubeAudienceInsights = {
+        demographics: { ageGroup: {}, gender: {}, country: {}, city: {} },
+        totalSubscribers: 0,
+        _rawResponses: []
+    };
 
     try {
         // We want percentage of viewers by age, gender, country.
@@ -607,41 +671,42 @@ export async function getYouTubeAudienceInsights(
                 _rawResponses.push({ label, url: res.url, status: res.status, error: 'Failed to parse JSON' });
             }
         };
+        result._rawResponses = _rawResponses;
+
+        const channelInfo = await getYouTubeChannelInfo(accessToken);
+        result.totalSubscribers = channelInfo ? parseInt(channelInfo.statistics?.subscriberCount || '0') : 0;
 
         const endDate = new Date().toISOString().split('T')[0];
-        const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // Last 90 days
+        const startDate28 = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const startDate90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // fallback range
 
-        // 1. Age and Gender
-        const ageGenderUrl = `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=${startDate}&endDate=${endDate}&metrics=viewerPercentage&dimensions=ageGroup,gender&sort=gender,ageGroup`;
+        // Helper to fetch report with fallback
+        const fetchReport = async (label: string, urlFunc: (start: string) => string) => {
+            let res = await fetch(urlFunc(startDate28), { headers: { 'Authorization': `Bearer ${accessToken}` } });
+            await capture(res, label);
+            let data = res.ok ? await res.json() : null;
 
-        // 2. Country
-        const countryUrl = `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=${startDate}&endDate=${endDate}&metrics=views&dimensions=country&sort=-views&maxResults=10`;
-
-        const ageGenderRes = await fetch(ageGenderUrl, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-        await capture(ageGenderRes, 'demographics_age_gender');
-
-        const countryRes = await fetch(countryUrl, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-        await capture(countryRes, 'demographics_country');
-
-        // Note: getYouTubeChannelInfo also makes an API call
-        const channelInfo = await getYouTubeChannelInfo(accessToken);
-        // We can't easily capture inside getYouTubeChannelInfo without modifying it too,
-        // but for now let's focus on the main analytics calls.
-
-        const result: YouTubeAudienceInsights = {
-            demographics: { ageGroup: {}, gender: {}, country: {} },
-            totalSubscribers: channelInfo ? parseInt(channelInfo.statistics?.subscriberCount || '0') : 0,
-            _rawResponses
+            // If no data in 28 days, try 90 days
+            if (res.ok && (!data.rows || data.rows.length === 0)) {
+                console.log(`[YouTube] No data for ${label} in 28d, trying 90d...`);
+                res = await fetch(urlFunc(startDate90), { headers: { 'Authorization': `Bearer ${accessToken}` } });
+                await capture(res, `${label}_90d`);
+                if (res.ok) data = await res.json();
+            }
+            return { ok: res.ok, status: res.status, data };
         };
 
-        if (ageGenderRes.ok) {
-            const data = await ageGenderRes.json();
-            // rows: [[ageGroup, gender, viewerPercentage], ...]
-            if (data.rows) {
+        try {
+            // 1. Age and Gender
+            const { ok, status, data } = await fetchReport('demographics_age_gender', (start) =>
+                `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=${start}&endDate=${endDate}&metrics=viewerPercentage&dimensions=ageGroup,gender&sort=ageGroup,gender`
+            );
+
+            if (ok && data?.rows) {
                 data.rows.forEach((row: any) => {
-                    const age = row[0];
-                    const gen = row[1];
-                    const pct = row[2];
+                    const age = row[0] || 'Unknown';
+                    const gen = row[1] ? row[1].toLowerCase() : 'unknown';
+                    const pct = row[2] || 0;
 
                     if (result.demographics.ageGroup[age]) result.demographics.ageGroup[age] += pct;
                     else result.demographics.ageGroup[age] = pct;
@@ -649,37 +714,57 @@ export async function getYouTubeAudienceInsights(
                     if (result.demographics.gender[gen]) result.demographics.gender[gen] += pct;
                     else result.demographics.gender[gen] = pct;
                 });
+            } else if (!ok) {
+                console.warn(`[YouTube] Age/Gender analytics fetch failed (${status})`);
             }
-        } else {
-            const err = await ageGenderRes.json();
-            console.warn(`[YouTube] Failed to fetch age/gender analytics (Status ${ageGenderRes.status}):`, JSON.stringify(err));
+        } catch (e) {
+            console.warn('[YouTube] Error fetching Age/Gender:', e);
         }
 
-        if (countryRes.ok) {
-            const data = await countryRes.json();
-            // rows: [[country, views], ...]
-            if (data.rows) {
-                // Calculate total views first
-                const totalViews = data.rows.reduce((acc: number, row: any) => acc + row[1], 0);
+        try {
+            // 2. Country
+            const { ok, status, data } = await fetchReport('demographics_country', (start) =>
+                `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=${start}&endDate=${endDate}&metrics=views&dimensions=country&sort=-views&maxResults=10`
+            );
 
+            if (ok && data?.rows) {
+                const totalViews = data.rows.reduce((acc: number, row: any) => acc + (row[1] || 0), 0);
                 data.rows.forEach((row: any) => {
-                    const country = row[0];
-                    const views = row[1];
-                    // Convert to percentage
+                    const country = row[0] || 'Unknown';
+                    const views = row[1] || 0;
                     const pct = totalViews > 0 ? (views / totalViews) * 100 : 0;
                     result.demographics.country[country] = Number(pct.toFixed(2));
                 });
             }
-        } else {
-            const err = await countryRes.json();
-            console.warn(`[YouTube] Failed to fetch country analytics (Status ${countryRes.status}):`, JSON.stringify(err));
+        } catch (e) {
+            console.warn('[YouTube] Error fetching Country analytics:', e);
+        }
+
+        try {
+            // 3. City
+            // Removed sort/maxResults for base baseline if failing
+            const { ok, status, data } = await fetchReport('demographics_city', (start) =>
+                `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=${start}&endDate=${endDate}&metrics=views&dimensions=city&sort=-views&maxResults=25`
+            );
+
+            if (ok && data?.rows) {
+                const totalViews = data.rows.reduce((acc: number, row: any) => acc + (row[1] || 0), 0);
+                data.rows.forEach((row: any) => {
+                    const city = row[0] || 'Unknown';
+                    const views = row[1] || 0;
+                    const pct = totalViews > 0 ? (views / totalViews) * 100 : 0;
+                    result.demographics.city[city] = Number(pct.toFixed(2));
+                });
+            }
+        } catch (e) {
+            console.warn('[YouTube] Error fetching City analytics:', e);
         }
 
         return result;
 
     } catch (error) {
         console.error('[YouTube] Error fetching audience insights:', error);
-        return { demographics: { ageGroup: {}, gender: {}, country: {} } };
+        return result; // Return empty/partial structure
     }
 }
 
@@ -689,6 +774,7 @@ export interface YouTubeAccountInsights {
     estimatedMinutesWatched: number;
     averageViewDuration: number;
     engagement: number;
+    trafficSources?: any[];
     _rawResponses?: any[];
 }
 
@@ -696,6 +782,8 @@ export async function getYouTubeAccountInsights(
     credentials: YouTubeCredentials
 ): Promise<YouTubeAccountInsights> {
     const { accessToken } = credentials;
+    const defaultResult = { views: 0, subscribersGained: 0, estimatedMinutesWatched: 0, averageViewDuration: 0, engagement: 0 };
+
     try {
         const _rawResponses: any[] = [];
         const capture = async (res: Response, label: string) => {
@@ -711,6 +799,7 @@ export async function getYouTubeAccountInsights(
         const endDate = new Date().toISOString().split('T')[0];
         const startDate = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // last 28 days
 
+        // Note: 'averageViewDuration' is in seconds
         const metrics = 'views,subscribersGained,estimatedMinutesWatched,averageViewDuration,likes,comments';
         const url = `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=${startDate}&endDate=${endDate}&metrics=${metrics}`;
 
@@ -722,28 +811,42 @@ export async function getYouTubeAccountInsights(
         await capture(response, 'account_insights_28d');
 
         if (!response.ok) {
-            const err = await response.json();
-            console.warn(`[YouTube] Failed to fetch channel insights:`, JSON.stringify(err));
-            return { views: 0, subscribersGained: 0, estimatedMinutesWatched: 0, averageViewDuration: 0, engagement: 0 };
+            const err = await response.text(); // Use text() to avoid JSON parse error on empty/HTML response
+            console.warn(`[YouTube] Failed to fetch channel insights (${response.status}):`, err);
+            return { ...defaultResult, _rawResponses };
         }
 
         const data = await response.json();
-        // rows: [[views, subscribersGained, estimatedMinutesWatched, averageViewDuration, likes, comments]]
+        const result: YouTubeAccountInsights = { ...defaultResult, _rawResponses };
+
         if (data.rows && data.rows.length > 0) {
             const row = data.rows[0];
-            return {
-                views: row[0] || 0,
-                subscribersGained: row[1] || 0,
-                estimatedMinutesWatched: row[2] || 0,
-                averageViewDuration: row[3] || 0,
-                engagement: (row[4] || 0) + (row[5] || 0),
-                _rawResponses
-            };
+            result.views = row[0] || 0;
+            result.subscribersGained = row[1] || 0;
+            result.estimatedMinutesWatched = row[2] || 0;
+            result.averageViewDuration = row[3] || 0;
+            result.engagement = (row[4] || 0) + (row[5] || 0);
         }
 
-        return { views: 0, subscribersGained: 0, estimatedMinutesWatched: 0, averageViewDuration: 0, engagement: 0, _rawResponses };
+        // Fetch Traffic Sources for Channel
+        try {
+            const trafficUrl = `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=${startDate}&endDate=${endDate}&metrics=views&dimensions=insightTrafficSourceType`;
+            const trafficRes = await fetch(trafficUrl, {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            await capture(trafficRes, 'channel_traffic_sources');
+            if (trafficRes.ok) {
+                const trafficData = await trafficRes.json();
+                result.trafficSources = trafficData.rows || [];
+            }
+        } catch (e) {
+            console.warn('[YouTube] Error fetching channel traffic sources:', e);
+        }
+
+        return result;
+
     } catch (error) {
         console.error('[YouTube] Error fetching YouTube account insights:', error);
-        return { views: 0, subscribersGained: 0, estimatedMinutesWatched: 0, averageViewDuration: 0, engagement: 0 };
+        return defaultResult;
     }
 }

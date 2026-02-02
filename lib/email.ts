@@ -426,6 +426,7 @@ interface SendEmailParams {
     html: string;
     from?: string;
     replyTo?: string;
+    cc?: string;
 }
 
 /**
@@ -433,7 +434,7 @@ interface SendEmailParams {
  * @param params - Email parameters
  */
 export async function sendEmail(params: SendEmailParams): Promise<boolean> {
-    const { to, subject, html, from, replyTo } = params;
+    const { to, subject, html, from, replyTo, cc } = params;
     const { apiKey, domain, fromEmail } = await getEmailConfig();
 
     const senderEmail = from || fromEmail;
@@ -453,9 +454,13 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
             msg['h:Reply-To'] = replyTo;
         }
 
+        if (cc) {
+            msg.cc = [cc];
+        }
+
         try {
             await mg.messages.create(domain, msg);
-            console.log(`✅ Email sent to ${to}`);
+            console.log(`✅ Email sent to ${to} ${cc ? `(CC: ${cc})` : ''}`);
             return true;
         } catch (error: any) {
             console.error('Error sending email via Mailgun:', error);
@@ -468,6 +473,7 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
     console.log('📧 MOCK EMAIL');
     console.log('='.repeat(60));
     console.log(`To: ${to}`);
+    if (cc) console.log(`CC: ${cc}`);
     console.log(`Subject: ${subject}`);
     if (replyTo) console.log(`Reply-To: ${replyTo}`);
     console.log('\nBody:');
