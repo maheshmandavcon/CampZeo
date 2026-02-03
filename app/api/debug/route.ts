@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-export async function GET() {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler() {
+
         // Migration: Add lastRunAt column if missing
         try {
             await prisma.$executeRawUnsafe(`ALTER TABLE "JobSetting" ADD COLUMN "lastRunAt" TIMESTAMP;`);
@@ -21,11 +22,7 @@ export async function GET() {
             message: "Migration attempted",
             jobSettingColumns
         });
-    } catch (error: any) {
-        return NextResponse.json({
-            success: false,
-            error: error.message,
-            stack: error.stack
-        }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/debug");

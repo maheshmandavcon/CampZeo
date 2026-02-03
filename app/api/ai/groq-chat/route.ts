@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { currentUser } from '@clerk/nextjs/server';
 import Groq from "groq-sdk";
 
+import { withErrorHandling } from '@/lib/api-handler';
 // Initialize Groq
 const groq = new Groq({
     apiKey: process.env.NEXT_PUBLIC_GROQ_API_KEY || ""
@@ -24,8 +25,8 @@ const minifyData = (data: any) => {
     }));
 };
 
-export async function POST(request: NextRequest) {
-    try {
+async function postHandler(request: NextRequest) {
+
         const body = await request.json();
         const { message, analyticsData } = body;
 
@@ -160,17 +161,7 @@ INSTRUCTIONS:
 
         return NextResponse.json({ message: text });
 
-    } catch (error: any) {
-        console.error('Groq AI Chat Error:', error);
-
-        let errorMessage = "I'm having trouble analyzing your data right now. Please try again later.";
-
-        if (error.status === 413 || error.message?.includes("rate_limit_exceeded")) {
-            errorMessage = "The analysis request was too complex for the current engine. I've tried to optimize it, but please try asking a more specific question or filtering for a single platform.";
-        } else if (error.message?.includes("401")) {
-            errorMessage = "Authentication Error with Groq. Please check API configuration.";
-        }
-
-        return NextResponse.json({ message: errorMessage }, { status: 500 });
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/ai/groq-chat");

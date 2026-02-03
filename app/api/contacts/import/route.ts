@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { currentUser } from '@clerk/nextjs/server';
 import { logError, logWarning, logInfo } from '@/lib/audit-logger';
 
+import { withErrorHandling } from '@/lib/api-handler';
 interface CSVRow {
     contactName?: string;
     contactEmail?: string;
@@ -73,8 +74,8 @@ function parseCSV(csvText: string): CSVRow[] {
     return rows;
 }
 
-export async function POST(request: NextRequest) {
-    try {
+async function postHandler(request: NextRequest) {
+
         const user = await currentUser();
         if (!user) {
             await logWarning("Unauthorized access attempt to import contacts", { action: "import-contacts" });
@@ -231,12 +232,7 @@ export async function POST(request: NextRequest) {
 
         await logInfo("Contacts imported", { success: result.success, failed: result.failed, duplicates: result.duplicates, importedBy: user.id });
         return NextResponse.json(result);
-    } catch (error: any) {
-        console.error('Error importing contacts:', error);
-        await logError("Failed to import contacts", { userId: "unknown" }, error);
-        return NextResponse.json(
-            { error: 'Failed to import contacts' },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/contacts/import");

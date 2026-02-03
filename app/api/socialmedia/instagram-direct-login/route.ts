@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 
+import { withErrorHandling } from '@/lib/api-handler';
 /**
  * Instagram Direct Login API
  * Authenticates users directly using Instagram credentials (not via Facebook OAuth)
  * This uses Instagram's Graph API with username and password-based authentication
  */
-export async function POST(request: NextRequest) {
-    try {
+async function postHandler(request: NextRequest) {
+
         const { userId } = await auth();
         if (!userId) {
             return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -141,11 +142,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-    } catch (error: any) {
-        console.error('Error in Instagram direct login:', error);
-        return NextResponse.json(
-            { message: 'Internal server error' },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/instagram-direct-login");

@@ -3,8 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { currentUser } from '@clerk/nextjs/server';
 import { SocialNormalizerService } from '@/lib/social-normalizer';
 
-export async function GET(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler(request: NextRequest) {
+
         const user = await currentUser();
 
         if (!user) {
@@ -195,11 +196,7 @@ export async function GET(request: NextRequest) {
             syncedAt: new Date().toISOString()
         });
 
-    } catch (error: any) {
-        console.error('[Sync All] Error:', error);
-        return NextResponse.json({
-            error: 'Failed to sync analytics',
-            message: error.message
-        }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/Analytics/sync-all");

@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler() {
+
         const user = await currentUser();
         if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -95,8 +96,7 @@ export async function GET() {
 
         return NextResponse.json({ organizations });
 
-    } catch (error) {
-        console.error("Error fetching LinkedIn pages:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/linkedin/pages");

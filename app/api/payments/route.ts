@@ -3,8 +3,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logError, logWarning } from "@/lib/audit-logger";
 
-export async function GET() {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler() {
+
         const user = await currentUser();
 
         if (!user) {
@@ -28,12 +29,7 @@ export async function GET() {
         });
 
         return NextResponse.json({ payments });
-    } catch (error: any) {
-        console.error("Error fetching payments:", error);
-        await logError("Failed to fetch payments", { userId: "unknown" }, error);
-        return NextResponse.json(
-            { error: "Failed to fetch payments" },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/payments");

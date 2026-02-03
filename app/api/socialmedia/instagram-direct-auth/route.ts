@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 
+import { withErrorHandling } from '@/lib/api-handler';
 /**
  * Instagram Direct Auth Callback
  * Handles Instagram app-based authentication using client ID and secret
  * This is an alternative to Facebook login for direct Instagram app authentication
  */
-export async function POST(request: NextRequest) {
-    try {
+async function postHandler(request: NextRequest) {
+
         const { userId } = await auth();
         if (!userId) {
             return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -130,11 +131,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-    } catch (error: any) {
-        console.error('Error in Instagram direct auth callback:', error);
-        return NextResponse.json(
-            { message: 'Internal server error' },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/instagram-direct-auth");

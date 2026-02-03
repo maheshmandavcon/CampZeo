@@ -3,8 +3,9 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { logError, logWarning } from '@/lib/audit-logger';
 
-export async function GET(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler(request: NextRequest) {
+
         const { userId } = await auth();
         if (!userId) return NextResponse.json({ isSuccess: false, message: 'Unauthorized' }, { status: 401 });
 
@@ -31,8 +32,7 @@ export async function GET(request: NextRequest) {
         });
 
         return NextResponse.json({ isSuccess: true, data: enquiries });
-    } catch (error: any) {
-        await logError("Failed to fetch enquiries", { userId: "Unknown" }, error);
-        return NextResponse.json({ isSuccess: false, message: error.message }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/admin/enquiries");

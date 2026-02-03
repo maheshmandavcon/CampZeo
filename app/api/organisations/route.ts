@@ -4,8 +4,9 @@ import { NextResponse } from "next/server";
 import { sendPaymentReceipt } from "@/lib/email";
 import { logError, logWarning, logInfo } from '@/lib/audit-logger';
 
-export async function POST(req: Request) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(req: Request) {
+
         const user = await currentUser();
 
         if (!user) {
@@ -253,26 +254,14 @@ export async function POST(req: Request) {
             // Let's rely on finding it or refactoring. 
             // Better: let invoice variable be outside.
         });
-    } catch (error) {
-        console.error("=== ERROR CREATING ORGANISATION ===");
-        console.error("Error details:", error);
-        console.error("Error message:", error instanceof Error ? error.message : "Unknown error");
-        console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
-        console.error("===================================");
-
-        return NextResponse.json(
-            {
-                error: "Internal server error",
-                details: error instanceof Error ? error.message : "Unknown error",
-            },
-            { status: 500 }
-        );
-    }
+    
 }
 
+export const POST = withErrorHandling(postHandler, "POST /api/organisations");
+
 // GET endpoint to fetch current user's organisation
-export async function GET() {
-    try {
+async function getHandler() {
+
         const user = await currentUser();
 
         if (!user) {
@@ -292,11 +281,7 @@ export async function GET() {
             user: dbUser,
             organisation: dbUser.organisation,
         });
-    } catch (error) {
-        console.error("Error fetching organisation:", error);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/organisations");

@@ -4,8 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { getFacebookPagePosts } from "@/lib/facebook";
 import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
 
-export async function GET(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler(request: NextRequest) {
+
         const { userId } = await auth();
         if (!userId) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -35,8 +36,7 @@ export async function GET(request: NextRequest) {
         });
 
         return NextResponse.json({ posts });
-    } catch (error: any) {
-        console.error("Error fetching Facebook posts:", error);
-        return NextResponse.json({ error: error.message || "Failed to fetch posts" }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/facebook/posts");

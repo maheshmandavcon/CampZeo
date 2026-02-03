@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { getPlanById } from "@/lib/plans";
 import { logError, logWarning, logInfo } from "@/lib/audit-logger";
 
-export async function POST(req: Request) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(req: Request) {
+
         const user = await currentUser();
 
         if (!user) {
@@ -116,12 +117,7 @@ export async function POST(req: Request) {
                 isSignup: false,
             });
         }
-    } catch (error: any) {
-        console.error("Error creating Razorpay order:", error);
-        await logError("Failed to create razorpay order", { userId: "unknown" }, error);
-        return NextResponse.json(
-            { error: "Failed to create order" },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/razorpay/create-order");

@@ -10,28 +10,41 @@ type ApiHandlerContext = { params: Promise<Record<string, string | string[]>> };
 // Current file has: type ApiHandlerContext = { params: Record<string, string | string[]> };
 // Let's stick to the existing type signature but be robust.
 
+/**
+ * Custom error class for API-related errors that should be shown to the user.
+ */
+export class ApiError extends Error {
+    constructor(
+        public statusCode: number,
+        message: string,
+        public isPublic: boolean = true
+    ) {
+        super(message);
+        this.name = 'ApiError';
+    }
+}
+
 type ApiHandler = (req: NextRequest, context: any) => Promise<Response>;
 
 /**
  * Wraps an API route handler with centralized error handling logic.
- * 
- * Features:
- * 1. Structured Logging (Pino) -> Console/Stdout
- * 2. Database Logging (Audit Log) -> Prisma
- * 3. Admin Alerting (SMTP) -> Email
- * 4. Safe User Response -> JSON 500
- * 
- * @param handler - The original API route handler
- * @param apiName - Descriptive name (e.g., "GET /api/posts")
  */
 export function withErrorHandling(handler: ApiHandler, apiName: string): ApiHandler {
     return async (req: NextRequest, context: any) => {
         try {
             return await handler(req, context);
         } catch (error) {
+            // Handle known API errors that are safe to show to the user
+            if (error instanceof ApiError && error.isPublic) {
+                return NextResponse.json(
+                    { error: error.message },
+                    { status: error.statusCode }
+                );
+            }
+
             // 1. Structured Log (Pino)
             logger.error({
-                msg: `Error in ${apiName}`,
+                msg: `Unexpected Error in ${apiName}`,
                 err: error,
                 url: req.url,
                 method: req.method
@@ -41,14 +54,11 @@ export function withErrorHandling(handler: ApiHandler, apiName: string): ApiHand
             const metadata = {
                 url: req.url,
                 method: req.method,
-                // Safe capture of params and query
                 query: Object.fromEntries(req.nextUrl.searchParams.entries()),
-                // Context params might be resolved or not, just try to capture safe JSON
                 params: context?.params
             };
 
             // 2. Database Log (Audit)
-            // Fire and forget to not block response? No, usually safer to await to ensure persistence.
             try {
                 await logError(`API Failure: ${apiName}`, { ...metadata, reason: errorMessage }, error instanceof Error ? error : new Error(errorMessage));
             } catch (dbLogErr) {
@@ -56,9 +66,6 @@ export function withErrorHandling(handler: ApiHandler, apiName: string): ApiHand
             }
 
             // 3. Admin Alert (Email)
-            // Fire and forget to avoid delaying response significantly? 
-            // Better to await to ensure alerting? Or utilize execution context like waitUntil locally?
-            // For now, we await it but catch errors so we still return response.
             await notifyAdminOfError(apiName, error, metadata);
 
             // 4. Generic Response

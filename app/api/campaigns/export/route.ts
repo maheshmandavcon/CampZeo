@@ -4,8 +4,9 @@ import { currentUser } from '@clerk/nextjs/server';
 import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
 import { logError, logWarning } from '@/lib/audit-logger';
 
-export async function GET(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler(request: NextRequest) {
+
         const user = await currentUser();
         if (!user) {
             await logWarning("Unauthorized access attempt to export campaigns", { action: "export-campaigns" });
@@ -105,9 +106,7 @@ export async function GET(request: NextRequest) {
             },
         });
 
-    } catch (error: any) {
-        console.error('Error exporting campaigns:', error);
-        await logError("Failed to export campaigns", { userId: "unknown" }, error);
-        return NextResponse.json({ error: 'Failed to export campaigns' }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/campaigns/export");

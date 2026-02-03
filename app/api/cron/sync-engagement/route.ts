@@ -6,8 +6,9 @@ import { getLinkedInPostInsights } from '@/lib/linkedin';
 import { getYouTubeVideoInsights } from '@/lib/youtube';
 import { getPinterestPostInsights } from '@/lib/pinterest';
 
-export async function GET(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler(request: NextRequest) {
+
         // Authenticate the request (e.g., via a secret token in headers for cron)
         const authHeader = request.headers.get('authorization');
         if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -110,8 +111,7 @@ export async function GET(request: NextRequest) {
             results
         });
 
-    } catch (error) {
-        console.error('Engagement sync error:', error);
-        return NextResponse.json({ error: 'Failed to sync engagement' }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/cron/sync-engagement");

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logError, logInfo } from '@/lib/audit-logger';
 
+import { withErrorHandling } from '@/lib/api-handler';
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -11,8 +12,8 @@ const PHONE_REGEX = /^[\d\s\-\+\(\)]+$/;
 // Password validation: at least 8 characters, 1 uppercase, 1 lowercase, 1 number
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
-export async function POST(req: Request) {
-    try {
+async function postHandler(req: Request) {
+
         const data = await req.json();
 
         if (!data.captchaToken) {
@@ -191,13 +192,7 @@ export async function POST(req: Request) {
 
         await logInfo("Enquiry created", { email: data.email, organisationName: data.organisationName });
         return NextResponse.json({ success: true, enquiry });
-    } catch (error: any) {
-        console.error("Enquiry creation error:", error);
-        await logError("Failed to create enquiry", { userId: "Unknown" }, error);
-        return NextResponse.json({
-            success: false,
-            error: error instanceof Error ? error.message : "Failed to create enquiry",
-            message: "An error occurred while creating your enquiry"
-        }, { status: 500 });
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/enquiries");

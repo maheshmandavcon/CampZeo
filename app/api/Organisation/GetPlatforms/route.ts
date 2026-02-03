@@ -3,8 +3,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 
-export async function GET() {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler() {
+
         const user = await currentUser();
 
         if (!user) {
@@ -55,14 +56,7 @@ export async function GET() {
             platforms: uniquePlatforms
         });
 
-    } catch (error) {
-        console.error("Error fetching organization platforms:", error);
-        return NextResponse.json(
-            {
-                error: "Failed to fetch platforms",
-                details: error instanceof Error ? error.message : "Unknown error"
-            },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/Organisation/GetPlatforms");

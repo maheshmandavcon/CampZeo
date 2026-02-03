@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getFacebookPagePosts, getFacebookPostInsights } from '@/lib/facebook';
 
-export async function POST(request: NextRequest) {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(request: NextRequest) {
+
     const apiKey = request.headers.get('x-api-key');
 
     // Basic API Key check
@@ -69,4 +71,7 @@ export async function POST(request: NextRequest) {
         console.error('Sync error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
+
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/ai/sync-analytics");

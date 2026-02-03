@@ -4,8 +4,9 @@ import { refreshUserTokens } from "@/lib/social-refresh";
 import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 import { prisma } from "@/lib/prisma";
 
-export async function POST() {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler() {
+
         const { userId } = await auth();
         if (!userId) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,8 +28,7 @@ export async function POST() {
         const result = await refreshUserTokens(targetUserId);
 
         return NextResponse.json(result);
-    } catch (error: any) {
-        console.error("Error in refresh API:", error);
-        return NextResponse.json({ error: "Internal server error", details: error.message }, { status: 500 });
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/refresh");

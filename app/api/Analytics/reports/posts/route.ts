@@ -4,8 +4,9 @@ import { currentUser } from "@clerk/nextjs/server";
 import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 import { AudienceNormalizerService } from "@/lib/audience-normalizer";
 
-export async function GET(req: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler(req: NextRequest) {
+
         const user = await currentUser();
         if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -219,8 +220,7 @@ export async function GET(req: NextRequest) {
             activityHeatmap
         });
 
-    } catch (error) {
-        console.error("[API] Reports Posts Analytics error:", error);
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/Analytics/reports/posts");

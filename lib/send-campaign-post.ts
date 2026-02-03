@@ -287,15 +287,20 @@ export async function sendCampaignPost(
                         }
                     );
                 } catch (igError: any) {
-                    // Normalize error message if it's an object or JSON
+                    // Normalize error message if it's an object or contains JSON
                     let errorMsg = igError instanceof Error ? igError.message : String(igError);
-                    try {
-                        // Attempt to parse JSON error if stringified
-                        const parsed = JSON.parse(errorMsg);
-                        errorMsg = parsed.error?.message || parsed.message || errorMsg;
-                    } catch (e) {
-                        // Not JSON, use as is
+
+                    // If the error message contains a JSON block (common from lib/instagram.ts), extract it
+                    if (errorMsg.includes('{') && errorMsg.includes('}')) {
+                        try {
+                            const jsonContent = errorMsg.substring(errorMsg.indexOf('{'), errorMsg.lastIndexOf('}') + 1);
+                            const parsed = JSON.parse(jsonContent);
+                            errorMsg = parsed.error?.message || parsed.message || errorMsg;
+                        } catch (e) {
+                            // If parsing fails, stick with the original message
+                        }
                     }
+
                     console.error('[Instagram] Post failed:', errorMsg);
                     throw new Error(errorMsg); // Re-throw to be caught by main handler
                 }
