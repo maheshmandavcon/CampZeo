@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { logInfo, logError, logWarning } from "@/lib/audit-logger";
 
-export async function POST(req: Request) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(req: Request) {
+
         const user = await currentUser();
 
         if (!user) {
@@ -77,12 +78,7 @@ export async function POST(req: Request) {
                 autoRenew: updatedSubscription.autoRenew,
             },
         });
-    } catch (error: any) {
-        console.error("Error cancelling subscription:", error);
-        await logError("Failed to cancel subscription", { userId: "unknown" }, error);
-        return NextResponse.json(
-            { error: "Failed to cancel subscription" },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/subscription/cancel");

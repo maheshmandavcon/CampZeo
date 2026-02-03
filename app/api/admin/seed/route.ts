@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
 
-export async function POST() {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler() {
+
 
         const user = await currentUser();
 
@@ -139,14 +140,7 @@ export async function POST() {
             plans: createdPlans
         });
 
-    } catch (error) {
-        console.error('❌ Error seeding database:', error);
-        return NextResponse.json(
-            {
-                error: "Failed to seed database",
-                details: error instanceof Error ? error.message : "Unknown error"
-            },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/admin/seed");

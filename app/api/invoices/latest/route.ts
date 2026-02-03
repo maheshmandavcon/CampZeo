@@ -2,8 +2,9 @@ import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler() {
+
         const user = await currentUser();
 
         if (!user) {
@@ -35,11 +36,7 @@ export async function GET() {
         }
 
         return NextResponse.json({ invoice: latestInvoice });
-    } catch (error) {
-        console.error("Error fetching latest invoice:", error);
-        return NextResponse.json(
-            { error: "Failed to fetch latest invoice" },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/invoices/latest");

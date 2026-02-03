@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { logInfo, logError, logWarning } from "@/lib/audit-logger";
 
-export async function POST(req: Request) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(req: Request) {
+
         const user = await currentUser();
 
         if (!user) {
@@ -75,12 +76,7 @@ export async function POST(req: Request) {
                 autoRenew: updatedSubscription.autoRenew,
             },
         });
-    } catch (error: any) {
-        console.error("Error toggling auto-renew:", error);
-        await logError("Failed to update auto-renew setting", { userId: "unknown" }, error);
-        return NextResponse.json(
-            { error: "Failed to update auto-renew setting" },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/subscription/auto-renew");

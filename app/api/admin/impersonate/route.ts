@@ -3,8 +3,9 @@ import { auth, clerkClient } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { logError, logWarning, logInfo } from '@/lib/audit-logger';
 
-export async function POST(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(request: NextRequest) {
+
         const { userId } = await auth();
         if (!userId) return NextResponse.json({ isSuccess: false, message: 'Unauthorized' }, { status: 401 });
 
@@ -29,9 +30,7 @@ export async function POST(request: NextRequest) {
 
         await logInfo("Admin impersonated user", { adminId: userId, targetUserId, targetUserClerkId: targetUser.clerkId });
         return NextResponse.json({ isSuccess: true, data: { url: signInToken.url } });
-    } catch (error: any) {
-        console.error('Impersonate error:', error);
-        await logError("Failed to impersonate user", { userId: "Unknown" }, error);
-        return NextResponse.json({ isSuccess: false, message: error.message }, { status: 500 });
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/admin/impersonate");

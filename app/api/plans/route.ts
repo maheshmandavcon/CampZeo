@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { withErrorHandling } from '@/lib/api-handler';
 // GET: Fetch active plans (public endpoint - no auth required for pricing pages)
-export async function GET(request: NextRequest) {
-    try {
+async function getHandler(request: NextRequest) {
+
         // Fetch only active, non-deleted plans
         const plans = await prisma.plan.findMany({
             where: {
@@ -72,15 +73,7 @@ export async function GET(request: NextRequest) {
             plans: formattedPlans
         });
 
-    } catch (error: any) {
-        console.error("Error fetching plans:", error);
-        return NextResponse.json(
-            {
-                success: false,
-                message: error.message || 'Failed to fetch plans',
-                plans: []
-            },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/plans");

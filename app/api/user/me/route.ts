@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 
-export async function GET() {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler() {
+
         const user = await currentUser();
 
         if (!user) {
@@ -78,17 +79,13 @@ export async function GET() {
             createdAt: dbUser.createdAt,
             updatedAt: dbUser.updatedAt,
         });
-    } catch (error) {
-        console.error("Error fetching user:", error);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
-    }
+    
 }
 
-export async function PUT(req: Request) {
-    try {
+export const GET = withErrorHandling(getHandler, "GET /api/user/me");
+
+async function putHandler(req: Request) {
+
         const user = await currentUser();
 
         if (!user) {
@@ -108,11 +105,7 @@ export async function PUT(req: Request) {
         });
 
         return NextResponse.json(updatedUser);
-    } catch (error) {
-        console.error("Error updating user:", error);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const PUT = withErrorHandling(putHandler, "PUT /api/user/me");

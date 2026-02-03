@@ -4,7 +4,7 @@ import { currentUser } from '@clerk/nextjs/server';
 import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
 import { sendCampaignPost } from '@/lib/send-campaign-post';
 import { logWarning, logInfo } from '@/lib/audit-logger';
-import { withErrorHandling } from '@/lib/api-handler';
+import { withErrorHandling, ApiError } from '@/lib/api-handler';
 
 // GET - Fetch all posts for a campaign
 async function getPostsHandler(
@@ -218,10 +218,9 @@ async function createPostHandler(
     const isSocialPlatform = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(type);
 
     if (isSocialPlatform && !scheduledPostTime) {
-        try {
-            await sendCampaignPost(post);
-        } catch (postError) {
-            console.error(`Failed to post to ${type}:`, postError);
+        const result = await sendCampaignPost(post);
+        if (!result.success) {
+            throw new ApiError(400, result.error || "Failed to share post immediately");
         }
     }
 

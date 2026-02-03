@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { prisma } from '@/lib/prisma';
+import { safeJsonStringify } from './safe-json';
 
 // Cache structure for SMTP config to reduce DB hits
 let smtpConfigCache: {
@@ -9,7 +10,8 @@ let smtpConfigCache: {
     user: string;
     pass: string;
     from: string;
-    to: string;
+    recipients: string[];
+    logLevel: string;
     lastFetched: number;
 } | null = null;
 
@@ -26,41 +28,76 @@ async function getSmtpConfig() {
     }
 
     let config = {
-        host: process.env.SMTP_HOST || '',
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true',
-        user: process.env.SMTP_USER || '',
-        pass: process.env.SMTP_PASS || '',
-        from: process.env.SMTP_FROM || '"System Alert" <no-reply@campzeo.com>',
-        to: process.env.ADMIN_EMAIL || '',
+        host: '',
+        port: 587,
+        secure: false,
+        user: '',
+        pass: '',
+        from: '"System Alert" <no-reply@campzeo.com>',
+        recipients: [] as string[],
+        logLevel: 'ERROR', // INFO, WARN, ERROR
     };
 
     try {
-        // Fetch from DB to override env vars if present
+        // Fetch strictly from DB
         const dbConfigs = await prisma.adminPlatformConfiguration.findMany({
             where: {
                 platform: 'EMAIL', // Using EMAIL platform for SMTP config
-                key: { in: ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'ADMIN_EMAIL_RECIPIENT'] }
+                key: { in: ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'ADMIN_EMAIL_RECIPIENTS', 'ADMIN_LOG_LEVEL', 'SMTP_SECURE'] }
             }
         });
+
+        console.log(`[getSmtpConfig] DB Fetch: Found ${dbConfigs.length} config entries`);
 
         if (dbConfigs.length > 0) {
             const getValue = (key: string) => dbConfigs.find(c => c.key === key)?.value;
 
             if (getValue('SMTP_HOST')) config.host = getValue('SMTP_HOST')!;
             if (getValue('SMTP_PORT')) config.port = parseInt(getValue('SMTP_PORT')!);
+            if (getValue('SMTP_SECURE')) config.secure = getValue('SMTP_SECURE') === 'true';
             if (getValue('SMTP_USER')) config.user = getValue('SMTP_USER')!;
             if (getValue('SMTP_PASS')) config.pass = getValue('SMTP_PASS')!;
             if (getValue('SMTP_FROM')) config.from = getValue('SMTP_FROM')!;
-            if (getValue('ADMIN_EMAIL_RECIPIENT')) config.to = getValue('ADMIN_EMAIL_RECIPIENT')!;
-        }
 
-        // Cache valid config
-        if (config.host && config.user) {
-            smtpConfigCache = { ...config, lastFetched: now };
+            const recipientsStr = getValue('ADMIN_EMAIL_RECIPIENTS');
+            if (recipientsStr) {
+                config.recipients = recipientsStr.split(',').map(e => e.trim()).filter(e => e);
+            }
+
+            if (getValue('ADMIN_LOG_LEVEL')) config.logLevel = getValue('ADMIN_LOG_LEVEL')!;
         }
     } catch (error) {
-        console.error("Failed to fetch SMTP config from DB:", error);
+        console.error("[getSmtpConfig] Database fetch failed:", error instanceof Error ? error.message : error);
+    }
+
+    // Secondary fallback to environment variables if still not fully configured
+    if (!config.host) {
+        console.log(`[getSmtpConfig] Falling back to .env for Host: ${process.env.SMTP_HOST ? 'Present' : 'Missing'}`);
+        config.host = process.env.SMTP_HOST || '';
+    }
+    // ... (rest of fallback logic)
+    if (config.port === 587 && process.env.SMTP_PORT) config.port = parseInt(process.env.SMTP_PORT);
+    if (!config.secure && process.env.SMTP_SECURE) config.secure = process.env.SMTP_SECURE === 'true';
+    if (!config.user) config.user = process.env.SMTP_USER || '';
+    if (!config.pass) config.pass = process.env.SMTP_PASS || '';
+
+    if (config.from === '"System Alert" <no-reply@campzeo.com>' && process.env.SMTP_FROM) {
+        config.from = process.env.SMTP_FROM;
+    }
+
+    if (config.recipients.length === 0) {
+        const recipients = process.env.ADMIN_EMAIL_RECIPIENTS || process.env.ADMIN_EMAIL;
+        console.log(`[getSmtpConfig] Falling back to .env for Recipients: ${recipients ? 'Found' : 'Missing'}`);
+        if (recipients) {
+            config.recipients = recipients.split(',').map(e => e.trim()).filter(e => e);
+        }
+    }
+
+    console.log(`[getSmtpConfig] Final config: Host=${config.host}, User=${config.user}, Recipients=${config.recipients.join(', ')}`);
+
+    // Cache valid config
+    if (config.host && config.user) {
+        smtpConfigCache = { ...config, lastFetched: now };
     }
 
     return config;
@@ -71,12 +108,19 @@ async function getSmtpConfig() {
  * Uses Nodemailer for direct SMTP transport.
  */
 export async function notifyAdminOfError(apiName: string, error: any, context?: any) {
+    console.log(`[notifyAdminOfError] Triggered for ${apiName}`);
     const config = await getSmtpConfig();
 
-    if (!config.host || !config.to) {
-        console.warn('⚠️ SMTP or Admin Email not configured using env or DB. Skipping alert.');
+    console.log(`[notifyAdminOfError] Internal Config Status: Host=${!!config.host}, Recipients=${config.recipients.length}`);
+
+    if (!config.host || config.recipients.length === 0) {
+        console.warn(`⚠️ [notifyAdminOfError] Skipping alert for ${apiName}: SMTP Host or Recipients missing.`);
+        console.log(`[notifyAdminOfError] Recipients found: ${JSON.stringify(config.recipients)}`);
         return;
     }
+
+    // Check log level? For now assuming this function is only called for ERRORs.
+    // If we want to support generic notifications later, we should check `config.logLevel`.
 
     try {
         const transporter = nodemailer.createTransport({
@@ -114,7 +158,7 @@ export async function notifyAdminOfError(apiName: string, error: any, context?: 
                     ${context ? `
                     <div style="margin-bottom: 20px;">
                         <h3 style="color: #4b5563;">Request Context</h3>
-                        <pre style="background-color: #f3f4f6; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px; border: 1px solid #e5e7eb;">${JSON.stringify(context, null, 2)}</pre>
+                        <pre style="background-color: #f3f4f6; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px; border: 1px solid #e5e7eb;">${safeJsonStringify(context, 2)}</pre>
                     </div>
                     ` : ''}
 
@@ -130,16 +174,58 @@ export async function notifyAdminOfError(apiName: string, error: any, context?: 
             </div>
         `;
 
-        await transporter.sendMail({
-            from: config.from,
-            to: config.to,
-            subject: subject,
-            html: html,
-        });
+        // Send to all recipients
+        for (const recipient of config.recipients) {
+            try {
+                await transporter.sendMail({
+                    from: config.from,
+                    to: recipient,
+                    subject: subject,
+                    html: html,
+                });
 
-        console.log(`✅ Admin alert sent to ${config.to}`);
+                // Log success
+                console.log(`✅ Admin alert sent to ${recipient}`);
+                try {
+                    await prisma.systemNotificationLog.create({
+                        data: {
+                            subject,
+                            recipient,
+                            status: 'SUCCESS',
+                            metadata: { apiName, error: errorMessage }
+                        }
+                    });
+                } catch (dbError) {
+                    console.error(`⚠️ Failed to log successful email to database for ${recipient}:`, dbError);
+                }
+            } catch (sendError: any) {
+                const detailedError = `Error Code: ${sendError.code || 'N/A'}, Message: ${sendError.message}`;
+                console.error(`❌ Failed to send admin alert to ${recipient}:`, detailedError);
+                // Log failure
+                try {
+                    await prisma.systemNotificationLog.create({
+                        data: {
+                            subject,
+                            recipient,
+                            status: 'FAILED',
+                            error: detailedError,
+                            metadata: {
+                                apiName,
+                                error: errorMessage,
+                                smtpHost: config.host,
+                                smtpPort: config.port,
+                                smtpSecure: config.secure
+                            }
+                        }
+                    });
+                } catch (dbError) {
+                    console.error(`⚠️ Failed to log failed email to database for ${recipient}:`, dbError);
+                }
+            }
+        }
 
-    } catch (sendError) {
-        console.error('❌ Failed to send admin alert email:', sendError);
+    } catch (setupError) {
+        console.error('❌ Failed to setup/send admin alerts:', setupError);
     }
 }
+

@@ -3,8 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { currentUser } from '@clerk/nextjs/server';
 import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
 
-export async function GET(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler(request: NextRequest) {
+
         const user = await currentUser();
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -62,11 +63,7 @@ export async function GET(request: NextRequest) {
         console.log(`Fetched ${posts.length} scheduled posts for organisation ${effectiveOrganisationId}`);
 
         return NextResponse.json({ posts, count: posts.length });
-    } catch (error) {
-        console.error('Error fetching scheduled posts:', error);
-        return NextResponse.json({
-            error: 'Failed to fetch scheduled posts',
-            details: error instanceof Error ? error.message : 'Unknown error'
-        }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/scheduled-posts");

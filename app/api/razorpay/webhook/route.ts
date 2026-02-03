@@ -3,8 +3,9 @@ import { verifyWebhookSignature } from "@/lib/razorpay";
 import { prisma } from "@/lib/prisma";
 import { logError, logWarning, logInfo } from "@/lib/audit-logger";
 
-export async function POST(req: Request) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(req: Request) {
+
         const body = await req.text();
         const signature = req.headers.get("x-razorpay-signature");
 
@@ -45,15 +46,10 @@ export async function POST(req: Request) {
         }
 
         return NextResponse.json({ received: true });
-    } catch (error: any) {
-        console.error("Error processing webhook:", error);
-        await logError("Razorpay webhook processing failed", { action: "webhook-processing" }, error);
-        return NextResponse.json(
-            { error: "Webhook processing failed" },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/razorpay/webhook");
 
 async function handlePaymentSuccess(payment: any) {
     try {

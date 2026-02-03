@@ -36,7 +36,9 @@ import {
   Download,
   X,
   Trash,
-  FileJson
+  FileJson,
+  Bell,
+  Siren
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -60,6 +62,8 @@ import { constants } from "buffer";
 import { JSX } from "react/jsx-runtime";
 import { AdminBroadcastNotification } from "@/components/admin/admin-broadcast-notification";
 import { AdminSchedulerView } from "@/components/admin/admin-scheduler-view";
+import { AdminNotificationSettings } from "@/components/admin/admin-notification-settings";
+import { AdminSystemAlerts } from "@/components/admin/admin-system-alerts";
 import { Clock } from "lucide-react";
 
 // JSON Viewer Component with Syntax Highlighting
@@ -1135,6 +1139,12 @@ export default function AdminDashboard() {
               <TabsTrigger value="scheduler" className="justify-start px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-white hover:bg-red-800 hover:text-slate-200 transition-all rounded-md mx-2">
                 <Clock className="mr-3 size-4" /> Scheduler
               </TabsTrigger>
+              <TabsTrigger value="notifications" className="justify-start px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-white hover:bg-red-800 hover:text-slate-200 transition-all rounded-md mx-2">
+                <Bell className="mr-3 size-4" /> SMTP Configuration
+              </TabsTrigger>
+              <TabsTrigger value="system-alerts" className="justify-start px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-white hover:bg-red-800 hover:text-slate-200 transition-all rounded-md mx-2">
+                <Siren className="mr-3 size-4" /> System Alerts
+              </TabsTrigger>
             </TabsList>
           </div>
         </div>
@@ -1989,6 +1999,16 @@ export default function AdminDashboard() {
             {/* Scheduler Management */}
             <TabsContent value="scheduler" className="m-0 focus-visible:outline-none">
               <AdminSchedulerView />
+            </TabsContent>
+
+            {/* Notification Settings */}
+            <TabsContent value="notifications" className="m-0 focus-visible:outline-none">
+              <AdminNotificationSettings />
+            </TabsContent>
+
+            {/* System Alerts */}
+            <TabsContent value="system-alerts" className="m-0 focus-visible:outline-none">
+              <AdminSystemAlerts />
             </TabsContent>
 
             {/* 4. Billing Plans */}

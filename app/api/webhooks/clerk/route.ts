@@ -5,7 +5,9 @@ import { headers } from 'next/headers'
 import { WebhookEvent } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 
-export async function POST(req: Request) {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(req: Request) {
+
     const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET
 
     if (!WEBHOOK_SECRET) {
@@ -157,5 +159,8 @@ export async function POST(req: Request) {
     }
 
     return new Response('Webhook received', { status: 200 })
+
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/webhooks/clerk");
 

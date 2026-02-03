@@ -4,8 +4,9 @@ import { NextResponse } from "next/server";
 import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 import { logError, logWarning } from "@/lib/audit-logger";
 
-export async function GET() {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler() {
+
         const user = await currentUser();
 
         if (!user) {
@@ -125,12 +126,7 @@ export async function GET() {
                 isApproved: organisation.isApproved,
             },
         });
-    } catch (error: any) {
-        console.error("Error fetching subscription:", error);
-        await logError("Failed to fetch subscription", { userId: "unknown" }, error);
-        return NextResponse.json(
-            { error: "Failed to fetch subscription" },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/subscription/current");

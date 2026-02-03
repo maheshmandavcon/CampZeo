@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
 import { sendCampaignPost } from '@/lib/send-campaign-post';
 import { logWarning } from '@/lib/audit-logger';
-import { withErrorHandling } from '@/lib/api-handler';
+import { withErrorHandling, ApiError } from '@/lib/api-handler';
 
 async function sendPostHandler(
     req: Request,
@@ -83,8 +83,8 @@ async function sendPostHandler(
     );
 
     if (!result.success && result.error) {
-        // Explicitly throw the error so withErrorHandling catches it and notifies admin
-        throw new Error(result.error);
+        // Explicitly throw ApiError so withErrorHandling shows it to the user
+        throw new ApiError(400, result.error);
     }
 
     return NextResponse.json({

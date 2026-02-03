@@ -3,8 +3,9 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 
-export async function PUT(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function putHandler(request: NextRequest) {
+
         const { userId: currentUserId } = await auth();
         if (!currentUserId) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -35,8 +36,7 @@ export async function PUT(request: NextRequest) {
         });
 
         return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error("Error updating LinkedIn page:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
+    
 }
+
+export const PUT = withErrorHandling(putHandler, "PUT /api/user/linkedin-page");

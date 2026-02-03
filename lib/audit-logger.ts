@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { safeJsonStringify } from "./safe-json";
 
 interface LogMetadata {
     action?: string;
@@ -23,7 +24,7 @@ export async function logInfo(message: string, metadata?: LogMetadata) {
                 message,
                 level: "Information",
                 timeStamp: new Date(),
-                properties: metadata ? JSON.stringify(sanitizeMetadata(metadata)) : null,
+                properties: metadata ? safeJsonStringify(sanitizeMetadata(metadata)) : null,
             },
         });
     } catch (error) {
@@ -41,7 +42,7 @@ export async function logWarning(message: string, metadata?: LogMetadata) {
                 message,
                 level: "Warning",
                 timeStamp: new Date(),
-                properties: metadata ? JSON.stringify(sanitizeMetadata(metadata)) : null,
+                properties: metadata ? safeJsonStringify(sanitizeMetadata(metadata)) : null,
             },
         });
     } catch (error) {
@@ -60,7 +61,7 @@ export async function logError(message: string, metadata?: LogMetadata, exceptio
                 level: "Error",
                 timeStamp: new Date(),
                 exception: exception ? exception.stack || exception.message : null,
-                properties: metadata ? JSON.stringify(sanitizeMetadata(metadata)) : null,
+                properties: metadata ? safeJsonStringify(sanitizeMetadata(metadata)) : null,
             },
         });
     } catch (error) {

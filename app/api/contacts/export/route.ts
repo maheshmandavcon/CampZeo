@@ -3,9 +3,10 @@ import { prisma } from '@/lib/prisma';
 import { currentUser } from '@clerk/nextjs/server';
 import { logError, logWarning, logInfo } from '@/lib/audit-logger';
 
+import { withErrorHandling } from '@/lib/api-handler';
 // GET - Export contacts to CSV
-export async function GET(request: NextRequest) {
-    try {
+async function getHandler(request: NextRequest) {
+
         const user = await currentUser();
         if (!user) {
             await logWarning("Unauthorized access attempt to export contacts", { action: "export-contacts" });
@@ -105,9 +106,7 @@ export async function GET(request: NextRequest) {
                 'Content-Disposition': `attachment; filename="contacts-${new Date().toISOString().split('T')[0]}.csv"`,
             },
         });
-    } catch (error: any) {
-        console.error('Error exporting contacts:', error);
-        await logError("Failed to export contacts", { userId: "unknown" }, error);
-        return NextResponse.json({ error: 'Failed to export contacts' }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/contacts/export");

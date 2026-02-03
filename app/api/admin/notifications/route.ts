@@ -3,8 +3,9 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { logError, logWarning, logInfo } from '@/lib/audit-logger';
 
-export async function POST(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(request: NextRequest) {
+
         const { userId } = await auth();
         if (!userId) return NextResponse.json({ isSuccess: false, message: 'Unauthorized' }, { status: 401 });
 
@@ -62,8 +63,7 @@ export async function POST(request: NextRequest) {
             message: `Notification sent to ${targetOrganisations.length} organization(s)`,
             count: result.count
         });
-    } catch (error: any) {
-        await logError("Failed to send notification", { userId: "Unknown" }, error);
-        return NextResponse.json({ isSuccess: false, message: error.message }, { status: 500 });
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/admin/notifications");

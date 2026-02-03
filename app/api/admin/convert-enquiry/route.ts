@@ -5,12 +5,13 @@ import { createClerkUser } from "@/lib/clerk-admin";
 import { sendOrganisationInvite } from "@/lib/email";
 import { logError, logWarning } from "@/lib/audit-logger";
 
+import { withErrorHandling } from '@/lib/api-handler';
 /**
  * POST /api/admin/convert-enquiry
  * Convert an enquiry to organisation with Clerk user creation
  */
-export async function POST(req: Request) {
-    try {
+async function postHandler(req: Request) {
+
         const user = await currentUser();
 
         // Verify admin user
@@ -243,19 +244,7 @@ export async function POST(req: Request) {
             },
             message: "Organisation created and user invited successfully"
         });
-    } catch (error: any) {
-        console.error("Error converting enquiry to organisation:", error);
-        await logError("Failed to convert enquiry to organisation", {
-            action: "convert-enquiry",
-            error: error.message
-        }, error);
-        return NextResponse.json(
-            {
-                isSuccess: false,
-                error: "Failed to convert enquiry",
-                details: error instanceof Error ? error.message : "Unknown error",
-            },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/admin/convert-enquiry");

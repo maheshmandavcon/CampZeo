@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendEmail } from "@/lib/email";
 
-export async function POST(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(request: NextRequest) {
+
         const body = await request.json();
         const { name, email, subject, message, captchaToken } = body;
 
@@ -70,11 +71,7 @@ export async function POST(request: NextRequest) {
                 { status: 500 }
             );
         }
-    } catch (error) {
-        console.error("Error in contact API:", error);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/contact");
