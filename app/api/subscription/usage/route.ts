@@ -47,7 +47,7 @@ export async function GET() {
             campaigns: 100,
             contacts: 100,
             users: 10,
-            platforms: 5,
+            platforms: 8,
             postsPerMonth: 100,
         };
 

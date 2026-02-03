@@ -514,14 +514,14 @@ export default function CampaignPostsPage() {
                                                 <SelectItem value="pending">Pending</SelectItem>
                                             </SelectContent>
                                         </Select>
-                                    <Button
-                                        variant="outline"
-                                        className="cursor-pointer"
-                                        onClick={handleExport}
-                                    >
-                                        <Download className="size-4 mr-2" />
-                                        Export All
-                                    </Button>
+                                        <Button
+                                            variant="outline"
+                                            className="cursor-pointer"
+                                            onClick={handleExport}
+                                        >
+                                            <Download className="size-4 mr-2" />
+                                            Export All
+                                        </Button>
                                     </div>
                                 </div>
                             </Tabs>
@@ -569,12 +569,12 @@ export default function CampaignPostsPage() {
                                                             From: {post.senderEmail}
                                                         </p>
                                                     )}
-                                                    {post.videoUrl && (
+                                                    {post.videoUrl || (post.mediaUrls && post.mediaUrls.length > 0) ? (
                                                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                                             <Paperclip className="size-3" />
                                                             <span>Media attached</span>
                                                         </div>
-                                                    )}
+                                                    ) : null}
                                                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                                                         {post.scheduledPostTime && (
                                                             <div className="flex items-center gap-1">
@@ -696,53 +696,63 @@ export default function CampaignPostsPage() {
                                 <div>
                                     <p className="text-sm font-medium mb-2">Media:</p>
                                     <div className="grid grid-cols-2 gap-2">
-                                        {(previewPost.mediaUrls || [previewPost.videoUrl].filter(Boolean)).map((url, index) => (
-                                            <div key={index} className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-                                                {(() => {
-                                                    const isYouTube = previewPost.type === 'YOUTUBE';
-                                                    const isVideo = url && (url.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i) || isYouTube);
+                                        {(() => {
+                                            const allMedia = Array.from(new Set([
+                                                ...(previewPost.mediaUrls || []),
+                                                previewPost.videoUrl
+                                            ].filter(Boolean) as string[]));
 
-                                                    if (isYouTube) {
-                                                        let videoId = '';
-                                                        if (url.includes('v=')) videoId = url.split('v=')[1].split('&')[0];
-                                                        else if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
-                                                        else if (url.includes('embed/')) videoId = url.split('embed/')[1].split('?')[0];
+                                            if (allMedia.length === 0) return null;
 
-                                                        if (videoId) {
+                                            return allMedia.map((url, index) => (
+                                                <div key={index} className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+                                                    {(() => {
+                                                        const isYouTubeUrl = url?.includes('youtube.com') || url?.includes('youtu.be');
+                                                        const isVideoFile = url?.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
+                                                        const isVideo = isVideoFile || (previewPost.type === 'YOUTUBE' && isYouTubeUrl);
+
+                                                        if (previewPost.type === 'YOUTUBE' && isYouTubeUrl) {
+                                                            let videoId = '';
+                                                            if (url.includes('v=')) videoId = url.split('v=')[1].split('&')[0];
+                                                            else if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
+                                                            else if (url.includes('embed/')) videoId = url.split('embed/')[1].split('?')[0];
+
+                                                            if (videoId) {
+                                                                return (
+                                                                    <iframe
+                                                                        src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
+                                                                        className="w-full h-full border-0"
+                                                                        allow="autoplay; encrypted-media"
+                                                                        allowFullScreen
+                                                                    />
+                                                                );
+                                                            }
+                                                        }
+
+                                                        if (isVideo && !isYouTubeUrl) {
                                                             return (
-                                                                <iframe
-                                                                    src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
-                                                                    className="w-full h-full border-0"
-                                                                    allow="autoplay; encrypted-media"
-                                                                    allowFullScreen
+                                                                <video
+                                                                    src={url}
+                                                                    className="w-full h-full object-cover"
+                                                                    autoPlay
+                                                                    muted
+                                                                    loop
+                                                                    playsInline
                                                                 />
                                                             );
                                                         }
-                                                    }
 
-                                                    if (isVideo) {
-                                                        return (
-                                                            <video
+                                                        return url ? (
+                                                            <img
                                                                 src={url}
+                                                                alt={`Media ${index + 1}`}
                                                                 className="w-full h-full object-cover"
-                                                                autoPlay
-                                                                muted
-                                                                loop
-                                                                playsInline
                                                             />
-                                                        );
-                                                    }
-
-                                                    return url ? (
-                                                        <img
-                                                            src={url}
-                                                            alt={`Media ${index + 1}`}
-                                                            className="w-full h-full object-cover"
-                                                        />
-                                                    ) : null;
-                                                })()}
-                                            </div>
-                                        ))}
+                                                        ) : null;
+                                                    })()}
+                                                </div>
+                                            ));
+                                        })()}
                                     </div>
                                 </div>
                             )}
