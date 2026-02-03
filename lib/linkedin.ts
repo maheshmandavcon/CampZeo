@@ -241,21 +241,28 @@ export async function getLinkedInPostInsights(
 
         // Also fetch the post itself for text/media
         let postData = null;
-        try {
-            const postUrl = `https://api.linkedin.com/v2/posts/${encodedUrn}`;
-            const postResponse = await fetch(postUrl, {
-                headers: {
-                    "Authorization": `Bearer ${accessToken}`,
-                    "X-Restli-Protocol-Version": "2.0.0",
-                    "LinkedIn-Version": "202401",
+        const endpoints = [
+            `https://api.linkedin.com/v2/posts/${encodedUrn}`,
+            `https://api.linkedin.com/v2/ugcPosts/${encodedUrn}`
+        ];
+
+        for (const endpoint of endpoints) {
+            try {
+                const postResponse = await fetch(endpoint, {
+                    headers: {
+                        "Authorization": `Bearer ${accessToken}`,
+                        "X-Restli-Protocol-Version": "2.0.0",
+                        "LinkedIn-Version": "202401",
+                    }
+                });
+                if (postResponse.ok) {
+                    postData = await postResponse.json();
+                    console.log(`[LinkedIn] Post Metadata from ${endpoint}:`, JSON.stringify(postData, null, 2));
+                    break;
                 }
-            });
-            if (postResponse.ok) {
-                postData = await postResponse.json();
-                console.log(`[LinkedIn] Post Metadata for ${urn}:`, JSON.stringify(postData, null, 2));
+            } catch (e) {
+                console.warn(`[LinkedIn] Could not fetch from ${endpoint}`, e);
             }
-        } catch (e) {
-            console.warn(`[LinkedIn] Could not fetch post metadata for ${urn}`, e);
         }
 
         if (!response.ok) {
@@ -371,8 +378,49 @@ export async function getLinkedInPostInsights(
         if (postData?.commentary) {
             result.text = postData.commentary;
         }
+
+        // Extract media URNs
+        let mediaUrns: string[] = [];
         if (postData?.content?.multiImage?.images) {
-            result.media = postData.content.multiImage.images;
+            mediaUrns = postData.content.multiImage.images.map((img: any) => img.media || img.id).filter(Boolean);
+        } else if (postData?.content?.media) {
+            mediaUrns = postData.content.media.map((m: any) => m.media || m.id).filter(Boolean);
+        } else if (postData?.specificContent?.['com.linkedin.ugc.ShareContent']?.media) {
+            mediaUrns = postData.specificContent['com.linkedin.ugc.ShareContent'].media.map((m: any) => m.media).filter(Boolean);
+        }
+
+        // Resolve URNs to actual CDN URLs
+        if (mediaUrns.length > 0) {
+            console.log(`[LinkedIn] Resolving ${mediaUrns.length} media asset(s) for ${urn}`);
+            try {
+                const resolvedMedia = await Promise.all(mediaUrns.map(async (assetUrn) => {
+                    if (!assetUrn.startsWith('urn:li:digitalmediaAsset:')) return { url: assetUrn };
+
+                    const assetUrl = `https://api.linkedin.com/v2/assets/${encodeURIComponent(assetUrn)}`;
+                    const assetRes = await fetch(assetUrl, {
+                        headers: {
+                            "Authorization": `Bearer ${accessToken}`,
+                            "X-Restli-Protocol-Version": "2.0.0",
+                            "LinkedIn-Version": "202401",
+                        }
+                    });
+
+                    if (assetRes.ok) {
+                        const assetData = await assetRes.json();
+                        const mediaAsset = assetData?.['com.linkedin.digitalmedia.asset.DigitalMediaAsset'] || assetData?.['digitalmediaAsset'] || assetData;
+                        const thumbnails = mediaAsset?.thumbnails || [];
+                        // Get the highest resolution thumbnail (usually the last or biggest)
+                        if (thumbnails.length > 0) {
+                            return { url: thumbnails[thumbnails.length - 1].url, originalUrn: assetUrn };
+                        }
+                    }
+                    return { originalUrn: assetUrn };
+                }));
+                result.media = resolvedMedia.filter(m => m.url).map(m => m.url);
+                console.log(`[LinkedIn] Resolved media URLs:`, result.media);
+            } catch (e) {
+                console.warn(`[LinkedIn] Failed to resolve assets for ${urn}:`, e);
+            }
         }
 
         return result;

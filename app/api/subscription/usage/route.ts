@@ -44,11 +44,11 @@ export async function GET() {
         // Parse usage limits from plan
         let usageLimits;
         const defaultLimits = {
-            campaigns: 999999,
-            contacts: 999999,
-            users: 999999,
-            platforms: 999999,
-            postsPerMonth: 999999,
+            campaigns: 100,
+            contacts: 100,
+            users: 10,
+            platforms: 5,
+            postsPerMonth: 100,
         };
 
         try {

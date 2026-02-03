@@ -166,7 +166,7 @@ export default function NewTemplatePage() {
     };
 
     const isVideo = (url: string) => {
-        return url.match(/\.(mp4|webm|ogg|mov)$/i);
+        return url.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
     };
 
     const handleCreate = async () => {
@@ -250,8 +250,9 @@ export default function NewTemplatePage() {
                                                 src={formData.mediaUrls[currentMediaIndex]}
                                                 className="size-full object-cover"
                                                 controls
-                                                autoPlay={isPlayingVideo}
+                                                autoPlay
                                                 muted
+                                                loop
                                                 playsInline
                                             />
                                         ) : (
@@ -348,8 +349,9 @@ export default function NewTemplatePage() {
                                         src={formData.mediaUrls[currentMediaIndex]}
                                         className="size-full object-cover"
                                         controls
-                                        autoPlay={isPlayingVideo}
+                                        autoPlay
                                         muted
+                                        loop
                                         playsInline
                                     />
                                 ) : (
@@ -464,8 +466,9 @@ export default function NewTemplatePage() {
                                                 src={formData.mediaUrls[currentMediaIndex]}
                                                 className="size-full object-cover"
                                                 controls
-                                                autoPlay={isPlayingVideo}
+                                                autoPlay
                                                 muted
+                                                loop
                                                 playsInline
                                             />
                                         ) : (
@@ -551,7 +554,9 @@ export default function NewTemplatePage() {
                                     className="size-full object-cover"
                                     controls
                                     autoPlay
-                                    onEnded={() => setIsPlayingVideo(false)}
+                                    muted
+                                    loop
+                                    playsInline
                                 />
                             ) : (
                                 <>
@@ -704,8 +709,9 @@ export default function NewTemplatePage() {
                                                 src={formData.mediaUrls[currentMediaIndex]}
                                                 className="size-full object-cover"
                                                 controls
-                                                autoPlay={isPlayingVideo}
+                                                autoPlay
                                                 muted
+                                                loop
                                                 playsInline
                                             />
                                         ) : (
@@ -781,8 +787,9 @@ export default function NewTemplatePage() {
                                                     src={formData.mediaUrls[currentMediaIndex]}
                                                     className="size-full object-cover"
                                                     controls
-                                                    autoPlay={isPlayingVideo}
+                                                    autoPlay
                                                     muted
+                                                    loop
                                                     playsInline
                                                 />
                                             ) : (

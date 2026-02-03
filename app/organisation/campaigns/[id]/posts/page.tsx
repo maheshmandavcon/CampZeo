@@ -546,7 +546,6 @@ export default function CampaignPostsPage() {
                                                 <SelectItem value="pending">Pending</SelectItem>
                                             </SelectContent>
                                         </Select>
-                                    </div>
                                     <Button
                                         variant="outline"
                                         className="cursor-pointer"
@@ -555,6 +554,7 @@ export default function CampaignPostsPage() {
                                         <Download className="size-4 mr-2" />
                                         Export All
                                     </Button>
+                                    </div>
                                 </div>
                             </Tabs>
                         </div>
@@ -730,20 +730,49 @@ export default function CampaignPostsPage() {
                                     <div className="grid grid-cols-2 gap-2">
                                         {(previewPost.mediaUrls || [previewPost.videoUrl].filter(Boolean)).map((url, index) => (
                                             <div key={index} className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-                                                {url && url.match(/\.(mp4|mov|webm)$/i) ? (
-                                                    <div className="flex items-center justify-center h-full bg-black/10">
-                                                        <div className="size-12 rounded-full bg-white/80 flex items-center justify-center shadow">
-                                                            <div className="ml-1 size-0 border-y-[8px] border-y-transparent border-l-[14px] border-l-primary" />
-                                                        </div>
-                                                        <p className="absolute bottom-2 left-2 text-xs bg-black/50 text-white px-2 py-1 rounded">Video</p>
-                                                    </div>
-                                                ) : url ? (
-                                                    <img
-                                                        src={url}
-                                                        alt={`Media ${index + 1}`}
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                ) : null}
+                                                {(() => {
+                                                    const isYouTube = previewPost.type === 'YOUTUBE';
+                                                    const isVideo = url && (url.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i) || isYouTube);
+
+                                                    if (isYouTube) {
+                                                        let videoId = '';
+                                                        if (url.includes('v=')) videoId = url.split('v=')[1].split('&')[0];
+                                                        else if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
+                                                        else if (url.includes('embed/')) videoId = url.split('embed/')[1].split('?')[0];
+
+                                                        if (videoId) {
+                                                            return (
+                                                                <iframe
+                                                                    src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
+                                                                    className="w-full h-full border-0"
+                                                                    allow="autoplay; encrypted-media"
+                                                                    allowFullScreen
+                                                                />
+                                                            );
+                                                        }
+                                                    }
+
+                                                    if (isVideo) {
+                                                        return (
+                                                            <video
+                                                                src={url}
+                                                                className="w-full h-full object-cover"
+                                                                autoPlay
+                                                                muted
+                                                                loop
+                                                                playsInline
+                                                            />
+                                                        );
+                                                    }
+
+                                                    return url ? (
+                                                        <img
+                                                            src={url}
+                                                            alt={`Media ${index + 1}`}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    ) : null;
+                                                })()}
                                             </div>
                                         ))}
                                     </div>
