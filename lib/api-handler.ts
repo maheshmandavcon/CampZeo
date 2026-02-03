@@ -34,41 +34,61 @@ export function withErrorHandling(handler: ApiHandler, apiName: string): ApiHand
         try {
             return await handler(req, context);
         } catch (error) {
-            // Handle known API errors that are safe to show to the user
-            if (error instanceof ApiError && error.isPublic) {
-                return NextResponse.json(
-                    { error: error.message },
-                    { status: error.statusCode }
-                );
-            }
+            console.log(`[withErrorHandling] Caught error in ${apiName}:`, error instanceof Error ? error.message : error);
 
-            // 1. Structured Log (Pino)
-            logger.error({
-                msg: `Unexpected Error in ${apiName}`,
-                err: error,
-                url: req.url,
-                method: req.method
-            });
+            // 1. Unified Logging and Alerting (Runs for ALL errors now)
+            console.log(`[withErrorHandling] Proceeding with logging and alerts for ALL errors.`);
 
             const errorMessage = error instanceof Error ? error.message : String(error);
             const metadata = {
                 url: req.url,
                 method: req.method,
                 query: Object.fromEntries(req.nextUrl.searchParams.entries()),
-                params: context?.params
+                params: context?.params,
+                isApiError: error instanceof ApiError,
+                isPublic: error instanceof ApiError ? error.isPublic : false
             };
 
-            // 2. Database Log (Audit)
+            // Structured Log (Pino)
             try {
-                await logError(`API Failure: ${apiName}`, { ...metadata, reason: errorMessage }, error instanceof Error ? error : new Error(errorMessage));
-            } catch (dbLogErr) {
-                console.error('Failed to write to audit log:', dbLogErr);
+                logger.error({
+                    msg: `Error in ${apiName}`,
+                    err: error,
+                    ...metadata
+                });
+            } catch (pinoErr) {
+                console.error('[withErrorHandling] Logger failed:', pinoErr);
             }
 
-            // 3. Admin Alert (Email)
-            await notifyAdminOfError(apiName, error, metadata);
+            // Database Log (Audit)
+            try {
+                console.log(`[withErrorHandling] Attempting logError for ${apiName}`);
+                await logError(`API Failure: ${apiName}`, { ...metadata, reason: errorMessage }, error instanceof Error ? error : new Error(errorMessage));
+                console.log(`[withErrorHandling] logError completed`);
+            } catch (dbLogErr) {
+                console.error(`[withErrorHandling] logError failed:`, dbLogErr);
+            }
 
-            // 4. Generic Response
+            // Admin Alert (Email)
+            try {
+                console.log(`[withErrorHandling] Attempting notifyAdminOfError for ${apiName}`);
+                await notifyAdminOfError(apiName, error, metadata);
+                console.log(`[withErrorHandling] notifyAdminOfError completed`);
+            } catch (alertErr) {
+                console.error(`[withErrorHandling] notifyAdminOfError failed:`, alertErr);
+            }
+
+            // 2. Response Handling
+            // If it's a known public ApiError, show the specific message to the user
+            if (error instanceof ApiError && error.isPublic) {
+                console.log(`[withErrorHandling] Returning Public ApiError to user (Status ${error.statusCode}).`);
+                return NextResponse.json(
+                    { error: error.message },
+                    { status: error.statusCode }
+                );
+            }
+
+            // Otherwise, return generic response
             return NextResponse.json(
                 {
                     error: 'Internal Server Error',

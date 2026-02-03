@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { prisma } from '@/lib/prisma';
+import { safeJsonStringify } from './safe-json';
 
 // Cache structure for SMTP config to reduce DB hits
 let smtpConfigCache: {
@@ -46,6 +47,8 @@ async function getSmtpConfig() {
             }
         });
 
+        console.log(`[getSmtpConfig] DB Fetch: Found ${dbConfigs.length} config entries`);
+
         if (dbConfigs.length > 0) {
             const getValue = (key: string) => dbConfigs.find(c => c.key === key)?.value;
 
@@ -58,19 +61,43 @@ async function getSmtpConfig() {
 
             const recipientsStr = getValue('ADMIN_EMAIL_RECIPIENTS');
             if (recipientsStr) {
-                // Expecting comma-separated list
                 config.recipients = recipientsStr.split(',').map(e => e.trim()).filter(e => e);
             }
 
             if (getValue('ADMIN_LOG_LEVEL')) config.logLevel = getValue('ADMIN_LOG_LEVEL')!;
         }
-
-        // Cache valid config
-        if (config.host && config.user) {
-            smtpConfigCache = { ...config, lastFetched: now };
-        }
     } catch (error) {
-        console.error("Failed to fetch SMTP config from DB:", error);
+        console.error("[getSmtpConfig] Database fetch failed:", error instanceof Error ? error.message : error);
+    }
+
+    // Secondary fallback to environment variables if still not fully configured
+    if (!config.host) {
+        console.log(`[getSmtpConfig] Falling back to .env for Host: ${process.env.SMTP_HOST ? 'Present' : 'Missing'}`);
+        config.host = process.env.SMTP_HOST || '';
+    }
+    // ... (rest of fallback logic)
+    if (config.port === 587 && process.env.SMTP_PORT) config.port = parseInt(process.env.SMTP_PORT);
+    if (!config.secure && process.env.SMTP_SECURE) config.secure = process.env.SMTP_SECURE === 'true';
+    if (!config.user) config.user = process.env.SMTP_USER || '';
+    if (!config.pass) config.pass = process.env.SMTP_PASS || '';
+
+    if (config.from === '"System Alert" <no-reply@campzeo.com>' && process.env.SMTP_FROM) {
+        config.from = process.env.SMTP_FROM;
+    }
+
+    if (config.recipients.length === 0) {
+        const recipients = process.env.ADMIN_EMAIL_RECIPIENTS || process.env.ADMIN_EMAIL;
+        console.log(`[getSmtpConfig] Falling back to .env for Recipients: ${recipients ? 'Found' : 'Missing'}`);
+        if (recipients) {
+            config.recipients = recipients.split(',').map(e => e.trim()).filter(e => e);
+        }
+    }
+
+    console.log(`[getSmtpConfig] Final config: Host=${config.host}, User=${config.user}, Recipients=${config.recipients.join(', ')}`);
+
+    // Cache valid config
+    if (config.host && config.user) {
+        smtpConfigCache = { ...config, lastFetched: now };
     }
 
     return config;
@@ -81,10 +108,14 @@ async function getSmtpConfig() {
  * Uses Nodemailer for direct SMTP transport.
  */
 export async function notifyAdminOfError(apiName: string, error: any, context?: any) {
+    console.log(`[notifyAdminOfError] Triggered for ${apiName}`);
     const config = await getSmtpConfig();
 
+    console.log(`[notifyAdminOfError] Internal Config Status: Host=${!!config.host}, Recipients=${config.recipients.length}`);
+
     if (!config.host || config.recipients.length === 0) {
-        console.warn('⚠️ SMTP or Admin Email not configured using env or DB. Skipping alert.');
+        console.warn(`⚠️ [notifyAdminOfError] Skipping alert for ${apiName}: SMTP Host or Recipients missing.`);
+        console.log(`[notifyAdminOfError] Recipients found: ${JSON.stringify(config.recipients)}`);
         return;
     }
 
@@ -127,7 +158,7 @@ export async function notifyAdminOfError(apiName: string, error: any, context?: 
                     ${context ? `
                     <div style="margin-bottom: 20px;">
                         <h3 style="color: #4b5563;">Request Context</h3>
-                        <pre style="background-color: #f3f4f6; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px; border: 1px solid #e5e7eb;">${JSON.stringify(context, null, 2)}</pre>
+                        <pre style="background-color: #f3f4f6; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px; border: 1px solid #e5e7eb;">${safeJsonStringify(context, 2)}</pre>
                     </div>
                     ` : ''}
 
