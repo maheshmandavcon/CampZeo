@@ -164,6 +164,9 @@ export default function CampaignPostsPage() {
                 setPosts(postsData.posts);
             } catch (error) {
                 console.error('Error fetching data:', error);
+
+                console.error('Error fetching data:', error);
+
                 toast.error('Failed to load campaign posts');
                 router.push('/organisation/campaigns');
             } finally {
@@ -211,6 +214,9 @@ export default function CampaignPostsPage() {
             setDeletePostId(null);
         } catch (error) {
             console.error('Error deleting post:', error);
+
+            console.error('Error deleting post:', error);
+
             toast.error('Failed to delete post');
         }
     };
@@ -237,6 +243,9 @@ export default function CampaignPostsPage() {
             toast.success('Post duplicated successfully');
         } catch (error) {
             console.error('Error duplicating post:', error);
+
+            console.error('Error duplicating post:', error);
+
             toast.error('Failed to duplicate post');
         }
     };
@@ -282,6 +291,29 @@ export default function CampaignPostsPage() {
 
         } catch (error) {
             console.error('Error sharing post:', error);
+
+            // Log error to database and notify admin
+            try {
+                await fetch('/api/log-error', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        apiName: `Client: Share Post - Campaign ${campaignId}`,
+                        error: error instanceof Error ? error.message : String(error),
+                        stack: error instanceof Error ? error.stack : undefined,
+                        context: {
+                            campaignId,
+                            postId: sharePost?.id,
+                            postType: sharePost?.type,
+                            selectedContactsCount: selectedContacts.length,
+                            url: window.location.href,
+                        }
+                    })
+                });
+            } catch (logError) {
+                console.error('Failed to log error:', logError);
+            }
+
             toast.error(error instanceof Error ? error.message : 'Failed to share post');
         } finally {
             setSendingShare(false);

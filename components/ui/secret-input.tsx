@@ -1,28 +1,19 @@
-"use client";
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Eye, EyeOff } from "lucide-react";
+import { cn } from "@/lib/utils"; // Assuming utils exists, verified in previous step
 
-interface SecretInputProps {
-  defaultValue: string;
-  placeholder: string;
-  id: string;
-  onBlur: (e: React.FocusEvent<HTMLInputElement>) => void;
-}
+interface SecretInputProps extends React.InputHTMLAttributes<HTMLInputElement> { }
 
-export function SecretInput({ defaultValue, placeholder, id, onBlur }: SecretInputProps) {
+export function SecretInput({ className, ...props }: SecretInputProps) {
   const [isVisible, setIsVisible] = useState(false);
   return (
     <div className="relative">
       <Input
-        defaultValue={defaultValue}
-        placeholder={placeholder}
-        id={id}
         type={isVisible ? "text" : "password"}
-        onBlur={onBlur}
-        className="pr-10"
+        className={cn("pr-10", className)}
+        {...props}
       />
       <Button
         type="button"

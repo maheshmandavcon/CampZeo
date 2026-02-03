@@ -2,43 +2,39 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { generateImage } from '@/lib/pollinations';
 
-export async function POST(request: NextRequest) {
-    try {
-        // Check authentication
-        const { userId } = await auth();
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+import { withErrorHandling } from '@/lib/api-handler';
 
-        const body = await request.json();
-        const { prompt, style, model, width, height } = body;
+async function generateImageHandler(request: NextRequest) {
+    // Check authentication
+    const { userId } = await auth();
+    if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-        if (!prompt) {
-            return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
-        }
+    const body = await request.json();
+    const { prompt, style, model, width, height } = body;
 
-        const result = await generateImage(prompt, style, { model, width, height });
+    if (!prompt) {
+        return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
+    }
 
-        if (!result.success) {
-            return NextResponse.json(
-                {
-                    error: result.error || 'Failed to generate image',
-                    imagePrompt: result.imageData // Return the enhanced prompt even on "error"
-                },
-                { status: 200 } // Return 200 since we're providing useful data
-            );
-        }
+    const result = await generateImage(prompt, style, { model, width, height });
 
-        return NextResponse.json({
-            success: true,
-            imagePrompt: result.imageData,
-            message: 'Image prompt generated. You can use this with image generation services like DALL-E or Midjourney.',
-        });
-    } catch (error: any) {
-        console.error('Generate image API error:', error);
+    if (!result.success) {
         return NextResponse.json(
-            { error: error.message || 'Internal server error' },
-            { status: 500 }
+            {
+                error: result.error || 'Failed to generate image',
+                imagePrompt: result.imageData // Return the enhanced prompt even on "error"
+            },
+            { status: 200 } // Return 200 since we're providing useful data
         );
     }
+
+    return NextResponse.json({
+        success: true,
+        imagePrompt: result.imageData,
+        message: 'Image prompt generated. You can use this with image generation services like DALL-E or Midjourney.',
+    });
 }
+
+export const POST = withErrorHandling(generateImageHandler, "POST /api/ai/generate-image");

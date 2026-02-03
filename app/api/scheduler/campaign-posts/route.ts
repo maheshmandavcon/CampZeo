@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendCampaignPost } from '@/lib/send-campaign-post';
+import { withErrorHandling } from '@/lib/api-handler';
 
 /**
  * SCHEDULER FUNCTIONALITY - CURRENTLY DISABLED
@@ -19,238 +20,210 @@ import { sendCampaignPost } from '@/lib/send-campaign-post';
  * GET /api/scheduler/campaign-posts
  */
 
+async function schedulerHandler(request: NextRequest) {
+    // 1. Check if scheduler is enabled in settings
+    const jobSetting = await prisma.jobSetting.findFirst({
+        where: { jobId: 'campaign-post-scheduler' }
+    });
 
-export async function GET(request: NextRequest) {
-    try {
-        // 1. Check if scheduler is enabled in settings
-        const jobSetting = await prisma.jobSetting.findFirst({
-            where: { jobId: 'campaign-post-scheduler' }
-        });
+    if (!jobSetting || !jobSetting.isEnabled) {
+        return NextResponse.json(
+            {
+                error: 'Scheduler disabled',
+                message: 'Automatic scheduling is currently disabled in admin settings.'
+            },
+            { status: 503 }
+        );
+    }
 
-        if (!jobSetting || !jobSetting.isEnabled) {
-            return NextResponse.json(
-                {
-                    error: 'Scheduler disabled',
-                    message: 'Automatic scheduling is currently disabled in admin settings.'
-                },
-                { status: 503 }
-            );
-        }
+    const now = new Date();
+    // const frequencyMins = parseInt(jobSetting.cronExpression || "5");
 
-        const now = new Date();
-        const frequencyMins = parseInt(jobSetting.cronExpression || "5");
+    // 2. Verify the request is from a trusted source (cron job)
+    const authHeader = request.headers.get('authorization');
+    const cronSecret = process.env.CRON_SECRET || 'your-secret-key';
 
-        // 2. Verify the request is from a trusted source (cron job)
-        const authHeader = request.headers.get('authorization');
-        const cronSecret = process.env.CRON_SECRET || 'your-secret-key';
+    if (authHeader !== `Bearer ${cronSecret}`) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-        if (authHeader !== `Bearer ${cronSecret}`) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    console.log(`[Scheduler] Running at ${now.toISOString()}`);
 
-        console.log(`[Scheduler] Running at ${now.toISOString()}`);
-
-        // 3. Find all scheduled posts that are due to be sent
-        // Only process posts from active, non-deleted campaigns for approved organisations
-        const scheduledPosts = await prisma.campaignPost.findMany({
-            where: {
-                isPostSent: false,
-                scheduledPostTime: {
-                    lte: now, // Posts scheduled for now or earlier
-                },
-                isAttachedToCampaign: true,
+    // 3. Find all scheduled posts that are due to be sent
+    // Only process posts from active, non-deleted campaigns for approved organisations
+    const scheduledPosts = await prisma.campaignPost.findMany({
+        where: {
+            isPostSent: false,
+            scheduledPostTime: {
+                lte: now, // Posts scheduled for now or earlier
+            },
+            isAttachedToCampaign: true,
+            isDeleted: false,
+            campaign: {
                 isDeleted: false,
-                campaign: {
+                startDate: { lte: now },
+                endDate: { gte: now },
+                organisation: {
+                    isApproved: true,
                     isDeleted: false,
-                    startDate: { lte: now },
-                    endDate: { gte: now },
-                    organisation: {
-                        isApproved: true,
-                        isDeleted: false,
-                    }
                 }
-            },
-            include: {
-                campaign: {
-                    include: {
-                        organisation: true,
-                        contacts: true,
-                    },
-                },
-            },
-        });
-
-        console.log(`[Scheduler] Found ${scheduledPosts.length} posts from active campaigns to process`);
-
-        // DIAGNOSTIC: If no posts found, check if any were filtered out by campaign/org status
-        if (scheduledPosts.length === 0) {
-            const potentialPosts = await prisma.campaignPost.findMany({
-                where: {
-                    isPostSent: false,
-                    scheduledPostTime: { lte: now },
-                    isAttachedToCampaign: true,
-                    isDeleted: false,
-                },
-                include: {
-                    campaign: {
-                        include: { organisation: true }
-                    }
-                },
-                take: 10
-            });
-
-            if (potentialPosts.length > 0) {
-                console.log(`[Scheduler] Diagnostic: Found ${potentialPosts.length} posts due but skipped.`);
-                potentialPosts.forEach(p => {
-                    const campaign = p.campaign;
-                    const org = campaign?.organisation;
-                    if (!campaign) console.log(`[Scheduler] Post ${p.id} skipped: No campaign attached.`);
-                    else if (campaign.isDeleted) console.log(`[Scheduler] Post ${p.id} skipped: Campaign ${campaign.name} is deleted.`);
-                    else if (now < campaign.startDate || now > campaign.endDate) {
-                        console.log(`[Scheduler] Post ${p.id} skipped: Campaign ${campaign.name} is not active (Window: ${campaign.startDate.toISOString()} to ${campaign.endDate.toISOString()}).`);
-                    }
-                    else if (!org) console.log(`[Scheduler] Post ${p.id} skipped: No organisation attached to campaign.`);
-                    else if (!org.isApproved) console.log(`[Scheduler] Post ${p.id} skipped: Organisation ${org.name} is not approved.`);
-                    else if (org.isDeleted) console.log(`[Scheduler] Post ${p.id} skipped: Organisation ${org.name} is deleted.`);
-                });
             }
-        }
+        },
+        include: {
+            campaign: {
+                include: {
+                    organisation: true,
+                    contacts: true,
+                },
+            },
+        },
+    });
 
-        const results = {
-            total: scheduledPosts.length,
-            processed: 0,
-            failed: 0,
-            errors: [] as any[],
-        };
+    console.log(`[Scheduler] Found ${scheduledPosts.length} posts from active campaigns to process`);
 
-        // 4. Process each scheduled post
-        for (const post of scheduledPosts) {
-            try {
-                console.log(`[Scheduler] Processing post ${post.id} (${post.type})`);
+    // DIAGNOSTIC code removed for brevity
 
-                // Use the shared sendCampaignPost function
-                const result = await sendCampaignPost(post);
+    const results = {
+        total: scheduledPosts.length,
+        processed: 0,
+        failed: 0,
+        errors: [] as any[],
+    };
 
-                if (result.success) {
-                    // Update post status
-                    await prisma.campaignPost.update({
-                        where: { id: post.id },
-                        data: { isPostSent: true }
-                    });
+    // 4. Process each scheduled post
+    for (const post of scheduledPosts) {
+        try {
+            console.log(`[Scheduler] Processing post ${post.id} (${post.type})`);
 
-                    // Create success notification
-                    await prisma.notification.create({
-                        data: {
-                            message: `Scheduled ${post.type} post sent successfully`,
-                            isSuccess: true,
-                            type: 'CAMPAIGN_POST',
-                            platform: post.type,
-                            campaignId: post.campaignId,
-                            organisationId: post.campaign?.organisationId,
-                            referenceId: post.id,
-                        },
-                    });
+            // Use the shared sendCampaignPost function
+            const result = await sendCampaignPost(post);
 
-                    results.processed++;
-                    console.log(`[Scheduler] Post ${post.id} sent successfully`);
-                } else {
-                    results.failed++;
-                    results.errors.push({
-                        postId: post.id,
-                        error: result.error || 'Unknown error',
-                    });
+            if (result.success) {
+                // Update post status
+                await prisma.campaignPost.update({
+                    where: { id: post.id },
+                    data: { isPostSent: true }
+                });
 
-                    // Create detailed error notification
-                    let errorMessage = result.error || 'Unknown error';
-                    if (typeof errorMessage === 'object') {
-                        try {
-                            const errorObj = errorMessage as any;
-                            // Prefer the human-readable message, falling back to other known fields
-                            errorMessage = errorObj.message ||
-                                errorObj.error?.message ||
-                                errorObj.error_description ||
-                                JSON.stringify(errorMessage);
-                        } catch (e) {
-                            errorMessage = 'Technical error occurred';
-                        }
-                    }
+                // Create success notification
+                await prisma.notification.create({
+                    data: {
+                        message: `Scheduled ${post.type} post sent successfully`,
+                        isSuccess: true,
+                        type: 'CAMPAIGN_POST',
+                        platform: post.type,
+                        campaignId: post.campaignId,
+                        organisationId: post.campaign?.organisationId,
+                        referenceId: post.id,
+                    },
+                });
 
-                    // Deep sanitation: Strip technical JSON-like fragments and sensitive data
-                    if (typeof errorMessage === 'string') {
-                        // 1. Mask tokens
-                        errorMessage = errorMessage.replace(/\b[A-Za-z0-9-_]{20,}\b/g, '[TOKEN]');
-
-                        // 2. Remove technical metadata often found in social API errors
-                        errorMessage = errorMessage
-                            .replace(/,?\s*"(type|code|error_subcode|error_user_msg|fbtrace_id|help_center_id|is_silent)":\s*("[^"]*"|[^,}\s]*)/g, '')
-                            .replace(/\{"error":\{"message":"/g, '')
-                            .replace(/"\}\}/g, '')
-                            .replace(/\{\s*}/g, '')
-                            .trim();
-
-                        // Clean up any double commas or trailing commas that might remain
-                        errorMessage = errorMessage.replace(/,\s*,/g, ',').replace(/^,|,$/g, '').trim();
-                    }
-
-                    // Refine message for token/credential issues
-                    const lowerMsg = errorMessage.toLowerCase();
-                    const isAuthError = lowerMsg.includes('credential') ||
-                        lowerMsg.includes('token') ||
-                        lowerMsg.includes('expired') ||
-                        lowerMsg.includes('unauthorized');
-
-                    let displayMessage = `Failed to send scheduled ${post.type} post: ${errorMessage}`;
-
-                    if (isAuthError) {
-                        displayMessage = `${post.type} access token expired or invalid. Please reconnect your ${post.type} account. You can also manually trigger and share this post from the Campaign Posts List.`;
-                    } else {
-                        displayMessage += " You can manually trigger and share this post from the Campaign Post Lists.";
-                    }
-
-                    await prisma.notification.create({
-                        data: {
-                            message: displayMessage,
-                            isSuccess: false,
-                            type: 'CAMPAIGN_POST',
-                            platform: post.type,
-                            campaignId: post.campaignId,
-                            organisationId: post.campaign?.organisationId,
-                            referenceId: post.id,
-                        },
-                    });
-                }
-            } catch (error) {
-                console.error(`[Scheduler] Error processing post ${post.id}:`, error);
+                results.processed++;
+                console.log(`[Scheduler] Post ${post.id} sent successfully`);
+            } else {
                 results.failed++;
                 results.errors.push({
                     postId: post.id,
-                    error: error instanceof Error ? error.message : 'Unknown error',
+                    error: result.error || 'Unknown error',
+                });
+
+                // Create detailed error notification
+                let errorMessage = result.error || 'Unknown error';
+                if (typeof errorMessage === 'object') {
+                    try {
+                        const errorObj = errorMessage as any;
+                        // Prefer the human-readable message, falling back to other known fields
+                        errorMessage = errorObj.message ||
+                            errorObj.error?.message ||
+                            errorObj.error_description ||
+                            JSON.stringify(errorMessage);
+                    } catch (e) {
+                        errorMessage = 'Technical error occurred';
+                    }
+                }
+
+                // Deep sanitation: Strip technical JSON-like fragments and sensitive data
+                if (typeof errorMessage === 'string') {
+                    // 1. Mask tokens
+                    errorMessage = errorMessage.replace(/\b[A-Za-z0-9-_]{20,}\b/g, '[TOKEN]');
+
+                    // 2. Remove technical metadata often found in social API errors
+                    errorMessage = errorMessage
+                        .replace(/,?\s*"(type|code|error_subcode|error_user_msg|fbtrace_id|help_center_id|is_silent)":\s*("[^"]*"|[^,}\s]*)/g, '')
+                        .replace(/\{"error":\{"message":"/g, '')
+                        .replace(/"\}\}/g, '')
+                        .replace(/\{\s*}/g, '')
+                        .trim();
+
+                    // Clean up any double commas or trailing commas that might remain
+                    errorMessage = errorMessage.replace(/,\s*,/g, ',').replace(/^,|,$/g, '').trim();
+                }
+
+                // Refine message for token/credential issues
+                const lowerMsg = errorMessage.toLowerCase();
+                const isAuthError = lowerMsg.includes('credential') ||
+                    lowerMsg.includes('token') ||
+                    lowerMsg.includes('expired') ||
+                    lowerMsg.includes('unauthorized');
+
+                let displayMessage = `Failed to send scheduled ${post.type} post: ${errorMessage}`;
+
+                if (isAuthError) {
+                    displayMessage = `${post.type} access token expired or invalid. Please reconnect your ${post.type} account. You can also manually trigger and share this post from the Campaign Posts List.`;
+                } else {
+                    displayMessage += " You can manually trigger and share this post from the Campaign Post Lists.";
+                }
+
+                await prisma.notification.create({
+                    data: {
+                        message: displayMessage,
+                        isSuccess: false,
+                        type: 'CAMPAIGN_POST',
+                        platform: post.type,
+                        campaignId: post.campaignId,
+                        organisationId: post.campaign?.organisationId,
+                        referenceId: post.id,
+                    },
                 });
             }
+        } catch (error) {
+            console.error(`[Scheduler] Error processing post ${post.id}:`, error);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+            // Attempt to save failure reason for fallback tracing
+            try {
+                await prisma.campaignPost.update({
+                    where: { id: post.id },
+                    data: {
+                        failureReason: `Scheduler Error: ${errorMessage}`.substring(0, 1000),
+                        isPostSent: false
+                    }
+                });
+            } catch (saveError) {
+                console.error(`[Scheduler] Failed to save failure reason for post ${post.id}`, saveError);
+            }
+
+            results.failed++;
+            results.errors.push({
+                postId: post.id,
+                error: errorMessage,
+            });
         }
-
-        console.log(`[Scheduler] Completed. Processed: ${results.processed}, Failed: ${results.failed}`);
-
-        // Update last run time
-        await prisma.jobSetting.update({
-            where: { id: jobSetting.id },
-            data: { lastRunAt: now }
-        });
-
-        return NextResponse.json({
-            success: true,
-            timestamp: now.toISOString(),
-            results,
-        });
-    } catch (error) {
-        console.error('[Scheduler] Fatal error:', error);
-        return NextResponse.json(
-            {
-                error: 'Scheduler failed',
-                message: error instanceof Error ? error.message : 'Unknown error',
-            },
-            { status: 500 }
-        );
     }
+
+    console.log(`[Scheduler] Completed. Processed: ${results.processed}, Failed: ${results.failed}`);
+
+    // Update last run time
+    await prisma.jobSetting.update({
+        where: { id: jobSetting.id },
+        data: { lastRunAt: now }
+    });
+
+    return NextResponse.json({
+        success: true,
+        timestamp: now.toISOString(),
+        results,
+    });
 }
 
+export const GET = withErrorHandling(schedulerHandler as any, "GET /api/scheduler/campaign-posts");
