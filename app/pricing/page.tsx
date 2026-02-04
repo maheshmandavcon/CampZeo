@@ -78,8 +78,8 @@ export default function PricingPage() {
                                         <CardFooter>
                                             {isTrial ? (
                                                 // Free Trial: Redirect to purchase page with planId\
-                                                //  <Link href={`/purchase?planId=${plan.id}`} className="w-full"></Link>
-                                                <Link href="/coming-soon" className="w-full">
+                                                 <Link href={`/purchase?planId=${plan.id}`} className="w-full">
+                                                {/* <Link href="/coming-soon" className="w-full"> */}
                                                     <Button
                                                         className="w-full"
                                                         variant="outline"
@@ -95,9 +95,9 @@ export default function PricingPage() {
                                                     className="w-full"
                                                     variant={isPopular ? "default" : "outline"}
                                                     size="lg"
-                                                    onClick={() => router.push("/coming-soon")}
-                                                >
-                                                      {/* onClick={() => router.push(`/purchase?planId=${plan.id}`)} */}
+                                                       onClick={() => router.push(`/purchase?planId=${plan.id}`)} 
+                                                    >
+                                                    {/* onClick={() => router.push("/coming-soon")} */}
                                                     Purchase Now
                                                     <ArrowRight className="ml-2 size-4" />
                                                 </Button>
