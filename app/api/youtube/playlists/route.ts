@@ -4,8 +4,9 @@ import { currentUser } from '@clerk/nextjs/server';
 import { getYouTubePlaylists } from '@/lib/youtube';
 import { logError } from '@/lib/audit-logger';
 
-export async function GET(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler(request: NextRequest) {
+
         const user = await currentUser();
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,9 +33,7 @@ export async function GET(request: NextRequest) {
         }));
 
         return NextResponse.json({ playlists: formattedPlaylists });
-    } catch (error: any) {
-        console.error('Error fetching YouTube playlists:', error);
-        await logError("Failed to fetch YouTube playlists", { userId: "unknown" }, error);
-        return NextResponse.json({ error: 'Failed to fetch playlists' }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/youtube/playlists");

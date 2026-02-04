@@ -4,8 +4,9 @@ import { prisma } from '@/lib/prisma';
 import { postToPinterest, createPinterestBoard } from '@/lib/pinterest';
 import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
 
-export async function POST(req: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(req: NextRequest) {
+
         const { userId } = await auth();
         if (!userId) {
             return NextResponse.json({ isSuccess: false, message: 'Unauthorized' }, { status: 401 });
@@ -72,14 +73,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ isSuccess: true, data: result });
 
-    } catch (error: any) {
-        console.error('Error posting to Pinterest:', error);
-
-        let errorMessage = error.message || 'Failed to post to Pinterest';
-        if (errorMessage.includes("scope")) {
-            errorMessage = "Insufficient permissions. Please reconnect your Pinterest account with all required permissions.";
-        }
-
-        return NextResponse.json({ isSuccess: false, message: errorMessage }, { status: 500 });
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/post-pinterest");

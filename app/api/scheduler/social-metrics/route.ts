@@ -3,10 +3,11 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { SocialNormalizerService } from '@/lib/social-normalizer';
 
+import { withErrorHandling } from '@/lib/api-handler';
 const CRON_SECRET = process.env.CRON_SECRET;
 
-export async function GET(req: Request) {
-    try {
+async function getHandler(req: Request) {
+
         const authHeader = req.headers.get('authorization');
 
 
@@ -75,8 +76,7 @@ export async function GET(req: Request) {
             details
         });
 
-    } catch (error: any) {
-        console.error('[Scheduler] Critical Error:', error);
-        return new NextResponse(`Internal Server Error: ${error.message}`, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/scheduler/social-metrics");

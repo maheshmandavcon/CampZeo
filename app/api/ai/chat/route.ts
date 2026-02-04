@@ -5,11 +5,12 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { currentUser } from '@clerk/nextjs/server';
 import { SocialNormalizerService } from '@/lib/social-normalizer';
 
+import { withErrorHandling } from '@/lib/api-handler';
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-export async function POST(request: NextRequest) {
-    try {
+async function postHandler(request: NextRequest) {
+
         const body = await request.json();
         const { message, analyticsData } = body;
 
@@ -247,20 +248,7 @@ Return JSON with:
         // Return the answer field as the message
         return NextResponse.json({ message: parsedResponse.answer || text });
 
-    } catch (error: any) {
-        console.error('AI Chat Error:', error);
-
-        let errorMessage = "I'm having trouble analyzing your data right now. Please try again later.";
-
-        // Handle specific Gemini API errors
-        if (error.message?.includes("404") || error.message?.includes("not found")) {
-            errorMessage = "Configuration Error: The AI model could not be accessed. Please ensure your 'GEMINI_API_KEY' is valid and the 'Google Generative AI API' is enabled in your Google Cloud Console.";
-        } else if (error.message?.includes("403") || error.message?.includes("permission")) {
-            errorMessage = "Permission Denied: Your API key does not have access to the AI model. Please check your Google AI Studio settings.";
-        }
-
-        return NextResponse.json({
-            message: errorMessage
-        }, { status: 500 });
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/ai/chat");

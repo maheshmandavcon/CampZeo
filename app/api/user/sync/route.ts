@@ -2,7 +2,9 @@ import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler() {
+
     console.log("=== /api/user/sync called ===");
     console.log("CLERK_SECRET_KEY loaded:", !!process.env.CLERK_SECRET_KEY);
     console.log("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY loaded:", !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
@@ -130,4 +132,7 @@ export async function GET() {
             { status: 500 }
         );
     }
+
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/user/sync");

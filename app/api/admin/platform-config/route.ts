@@ -3,8 +3,9 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { logError, logWarning, logInfo } from '@/lib/audit-logger';
 
-export async function GET(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler(request: NextRequest) {
+
         const { userId } = await auth();
         if (!userId) return NextResponse.json({ isSuccess: false, message: 'Unauthorized' }, { status: 401 });
 
@@ -16,13 +17,13 @@ export async function GET(request: NextRequest) {
 
         const configs = await prisma.adminPlatformConfiguration.findMany();
         return NextResponse.json({ isSuccess: true, data: configs });
-    } catch (error: any) {
-        await logError("Failed to fetch platform config", { userId: request.headers.get('x-user-id') || undefined }, error);
-        return NextResponse.json({ isSuccess: false, message: error.message }, { status: 500 });
-    }
+    
 }
 
-export async function POST(request: NextRequest) {
+export const GET = withErrorHandling(getHandler, "GET /api/admin/platform-config");
+
+async function postHandler(request: NextRequest) {
+
     let key: string | undefined;
     try {
         const { userId } = await auth();
@@ -60,4 +61,7 @@ export async function POST(request: NextRequest) {
         await logError("Failed to update platform config", { userId: request.headers.get('x-user-id') || undefined, key }, error);
         return NextResponse.json({ isSuccess: false, message: error.message }, { status: 500 });
     }
+
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/admin/platform-config");

@@ -61,6 +61,7 @@ model Organisation {
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   analyticsSnapshots    AnalyticsSnapshot[]
+  audienceInsights      AudienceInsight[]
   campaigns             Campaign[]
   chatHistories         ChatHistory[]
   contacts              Contact[]
@@ -70,7 +71,6 @@ model Organisation {
   organisationPlatforms OrganisationPlatform[]
   payments              Payment[]
   socialMetricHistory   SocialMetricHistory[]
-  audienceInsights      AudienceInsight[]
   subscriptions         Subscription[]
   users                 User[]
 }
@@ -79,14 +79,13 @@ model AudienceInsight {
   id             Int          @id @default(autoincrement())
   organisationId Int
   platform       PlatformType
-  data           Json         // Stores normalized demographics and activity patterns
+  data           Json
   lastUpdated    DateTime     @default(now()) @updatedAt
   createdAt      DateTime     @default(now())
   organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
 
   @@unique([organisationId, platform])
 }
-
 
 model OrganisationPlatform {
   id             Int          @id @default(autoincrement())
@@ -112,42 +111,42 @@ model Campaign {
 }
 
 model CampaignPost {
-  id                   Int           @id @default(autoincrement())
+  id                   Int          @id @default(autoincrement())
   subject              String?
   message              String?
   senderEmail          String?
   type                 PlatformType
-  category             String?       // [NEW] Category for insights
-  isAttachedToCampaign Boolean       @default(false)
+  isAttachedToCampaign Boolean      @default(false)
   campaignId           Int?
   videoUrl             String?
   videoId              String?
   scheduledPostTime    DateTime?
-  publishedDate        DateTime?     // [NEW] Actual publish time
-  status               PostStatus    @default(DRAFT) // [NEW] Draft / Scheduled / Published
-  approvalStatus       String        @default("PENDING") // [NEW] PENDING / APPROVED / REJECTED
-  isPostSent           Boolean       @default(false)
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  isPostSent           Boolean      @default(false)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
   mediaUrls            String[]
   metadata             Json?
-  liveLink             String?       // [NEW] URL to the live post
-  engagement           Json?         // [NEW] Snapshot of engagement metrics
-  isDeleted            Boolean       @default(false)
-  campaign             Campaign?     @relation(fields: [campaignId], references: [id])
-  audits               PostAudit[]   // [NEW] Relation to audit trail
+  isDeleted            Boolean      @default(false)
+  approvalStatus       String       @default("PENDING")
+  category             String?
+  engagement           Json?
+  liveLink             String?
+  publishedDate        DateTime?
+  status               PostStatus   @default(DRAFT)
+  failureReason        String?
+  campaign             Campaign?    @relation(fields: [campaignId], references: [id])
+  audits               PostAudit[]
 }
 
 model PostAudit {
   id           Int          @id @default(autoincrement())
   postId       Int
-  post         CampaignPost @relation(fields: [postId], references: [id])
   fieldChanged String
   oldValue     String?
   newValue     String?
   changedBy    String?
   changedAt    DateTime     @default(now())
-
+  post         CampaignPost @relation(fields: [postId], references: [id])
 }
 
 model Contact {
@@ -279,23 +278,23 @@ model Payment {
 }
 
 model PostInsight {
-  id             Int      @id @default(autoincrement())
-  postId         String
-  platform       String   @default("")
-  likes          Int      @default(0)
-  comments       Int      @default(0)
-  reach          Int      @default(0)
-  impressions    Int      @default(0)
-  saves          Int      @default(0)
-  shares         Int      @default(0)
-  videoViews     Int      @default(0)
-  watchTime      Float    @default(0)
-  averageViewDuration Float @default(0)
-  engagementRate Float    @default(0)
-  lastUpdated    DateTime
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  isDeleted      Boolean  @default(false)
+  id                  Int      @id @default(autoincrement())
+  postId              String
+  likes               Int      @default(0)
+  comments            Int      @default(0)
+  reach               Int      @default(0)
+  impressions         Int      @default(0)
+  engagementRate      Float    @default(0)
+  lastUpdated         DateTime
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  isDeleted           Boolean  @default(false)
+  platform            String   @default("")
+  saves               Int      @default(0)
+  shares              Int      @default(0)
+  videoViews          Int      @default(0)
+  averageViewDuration Float    @default(0)
+  watchTime           Float    @default(0)
 
   @@index([platform])
   @@index([postId])
@@ -462,4 +461,12 @@ enum MessageChannel {
   WHATSAPP
 }
 
-
+model SystemNotificationLog {
+  id          Int      @id @default(autoincrement())
+  subject     String
+  recipient   String
+  status      String   // SUCCESS, FAILED
+  error       String?
+  createdAt   DateTime @default(now())
+  metadata    Json?
+}

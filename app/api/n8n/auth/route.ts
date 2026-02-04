@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(request: NextRequest) {
+
     const apiKey = request.headers.get('x-api-key');
 
     if (!process.env.N8N_API_KEY) {
@@ -13,4 +15,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
+
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/n8n/auth");

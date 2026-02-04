@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withErrorHandling } from '@/lib/api-handler';
 import { prisma } from '@/lib/prisma'; // Assuming this alias works, if not will use relative path. 
 
-export async function GET(request: NextRequest) {
+async function getHandler(request: NextRequest) {
+
     const apiKey = request.headers.get('x-api-key');
 
     if (!process.env.N8N_API_KEY) {
@@ -32,4 +34,7 @@ export async function GET(request: NextRequest) {
         console.error('Error fetching organizations for n8n:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
+
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/n8n/organizations");

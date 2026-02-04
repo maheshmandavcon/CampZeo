@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 
-export async function POST(req: Request) {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(req: Request) {
+
     console.log("POST /api/webhooks/twilio hit");
 
     try {
@@ -37,4 +39,7 @@ export async function POST(req: Request) {
         console.error("Error processing Twilio webhook:", error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
+
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/webhooks/twilio");

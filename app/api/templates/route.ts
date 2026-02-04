@@ -3,9 +3,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logError, logWarning, logInfo } from '@/lib/audit-logger';
 
+import { withErrorHandling } from '@/lib/api-handler';
 // GET: List all templates for the organization
-export async function GET(req: Request) {
-    try {
+async function getHandler(req: Request) {
+
         const user = await currentUser();
         if (!user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -61,19 +62,14 @@ export async function GET(req: Request) {
             data: templates
         });
 
-    } catch (error: any) {
-        console.error("Error fetching templates:", error);
-        await logError("Failed to fetch templates", { userId: "unknown" }, error);
-        return NextResponse.json(
-            { error: "Failed to fetch templates" },
-            { status: 500 }
-        );
-    }
+    
 }
 
+export const GET = withErrorHandling(getHandler, "GET /api/templates");
+
 // POST: Create a new template
-export async function POST(req: Request) {
-    try {
+async function postHandler(req: Request) {
+
         const user = await currentUser();
         if (!user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -156,15 +152,7 @@ export async function POST(req: Request) {
             message: "Template created successfully"
         });
 
-    } catch (error: any) {
-        console.error("Error creating template:", error);
-        await logError("Failed to create template", { userId: "unknown" }, error);
-        return NextResponse.json(
-            {
-                error: "Failed to create template",
-                details: error instanceof Error ? error.message : String(error)
-            },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/templates");

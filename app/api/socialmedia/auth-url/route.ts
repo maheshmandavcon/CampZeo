@@ -4,8 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 import { logError, logWarning, logInfo } from '@/lib/audit-logger';
 
-export async function GET(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler(request: NextRequest) {
+
         const { userId } = await auth();
         if (!userId) {
             await logWarning("Unauthorized access attempt to generate auth URL", { action: "generate-auth-url" });
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
                 authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=w_member_social,r_basicprofile,w_organization_social,r_organization_social,rw_organization_admin`;
                 break;
             case "YOUTUBE":
-                authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&response_type=code&scope=https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl https://www.googleapis.com/auth/yt-analytics.readonly https://www.googleapis.com/auth/yt-analytics-demographics.readonly&access_type=offline&prompt=consent`;
+                authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&response_type=code&scope=https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl https://www.googleapis.com/auth/yt-analytics.readonly &access_type=offline&prompt=consent`;
                 break;
             case "PINTEREST":
                 authUrl = `https://www.pinterest.com/oauth/?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&response_type=code&scope=boards:read,boards:write,pins:read,pins:write,user_accounts:read,ads:read`;
@@ -104,9 +105,7 @@ export async function GET(request: NextRequest) {
 
         await logInfo("OAuth URL generated", { userId, platform, impersonated: !!impersonatedOrgId });
         return NextResponse.json({ url: authUrl });
-    } catch (error: any) {
-        console.error("Error generating auth URL:", error);
-        await logError("Failed to generate auth URL", { userId: "Unknown" }, error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/auth-url");

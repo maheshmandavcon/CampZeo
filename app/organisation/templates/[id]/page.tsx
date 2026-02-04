@@ -147,7 +147,7 @@ export default function EditTemplatePage() {
     };
 
     const isVideo = (url: string) => {
-        return url.match(/\.(mp4|webm|ogg|mov)$/i);
+        return url.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
     };
 
     const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -262,8 +262,9 @@ export default function EditTemplatePage() {
                                                 src={formData.mediaUrls[currentMediaIndex]}
                                                 className="size-full object-cover"
                                                 controls
-                                                autoPlay={isPlayingVideo}
+                                                autoPlay
                                                 muted
+                                                loop
                                                 playsInline
                                             />
                                         ) : (
@@ -360,8 +361,9 @@ export default function EditTemplatePage() {
                                         src={formData.mediaUrls[currentMediaIndex]}
                                         className="size-full object-cover"
                                         controls
-                                        autoPlay={isPlayingVideo}
+                                        autoPlay
                                         muted
+                                        loop
                                         playsInline
                                     />
                                 ) : (
@@ -475,8 +477,9 @@ export default function EditTemplatePage() {
                                                 src={formData.mediaUrls[currentMediaIndex]}
                                                 className="size-full object-cover"
                                                 controls
-                                                autoPlay={isPlayingVideo}
+                                                autoPlay
                                                 muted
+                                                loop
                                                 playsInline
                                             />
                                         ) : (
@@ -562,7 +565,9 @@ export default function EditTemplatePage() {
                                     className="size-full object-cover"
                                     controls
                                     autoPlay
-                                    onEnded={() => setIsPlayingVideo(false)}
+                                    muted
+                                    loop
+                                    playsInline
                                 />
                             ) : (
                                 <>
@@ -715,8 +720,9 @@ export default function EditTemplatePage() {
                                                 src={formData.mediaUrls[currentMediaIndex]}
                                                 className="size-full object-cover"
                                                 controls
-                                                autoPlay={isPlayingVideo}
+                                                autoPlay
                                                 muted
+                                                loop
                                                 playsInline
                                             />
                                         ) : (
@@ -780,8 +786,9 @@ export default function EditTemplatePage() {
                                                         src={formData.mediaUrls[currentMediaIndex]}
                                                         className="size-full object-cover"
                                                         controls
-                                                        autoPlay={isPlayingVideo}
+                                                        autoPlay
                                                         muted
+                                                        loop
                                                         playsInline
                                                     />
                                                 ) : (

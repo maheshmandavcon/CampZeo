@@ -93,6 +93,8 @@ export default function EditPostPage() {
     const [newBoardName, setNewBoardName] = useState('');
     const [newBoardDescription, setNewBoardDescription] = useState('');
     const [creatingBoard, setCreatingBoard] = useState(false);
+    const [socialStatus, setSocialStatus] = useState<any>(null);
+    const [selectedLinkedInUrn, setSelectedLinkedInUrn] = useState<string>('');
 
     const [organisationPlatforms, setOrganisationPlatforms] = useState<string[]>([]);
     const [loadingPlatforms, setLoadingPlatforms] = useState(true);
@@ -138,6 +140,22 @@ export default function EditPostPage() {
         }
     };
 
+    // Fetch social status
+    useEffect(() => {
+        const fetchSocialStatus = async () => {
+            try {
+                const res = await fetch("/api/user/social-status");
+                if (res.ok) {
+                    const data = await res.json();
+                    setSocialStatus(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch social status", error);
+            }
+        };
+        fetchSocialStatus();
+    }, []);
+
     // Fetch post data
     useEffect(() => {
         const fetchPost = async () => {
@@ -176,7 +194,7 @@ export default function EditPostPage() {
                 setIsReel(metadata.isReel || metadata.postType === 'REEL' || false);
 
                 // Load YouTube content type
-                if (metadata.postType && type === 'YOUTUBE') {
+                if (metadata.postType && post.type === 'YOUTUBE') {
                     setYoutubeContentType(metadata.postType);
                 }
                 if (metadata.playlistTitle) {
@@ -184,8 +202,13 @@ export default function EditPostPage() {
                 }
 
                 // Load Facebook/Instagram content type
-                if (metadata.postType && (type === 'FACEBOOK' || type === 'INSTAGRAM')) {
+                if (metadata.postType && (post.type === 'FACEBOOK' || post.type === 'INSTAGRAM')) {
                     setContentType(metadata.postType);
+                }
+
+                // Load LinkedIn author
+                if (metadata.linkedInUrn) {
+                    setSelectedLinkedInUrn(metadata.linkedInUrn);
                 }
 
                 if (post.scheduledPostTime) {
@@ -510,6 +533,8 @@ export default function EditPostPage() {
             metadata = { boardId: pinterestBoardId, link: pinterestLink };
         } else if (type === 'FACEBOOK' || type === 'INSTAGRAM') {
             metadata = { isReel: !!isReel, postType: contentType };
+        } else if (type === 'LINKEDIN') {
+            metadata = { linkedInUrn: selectedLinkedInUrn };
         }
 
         try {
@@ -526,7 +551,8 @@ export default function EditPostPage() {
                     scheduledPostTime: scheduledPostTime ? new Date(scheduledPostTime).toISOString() : null,
                     mediaUrls: mediaUrls,
                     videoUrl: mediaUrls.length > 0 ? mediaUrls[0] : null,
-                    metadata
+                    metadata,
+                    linkedInUrn: type === 'LINKEDIN' ? selectedLinkedInUrn : undefined
                 }),
             });
 
@@ -545,7 +571,7 @@ export default function EditPostPage() {
     };
 
     // Check if a URL is a video
-    const isVideoUrl = (url: string) => url.match(/\.(mp4|mov|webm)$/i);
+    const isVideoUrl = (url: string) => url.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
 
     if (loading) {
         return (
@@ -831,6 +857,37 @@ export default function EditPostPage() {
                                             </div>
                                         )}
                                     </div>
+                                </div>
+                            )}
+
+                            {/* LinkedIn Organization Selection */}
+                            {type === 'LINKEDIN' && (
+                                <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+                                    <Label className="text-sm font-medium flex items-center gap-2">
+                                        <Linkedin className="size-4 text-blue-700" />
+                                        Post As
+                                    </Label>
+                                    <Select
+                                        value={selectedLinkedInUrn}
+                                        onValueChange={setSelectedLinkedInUrn}
+                                    >
+                                        <SelectTrigger className=''>
+                                            <SelectValue placeholder="Select author" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value={socialStatus?.linkedin?.urn || 'personal'}>
+                                                Personal Profile ({user?.fullName || 'You'})
+                                            </SelectItem>
+                                            {socialStatus?.linkedin?.organizations?.map((org: any) => (
+                                                <SelectItem key={org.id} value={org.id}>
+                                                    {org.name} (Organization)
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-[10px] text-muted-foreground">
+                                        Select whether to post to your personal profile or a managed company page.
+                                    </p>
                                 </div>
                             )}
 
@@ -1156,20 +1213,49 @@ export default function EditPostPage() {
                                 <div className="grid grid-cols-2 gap-2">
                                     {mediaUrls.map((url, index) => (
                                         <div key={index} className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-                                            {isVideoUrl(url) ? (
-                                                <div className="flex items-center justify-center h-full bg-black/10">
-                                                    <div className="size-12 rounded-full bg-white/80 flex items-center justify-center shadow">
-                                                        <div className="ml-1 size-0 border-y-[8px] border-y-transparent border-l-[14px] border-l-primary" />
-                                                    </div>
-                                                    <p className="absolute bottom-2 left-2 text-xs bg-black/50 text-white px-2 py-1 rounded">Video</p>
-                                                </div>
-                                            ) : (
-                                                <img
-                                                    src={url}
-                                                    alt={`Media ${index + 1}`}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            )}
+                                            {(() => {
+                                                const isYouTube = type === 'YOUTUBE';
+                                                const isVideo = isVideoUrl(url) || isYouTube;
+
+                                                if (isYouTube) {
+                                                    let videoId = '';
+                                                    if (url.includes('v=')) videoId = url.split('v=')[1].split('&')[0];
+                                                    else if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
+                                                    else if (url.includes('embed/')) videoId = url.split('embed/')[1].split('?')[0];
+
+                                                    if (videoId) {
+                                                        return (
+                                                            <iframe
+                                                                src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
+                                                                className="w-full h-full border-0"
+                                                                allow="autoplay; encrypted-media"
+                                                                allowFullScreen
+                                                            />
+                                                        );
+                                                    }
+                                                }
+
+                                                if (isVideo) {
+                                                    return (
+                                                        <video
+                                                            src={url}
+                                                            className="w-full h-full object-cover"
+                                                            autoPlay
+                                                            muted
+                                                            loop
+                                                            playsInline
+                                                        />
+                                                    );
+                                                }
+
+                                                return (
+                                                    <img
+                                                        src={url}
+                                                        alt={`Media ${index + 1}`}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                );
+                                            })()}
                                         </div>
                                     ))}
                                 </div>
@@ -1214,3 +1300,4 @@ export default function EditPostPage() {
         </>
     );
 }
+

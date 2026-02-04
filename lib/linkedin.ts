@@ -241,21 +241,28 @@ export async function getLinkedInPostInsights(
 
         // Also fetch the post itself for text/media
         let postData = null;
-        try {
-            const postUrl = `https://api.linkedin.com/v2/posts/${encodedUrn}`;
-            const postResponse = await fetch(postUrl, {
-                headers: {
-                    "Authorization": `Bearer ${accessToken}`,
-                    "X-Restli-Protocol-Version": "2.0.0",
-                    "LinkedIn-Version": "202401",
+        const endpoints = [
+            `https://api.linkedin.com/v2/posts/${encodedUrn}`,
+            `https://api.linkedin.com/v2/ugcPosts/${encodedUrn}`
+        ];
+
+        for (const endpoint of endpoints) {
+            try {
+                const postResponse = await fetch(endpoint, {
+                    headers: {
+                        "Authorization": `Bearer ${accessToken}`,
+                        "X-Restli-Protocol-Version": "2.0.0",
+                        "LinkedIn-Version": "202401",
+                    }
+                });
+                if (postResponse.ok) {
+                    postData = await postResponse.json();
+                    console.log(`[LinkedIn] Post Metadata from ${endpoint}:`, JSON.stringify(postData, null, 2));
+                    break;
                 }
-            });
-            if (postResponse.ok) {
-                postData = await postResponse.json();
-                console.log(`[LinkedIn] Post Metadata for ${urn}:`, JSON.stringify(postData, null, 2));
+            } catch (e) {
+                console.warn(`[LinkedIn] Could not fetch from ${endpoint}`, e);
             }
-        } catch (e) {
-            console.warn(`[LinkedIn] Could not fetch post metadata for ${urn}`, e);
         }
 
         if (!response.ok) {
@@ -371,8 +378,49 @@ export async function getLinkedInPostInsights(
         if (postData?.commentary) {
             result.text = postData.commentary;
         }
+
+        // Extract media URNs
+        let mediaUrns: string[] = [];
         if (postData?.content?.multiImage?.images) {
-            result.media = postData.content.multiImage.images;
+            mediaUrns = postData.content.multiImage.images.map((img: any) => img.media || img.id).filter(Boolean);
+        } else if (postData?.content?.media) {
+            mediaUrns = postData.content.media.map((m: any) => m.media || m.id).filter(Boolean);
+        } else if (postData?.specificContent?.['com.linkedin.ugc.ShareContent']?.media) {
+            mediaUrns = postData.specificContent['com.linkedin.ugc.ShareContent'].media.map((m: any) => m.media).filter(Boolean);
+        }
+
+        // Resolve URNs to actual CDN URLs
+        if (mediaUrns.length > 0) {
+            console.log(`[LinkedIn] Resolving ${mediaUrns.length} media asset(s) for ${urn}`);
+            try {
+                const resolvedMedia = await Promise.all(mediaUrns.map(async (assetUrn) => {
+                    if (!assetUrn.startsWith('urn:li:digitalmediaAsset:')) return { url: assetUrn };
+
+                    const assetUrl = `https://api.linkedin.com/v2/assets/${encodeURIComponent(assetUrn)}`;
+                    const assetRes = await fetch(assetUrl, {
+                        headers: {
+                            "Authorization": `Bearer ${accessToken}`,
+                            "X-Restli-Protocol-Version": "2.0.0",
+                            "LinkedIn-Version": "202401",
+                        }
+                    });
+
+                    if (assetRes.ok) {
+                        const assetData = await assetRes.json();
+                        const mediaAsset = assetData?.['com.linkedin.digitalmedia.asset.DigitalMediaAsset'] || assetData?.['digitalmediaAsset'] || assetData;
+                        const thumbnails = mediaAsset?.thumbnails || [];
+                        // Get the highest resolution thumbnail (usually the last or biggest)
+                        if (thumbnails.length > 0) {
+                            return { url: thumbnails[thumbnails.length - 1].url, originalUrn: assetUrn };
+                        }
+                    }
+                    return { originalUrn: assetUrn };
+                }));
+                result.media = resolvedMedia.filter(m => m.url).map(m => m.url);
+                console.log(`[LinkedIn] Resolved media URLs:`, result.media);
+            } catch (e) {
+                console.warn(`[LinkedIn] Failed to resolve assets for ${urn}:`, e);
+            }
         }
 
         return result;
@@ -447,6 +495,9 @@ export interface LinkedInAudienceInsights {
         total: number;
     };
     followerGeography: Record<string, number>;
+    followerIndustry: Record<string, number>;
+    followerSeniority: Record<string, number>;
+    followerFunction: Record<string, number>;
     _rawResponses?: any[];
 }
 
@@ -457,10 +508,43 @@ export async function getLinkedInAudienceInsights(
 
     // Verify it is an organization
     if (!authorUrn || !authorUrn.includes('organization')) {
-        console.warn('[LinkedIn] Audience insights are only available for Organization Pages, not personal profiles.');
+        console.log('[LinkedIn] Fetching basic network metrics for personal profile:', authorUrn);
+        try {
+            // For personal profiles, we can try to get network sizes (followers)
+            // v2/networkSizes/urn:li:person:{id}?edgeType=COMPANY_FOLLOWED_BY_MEMBER is for pages
+            // For personal connections/followers: v2/networkSizes/urn:li:person:{id} 
+            const response = await fetch(
+                `https://api.linkedin.com/v2/networkSizes/${encodeURIComponent(authorUrn)}`,
+                {
+                    headers: {
+                        "Authorization": `Bearer ${accessToken}`,
+                        "X-Restli-Protocol-Version": "2.0.0",
+                        "LinkedIn-Version": "202401",
+                    }
+                }
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                const total = data.firstDegreeSize || 0; // Connections/Followers
+                return {
+                    followerCounts: { organic: total, paid: 0, total: total },
+                    followerGeography: {},
+                    followerIndustry: {},
+                    followerSeniority: {},
+                    followerFunction: {}
+                };
+            }
+        } catch (e) {
+            console.error('[LinkedIn] Failed to fetch personal network size:', e);
+        }
+
         return {
             followerCounts: { organic: 0, paid: 0, total: 0 },
-            followerGeography: {}
+            followerGeography: {},
+            followerIndustry: {},
+            followerSeniority: {},
+            followerFunction: {}
         };
     }
 
@@ -496,7 +580,13 @@ export async function getLinkedInAudienceInsights(
             // 404 means not found
             const errorText = await response.text();
             console.warn(`[LinkedIn] Failed to fetch follower stats: ${response.status} - ${errorText}`);
-            return { followerCounts: { organic: 0, paid: 0, total: 0 }, followerGeography: {} };
+            return {
+                followerCounts: { organic: 0, paid: 0, total: 0 },
+                followerGeography: {},
+                followerIndustry: {},
+                followerSeniority: {},
+                followerFunction: {}
+            };
         }
 
         const data = await response.json();
@@ -506,33 +596,51 @@ export async function getLinkedInAudienceInsights(
             const organic = element.followerCountsByAssociationType?.organicFollowerCount || 0;
             const paid = element.followerCountsByAssociationType?.paidFollowerCount || 0;
 
-            // 2. Fetch Geographic Statistics (Followers by country)
+            // 2. Fetch Demographic Statistics using versioned API
             let followerGeography: Record<string, number> = {};
-            try {
-                const geoResponse = await fetch(
-                    `https://api.linkedin.com/v2/organizationalEntityFollowerStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(authorUrn)}&dimensions=List(geography)`,
-                    {
-                        headers: {
-                            "Authorization": `Bearer ${accessToken}`,
-                            "X-Restli-Protocol-Version": "2.0.0",
-                            "LinkedIn-Version": "202401",
+            let followerIndustry: Record<string, number> = {};
+            let followerSeniority: Record<string, number> = {};
+            let followerFunction: Record<string, number> = {};
+
+            // Map demographic types to their API enum values
+            const demographicTypes = [
+                { type: 'GEOGRAPHIC_AREA', label: 'follower_geography', target: followerGeography, fieldName: 'geographicArea' },
+                { type: 'INDUSTRY', label: 'follower_industry', target: followerIndustry, fieldName: 'industry' },
+                { type: 'SENIORITY', label: 'follower_seniority', target: followerSeniority, fieldName: 'seniority' },
+                { type: 'FUNCTION', label: 'follower_function', target: followerFunction, fieldName: 'function' }
+            ];
+
+            for (const demo of demographicTypes) {
+                try {
+                    const dimResponse = await fetch(
+                        `https://api.linkedin.com/rest/organizationalEntityFollowerStatistics?q=followerDemographics&organizationalEntity=${encodeURIComponent(authorUrn)}&followerDemographicType=${demo.type}`,
+                        {
+                            headers: {
+                                "Authorization": `Bearer ${accessToken}`,
+                                "X-Restli-Protocol-Version": "2.0.0",
+                                "LinkedIn-Version": "202401",
+                            }
+                        }
+                    );
+                    await capture(dimResponse, demo.label);
+
+                    if (dimResponse.ok) {
+                        const dimData = await dimResponse.json();
+                        if (dimData.elements) {
+                            dimData.elements.forEach((el: any) => {
+                                // The field name matches the demographic type (e.g., geographicArea, industry, etc.)
+                                const urn = el[demo.fieldName];
+                                if (urn) {
+                                    const code = urn.split(':').pop() || 'Unknown';
+                                    const count = el.followerCountsByAssociationType?.organicFollowerCount || 0;
+                                    demo.target[code] = (demo.target[code] || 0) + count;
+                                }
+                            });
                         }
                     }
-                );
-                await capture(geoResponse, 'follower_geography');
-
-                if (geoResponse.ok) {
-                    const geoData = await geoResponse.json();
-                    if (geoData.elements) {
-                        geoData.elements.forEach((el: any) => {
-                            const geoId = el.geography?.split(':').pop() || 'Unknown';
-                            const count = el.followerCountsByAssociationType?.organicFollowerCount || 0;
-                            followerGeography[geoId] = (followerGeography[geoId] || 0) + count;
-                        });
-                    }
+                } catch (err) {
+                    console.warn(`[LinkedIn] ${demo.label} fetch failed:`, err);
                 }
-            } catch (geoErr) {
-                console.warn('[LinkedIn] Geography fetch failed:', geoErr);
             }
 
             return {
@@ -542,15 +650,31 @@ export async function getLinkedInAudienceInsights(
                     total: organic + paid
                 },
                 followerGeography,
+                followerIndustry,
+                followerSeniority,
+                followerFunction,
                 _rawResponses
             };
         }
 
-        return { followerCounts: { organic: 0, paid: 0, total: 0 }, followerGeography: {}, _rawResponses };
+        return {
+            followerCounts: { organic: 0, paid: 0, total: 0 },
+            followerGeography: {},
+            followerIndustry: {},
+            followerSeniority: {},
+            followerFunction: {},
+            _rawResponses
+        };
 
     } catch (error) {
         console.error('[LinkedIn] Error fetching audience insights:', error);
-        return { followerCounts: { organic: 0, paid: 0, total: 0 }, followerGeography: {} };
+        return {
+            followerCounts: { organic: 0, paid: 0, total: 0 },
+            followerGeography: {},
+            followerIndustry: {},
+            followerSeniority: {},
+            followerFunction: {}
+        };
     }
 }
 /**
@@ -577,4 +701,58 @@ export async function refreshLinkedInToken(refreshToken: string, clientId: strin
 
     const data: any = await response.json();
     return data; // Returns { access_token, refresh_token (optional), expires_in, scope, token_type }
+}
+/**
+ * Get all LinkedIn organizations where the user is an administrator
+ */
+export async function getLinkedInUserOrganizations(accessToken: string): Promise<{ id: string, name: string }[]> {
+    try {
+        const response = await fetch("https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED", {
+            headers: {
+                "Authorization": `Bearer ${accessToken}`,
+                "X-Restli-Protocol-Version": "2.0.0",
+                "LinkedIn-Version": "202401",
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[LinkedIn] Failed to fetch organizations: ${response.status}`, errorText);
+            return [];
+        }
+
+        const data = await response.json();
+        const organizations: { id: string, name: string }[] = [];
+
+        if (data.elements && data.elements.length > 0) {
+            for (const element of data.elements) {
+                const orgUrn = element.organizationalTarget;
+                const orgId = orgUrn.split(":").pop();
+
+                // Get org details
+                try {
+                    const orgRes = await fetch(`https://api.linkedin.com/v2/organizations/${orgId}`, {
+                        headers: {
+                            "Authorization": `Bearer ${accessToken}`,
+                            "X-Restli-Protocol-Version": "2.0.0",
+                            "LinkedIn-Version": "202401",
+                        }
+                    });
+                    if (orgRes.ok) {
+                        const orgData = await orgRes.json();
+                        organizations.push({
+                            id: orgUrn,
+                            name: orgData.localizedName
+                        });
+                    }
+                } catch (e) {
+                    console.warn(`[LinkedIn] Failed to fetch details for org ${orgId}`, e);
+                }
+            }
+        }
+        return organizations;
+    } catch (error) {
+        console.error("[LinkedIn] Error in getLinkedInUserOrganizations:", error);
+        return [];
+    }
 }

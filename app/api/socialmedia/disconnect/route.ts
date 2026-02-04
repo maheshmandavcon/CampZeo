@@ -4,8 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 import { logError, logWarning, logInfo } from '@/lib/audit-logger';
 
-export async function POST(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(request: NextRequest) {
+
         const { userId: currentUserId } = await auth();
         if (!currentUserId) {
             await logWarning("Unauthorized access attempt to disconnect platform", { action: "disconnect-platform" });
@@ -58,9 +59,7 @@ export async function POST(request: NextRequest) {
 
         await logInfo("Social media platform disconnected", { userId: targetUserId, platform });
         return NextResponse.json({ success: true });
-    } catch (error: any) {
-        console.error("Error disconnecting platform:", error);
-        await logError("Failed to disconnect platform", { userId: "Unknown" }, error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/disconnect");

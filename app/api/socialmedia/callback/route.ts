@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logError, logInfo } from '@/lib/audit-logger';
 
-export async function GET(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler(request: NextRequest) {
+
         const searchParams = request.nextUrl.searchParams;
         const code = searchParams.get("code");
         const state = searchParams.get("state");
@@ -264,9 +265,7 @@ export async function GET(request: NextRequest) {
 
         await logInfo("Social media platform connected", { userId: stateUserId, platform });
         return NextResponse.redirect(new URL("/organisation/settings?success=connected", request.url));
-    } catch (error: any) {
-        console.error("Error in callback:", error);
-        await logError("Failed to connect social media platform", { userId: "Unknown" }, error);
-        return NextResponse.redirect(new URL("/organisation/settings?error=connection_failed", request.url));
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/callback");

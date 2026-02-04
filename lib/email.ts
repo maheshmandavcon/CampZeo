@@ -11,6 +11,10 @@ interface OrganisationInviteParams {
 }
 
 async function getEmailConfig() {
+    let apiKey: string | undefined;
+    let domain: string | undefined;
+    let fromEmail: string | undefined;
+
     try {
         const configs = await prisma.adminPlatformConfiguration.findMany({
             where: {
@@ -19,15 +23,18 @@ async function getEmailConfig() {
             }
         });
 
-        const apiKey = configs.find(c => c.key === 'MAILGUN_API_KEY')?.value;
-        const domain = configs.find(c => c.key === 'MAILGUN_DOMAIN')?.value;
-        const fromEmail = configs.find(c => c.key === 'MAILGUN_FROM_EMAIL')?.value;
-
-        return { apiKey, domain, fromEmail };
+        apiKey = configs.find(c => c.key === 'MAILGUN_API_KEY')?.value || undefined;
+        domain = configs.find(c => c.key === 'MAILGUN_DOMAIN')?.value || undefined;
+        fromEmail = configs.find(c => c.key === 'MAILGUN_FROM_EMAIL')?.value || undefined;
     } catch (error) {
-        console.error("Failed to fetch email config:", error);
-        return { apiKey: null, domain: null, fromEmail: null };
+        console.error("Failed to fetch email config from DB, falling back to ENV:", error);
     }
+
+    return {
+        apiKey: apiKey || process.env.MAILGUN_API_KEY,
+        domain: domain || process.env.MAILGUN_DOMAIN,
+        fromEmail: fromEmail || process.env.MAILGUN_FROM_EMAIL
+    };
 }
 
 /**

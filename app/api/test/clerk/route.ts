@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
-export async function GET() {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler() {
+
         console.log("=== /api/test/clerk called ===");
         console.log("CLERK_SECRET_KEY:", process.env.CLERK_SECRET_KEY?.substring(0, 10) + "...");
         console.log("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:", process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.substring(0, 10) + "...");
@@ -25,13 +26,7 @@ export async function GET() {
             userId: user?.id,
             clerkConfigured: !!process.env.CLERK_SECRET_KEY
         });
-    } catch (error) {
-        console.error("=== ERROR in /api/test/clerk ===");
-        console.error(error);
-        return NextResponse.json({
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-            stack: error instanceof Error ? error.stack : undefined
-        }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/test/clerk");

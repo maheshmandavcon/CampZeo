@@ -164,6 +164,9 @@ export default function CampaignPostsPage() {
                 setPosts(postsData.posts);
             } catch (error) {
                 console.error('Error fetching data:', error);
+
+                console.error('Error fetching data:', error);
+
                 toast.error('Failed to load campaign posts');
                 router.push('/organisation/campaigns');
             } finally {
@@ -211,6 +214,9 @@ export default function CampaignPostsPage() {
             setDeletePostId(null);
         } catch (error) {
             console.error('Error deleting post:', error);
+
+            console.error('Error deleting post:', error);
+
             toast.error('Failed to delete post');
         }
     };
@@ -237,6 +243,9 @@ export default function CampaignPostsPage() {
             toast.success('Post duplicated successfully');
         } catch (error) {
             console.error('Error duplicating post:', error);
+
+            console.error('Error duplicating post:', error);
+
             toast.error('Failed to duplicate post');
         }
     };
@@ -282,6 +291,29 @@ export default function CampaignPostsPage() {
 
         } catch (error) {
             console.error('Error sharing post:', error);
+
+            // Log error to database and notify admin
+            try {
+                await fetch('/api/log-error', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        apiName: `Client: Share Post - Campaign ${campaignId}`,
+                        error: error instanceof Error ? error.message : String(error),
+                        stack: error instanceof Error ? error.stack : undefined,
+                        context: {
+                            campaignId,
+                            postId: sharePost?.id,
+                            postType: sharePost?.type,
+                            selectedContactsCount: selectedContacts.length,
+                            url: window.location.href,
+                        }
+                    })
+                });
+            } catch (logError) {
+                console.error('Failed to log error:', logError);
+            }
+
             toast.error(error instanceof Error ? error.message : 'Failed to share post');
         } finally {
             setSendingShare(false);
@@ -514,15 +546,15 @@ export default function CampaignPostsPage() {
                                                 <SelectItem value="pending">Pending</SelectItem>
                                             </SelectContent>
                                         </Select>
+                                        <Button
+                                            variant="outline"
+                                            className="cursor-pointer"
+                                            onClick={handleExport}
+                                        >
+                                            <Download className="size-4 mr-2" />
+                                            Export All
+                                        </Button>
                                     </div>
-                                    <Button
-                                        variant="outline"
-                                        className="cursor-pointer"
-                                        onClick={handleExport}
-                                    >
-                                        <Download className="size-4 mr-2" />
-                                        Export All
-                                    </Button>
                                 </div>
                             </Tabs>
                         </div>
@@ -569,12 +601,12 @@ export default function CampaignPostsPage() {
                                                             From: {post.senderEmail}
                                                         </p>
                                                     )}
-                                                    {post.videoUrl && (
+                                                    {post.videoUrl || (post.mediaUrls && post.mediaUrls.length > 0) ? (
                                                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                                             <Paperclip className="size-3" />
                                                             <span>Media attached</span>
                                                         </div>
-                                                    )}
+                                                    ) : null}
                                                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                                                         {post.scheduledPostTime && (
                                                             <div className="flex items-center gap-1">
@@ -696,24 +728,63 @@ export default function CampaignPostsPage() {
                                 <div>
                                     <p className="text-sm font-medium mb-2">Media:</p>
                                     <div className="grid grid-cols-2 gap-2">
-                                        {(previewPost.mediaUrls || [previewPost.videoUrl].filter(Boolean)).map((url, index) => (
-                                            <div key={index} className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-                                                {url && url.match(/\.(mp4|mov|webm)$/i) ? (
-                                                    <div className="flex items-center justify-center h-full bg-black/10">
-                                                        <div className="size-12 rounded-full bg-white/80 flex items-center justify-center shadow">
-                                                            <div className="ml-1 size-0 border-y-[8px] border-y-transparent border-l-[14px] border-l-primary" />
-                                                        </div>
-                                                        <p className="absolute bottom-2 left-2 text-xs bg-black/50 text-white px-2 py-1 rounded">Video</p>
-                                                    </div>
-                                                ) : url ? (
-                                                    <img
-                                                        src={url}
-                                                        alt={`Media ${index + 1}`}
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                ) : null}
-                                            </div>
-                                        ))}
+                                        {(() => {
+                                            const allMedia = Array.from(new Set([
+                                                ...(previewPost.mediaUrls || []),
+                                                previewPost.videoUrl
+                                            ].filter(Boolean) as string[]));
+
+                                            if (allMedia.length === 0) return null;
+
+                                            return allMedia.map((url, index) => (
+                                                <div key={index} className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+                                                    {(() => {
+                                                        const isYouTubeUrl = url?.includes('youtube.com') || url?.includes('youtu.be');
+                                                        const isVideoFile = url?.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
+                                                        const isVideo = isVideoFile || (previewPost.type === 'YOUTUBE' && isYouTubeUrl);
+
+                                                        if (previewPost.type === 'YOUTUBE' && isYouTubeUrl) {
+                                                            let videoId = '';
+                                                            if (url.includes('v=')) videoId = url.split('v=')[1].split('&')[0];
+                                                            else if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
+                                                            else if (url.includes('embed/')) videoId = url.split('embed/')[1].split('?')[0];
+
+                                                            if (videoId) {
+                                                                return (
+                                                                    <iframe
+                                                                        src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
+                                                                        className="w-full h-full border-0"
+                                                                        allow="autoplay; encrypted-media"
+                                                                        allowFullScreen
+                                                                    />
+                                                                );
+                                                            }
+                                                        }
+
+                                                        if (isVideo && !isYouTubeUrl) {
+                                                            return (
+                                                                <video
+                                                                    src={url}
+                                                                    className="w-full h-full object-cover"
+                                                                    autoPlay
+                                                                    muted
+                                                                    loop
+                                                                    playsInline
+                                                                />
+                                                            );
+                                                        }
+
+                                                        return url ? (
+                                                            <img
+                                                                src={url}
+                                                                alt={`Media ${index + 1}`}
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                        ) : null;
+                                                    })()}
+                                                </div>
+                                            ));
+                                        })()}
                                     </div>
                                 </div>
                             )}

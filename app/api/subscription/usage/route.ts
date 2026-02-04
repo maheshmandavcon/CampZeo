@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { logError, logWarning } from "@/lib/audit-logger";
 
-export async function GET() {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler() {
+
         const user = await currentUser();
 
         if (!user) {
@@ -44,11 +45,11 @@ export async function GET() {
         // Parse usage limits from plan
         let usageLimits;
         const defaultLimits = {
-            campaigns: 999999,
-            contacts: 999999,
-            users: 999999,
-            platforms: 999999,
-            postsPerMonth: 999999,
+            campaigns: 100,
+            contacts: 100,
+            users: 10,
+            platforms: 8,
+            postsPerMonth: 100,
         };
 
         try {
@@ -125,12 +126,7 @@ export async function GET() {
         };
 
         return NextResponse.json({ usage });
-    } catch (error: any) {
-        console.error("Error calculating usage:", error);
-        await logError("Failed to calculate usage metrics", { userId: "unknown" }, error);
-        return NextResponse.json(
-            { error: "Failed to calculate usage metrics" },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/subscription/usage");

@@ -3,8 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { currentUser } from '@clerk/nextjs/server';
 import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
 
-export async function GET(request: NextRequest) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler(request: NextRequest) {
+
         const user = await currentUser();
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -120,8 +121,7 @@ export async function GET(request: NextRequest) {
                 stats
             }
         });
-    } catch (error) {
-        console.error('Error fetching post insights:', error);
-        return NextResponse.json({ error: 'Failed to fetch insights' }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/Organisation/posts/insights");

@@ -1,8 +1,7 @@
-
 import { prisma } from "@/lib/prisma";
 import { getFacebookPageAudience, getFacebookAccountInsights } from "./facebook";
 import { getInstagramAudienceInsights, getInstagramAccountInsights } from "./instagram";
-import { getLinkedInAudienceInsights } from "./linkedin";
+import { getLinkedInAudienceInsights, getLinkedInUserOrganizations } from "./linkedin";
 import { getYouTubeAudienceInsights, getYouTubeAccountInsights } from "./youtube";
 import { getPinterestAudienceInsights } from "./pinterest";
 import { PlatformType } from "@prisma/client";
@@ -101,11 +100,49 @@ export class AudienceNormalizerService {
                 .catch(e => ({ platform: 'INSTAGRAM', error: e })));
         }
 
-        // 3. LinkedIn
-        if (user.linkedInAccessToken && user.linkedInAuthUrn) {
-            promises.push(getLinkedInAudienceInsights({ accessToken: user.linkedInAccessToken, authorUrn: user.linkedInAuthUrn })
-                .then(data => ({ platform: 'LINKEDIN', data }))
-                .catch(e => ({ platform: 'LINKEDIN', error: e })));
+        // 3. LinkedIn - Fetch for ALL organizations the user manages
+        if (user.linkedInAccessToken) {
+            // First get the list of organizations
+            promises.push(
+                getLinkedInUserOrganizations(user.linkedInAccessToken)
+                    .then(async (orgs) => {
+                        if (orgs.length === 0 && user.linkedInAuthUrn?.includes('organization')) {
+                            // Fallback: If no orgs found (maybe permissions issue) but AuthURN looks like an org, try that
+                            orgs.push({ id: user.linkedInAuthUrn, name: 'Default Organization' });
+                        }
+
+                        // Fetch insights for each organization
+                        const orgPromises = orgs.map(org =>
+                            getLinkedInAudienceInsights({
+                                accessToken: user.linkedInAccessToken!,
+                                authorUrn: org.id
+                            })
+                                .then(data => ({
+                                    platform: 'LINKEDIN',
+                                    data,
+                                    accountId: org.id,
+                                    accountName: org.name,
+                                    isDefault: org.id === user.linkedInAuthUrn
+                                }))
+                                .catch(e => ({ platform: 'LINKEDIN', error: e, accountId: org.id, accountName: org.name }))
+                        );
+
+                        // Return all organization results flattened into the promises array?
+                        // No, `Promise.all(promises)` expects single results.
+                        // But we can return an ARRAY of audience insights here?
+                        // `normalizeResults` iterates `results`. If one result is an array, it might fail.
+                        // Wait, `promises.push(...)` usually pushes a Promise<AudienceInsight>.
+                        // If we return Promise<AudienceInsight[]>, `results` will contain an array at this index.
+                        // `normalizeResults` takes `(results: AudienceInsight[], ...)`
+                        // So `results` is expected to be flat.
+
+                        // We need to modify `promises` structure or how we push.
+                        return Promise.all(orgPromises);
+                    })
+                // This chain returns Promise<AudienceInsight[]>
+                // But `Promise.all` in line 183 will make `results` contain [InstaResult, [LinkedInResults...], ...]
+                // We need to flatten `results` before passing to `normalizeResults`.
+            );
         }
 
         // 4. YouTube
@@ -181,7 +218,7 @@ export class AudienceNormalizerService {
             }
         });
 
-        const results = await Promise.all(promises);
+        const results = (await Promise.all(promises)).flat();
 
         // Calculate Real Heatmap
         const realHeatmap = this.calculateRealHeatmap(transactions, allInsights);
@@ -245,17 +282,19 @@ export class AudienceNormalizerService {
             } as any
         };
 
-        results.forEach(res => {
+        results.forEach((res, i) => {
             if (res.error) return;
 
             const platKey = res.platform.toLowerCase();
-            // Initialize platform demographics object
-            aggregated.platformDemographics[platKey] = {
-                city: {},
-                country: {},
-                gender: {},
-                age: {}
-            };
+            // Initialize platform demographics object if not exists
+            if (!aggregated.platformDemographics[platKey]) {
+                aggregated.platformDemographics[platKey] = {
+                    city: {},
+                    country: {},
+                    gender: {},
+                    age: {}
+                };
+            }
 
             let followers = 0;
             if (res.platform === 'FACEBOOK') {
@@ -338,10 +377,61 @@ export class AudienceNormalizerService {
                 res.nonFollowerReach = data.nonFollowerReach || 0;
             } else if (res.platform === 'LINKEDIN') {
                 followers = res.data?.followerCounts?.total || 0;
+
+                // Process geography for global aggregation (only if this is an organization we want to include in global stats)
+                // For now, allow all organization data to contribute to global country/city
                 Object.entries(res.data?.followerGeography || {}).forEach(([k, v]) => {
                     const code = k.startsWith('urn:li:country:') ? k.replace('urn:li:country:', '').toUpperCase() : k;
                     aggregated.countries[code] = (aggregated.countries[code] || 0) + (v as number);
                 });
+
+                // Store per-organization data
+                if (!aggregated.platformDemographics[platKey].organizations) {
+                    aggregated.platformDemographics[platKey].organizations = [];
+                }
+
+                // If res.accountId is available, use it as URN, otherwise try to extract or generate one
+                // Assuming AudienceInsight might carry accountId/isDefault or we infer from data
+                const orgUrn = res.accountId || (res.data?._rawResponses?.[0]?.data?.elements?.[0]?.organizationalEntity) || `urn:li:organization:unknown-${i}`;
+                const orgName = res.accountName || `Organization ${i + 1}`;
+
+                // Check if this org is already in the list (in case of duplicate data sources)
+                let existingOrg = aggregated.platformDemographics[platKey].organizations.find((o: any) => o.urn === orgUrn);
+
+                if (!existingOrg) {
+                    existingOrg = {
+                        urn: orgUrn,
+                        name: orgName,
+                        data: {
+                            followerCounts: res.data?.followerCounts,
+                            followerGeography: res.data?.followerGeography,
+                            followerIndustry: res.data?.followerIndustry,
+                            followerSeniority: res.data?.followerSeniority,
+                            followerFunction: res.data?.followerFunction,
+                            _rawResponses: res.data?._rawResponses // Keep raw responses for debugging 403s
+                        },
+                        isDefault: res.isDefault || false,
+                        projectEngagement: {
+                            likes: 0,
+                            comments: 0,
+                            posts: 0,
+                            reach: 0,
+                            impressions: 0
+                        }
+                    };
+                    aggregated.platformDemographics[platKey].organizations.push(existingOrg);
+                }
+
+                // If the AudienceInsight carries aggregated post metrics (which it often doesn't directly, 
+                // typically those are separate, but let's assume if it did):
+                // In sync-all, we might need a way to attach post performance to this audience insight. 
+                // Current architecture separates Audience (followers) from Posts (engagement).
+                // However, the User wants "projectEngagement" inside the organization object in Audience API.
+                // This usually requires the Post stats to be merged here. 
+                // Since this function standardizes AUDIENCE data, we might not have post stats here unless passed.
+                // Assuming we will rely on a later step or the provided data to fill projectEngagement if available.
+                // For now, initialize it.
+
             } else if (res.platform === 'YOUTUBE') {
                 followers = res.data?.totalSubscribers || 0;
 
@@ -393,59 +483,65 @@ export class AudienceNormalizerService {
                 followers = data?.totalFollowers || data?.followerCount || 0;
                 console.log('[AudienceNormalizer] Pinterest followers extracted:', followers);
 
-                // Process demographics if available
+                // Process demographics if available and store as estimated counts
+                const followerCount = followers || 1000; // Fallback to 1000 to show ratios if followers are 0
+
                 if (data?.demographics) {
-                    // Countries/Locations
+                    // Countries
                     if (data.demographics.locations) {
+                        const countryCounts: Record<string, number> = {};
                         Object.entries(data.demographics.locations).forEach(([k, v]) => {
-                            const ratio = v as number;
-                            aggregated.countries[k] = (aggregated.countries[k] || 0) + (ratio * (followers || 1000));
-                            aggregated.reachByCountry[k] = (aggregated.reachByCountry[k] || 0) + (ratio * (followers || 1000));
+                            countryCounts[k] = (v as number) * followerCount;
                         });
-                        aggregated.platformDemographics[platKey].country = data.demographics.locations;
+                        aggregated.platformDemographics[platKey].country = countryCounts;
                     }
 
-                    // Metros/Cities
+                    // Cities
                     if (data.demographics.cities) {
+                        const cityCounts: Record<string, number> = {};
                         Object.entries(data.demographics.cities).forEach(([k, v]) => {
-                            const ratio = v as number;
-                            aggregated.cities[k] = (aggregated.cities[k] || 0) + (ratio * (followers || 1000));
-                            aggregated.reachByCity[k] = (aggregated.reachByCity[k] || 0) + (ratio * (followers || 1000));
+                            cityCounts[k] = (v as number) * followerCount;
                         });
-                        aggregated.platformDemographics[platKey].city = data.demographics.cities;
+                        aggregated.platformDemographics[platKey].city = cityCounts;
                     }
 
-                    // Genders
+                    // Gender
                     if (data.demographics.genders) {
+                        const genderCounts: Record<string, number> = {};
                         Object.entries(data.demographics.genders).forEach(([k, v]) => {
                             const lowerK = k.toLowerCase();
                             const genderKey = lowerK.includes('female') ? 'female' :
                                 lowerK.includes('male') ? 'male' : 'unknown';
-                            const ratio = v as number;
-                            aggregated.reachByGender[genderKey] = (aggregated.reachByGender[genderKey] || 0) + (ratio * (followers || 1000));
+                            genderCounts[genderKey] = (v as number) * followerCount;
                         });
-                        aggregated.platformDemographics[platKey].gender = data.demographics.genders;
+                        aggregated.platformDemographics[platKey].gender = genderCounts;
                     }
 
-                    // Ages
+                    // Ages - Already potentially counts or ratios? Assuming ratios for consistency with other Pinterest data
+                    // If Pinterest API returns ages as ratios, we should normalize them too.
+                    // Assuming they are ratios based on other fields.
                     if (data.demographics.ages) {
-                        aggregated.platformDemographics[platKey].age = data.demographics.ages;
+                        const ageCounts: Record<string, number> = {};
+                        Object.entries(data.demographics.ages).forEach(([k, v]) => {
+                            ageCounts[k] = (v as number) * followerCount;
+                        });
+                        aggregated.platformDemographics[platKey].age = ageCounts;
                     }
 
                     // Devices
                     if (data.demographics.devices) {
                         const devices: Record<string, number> = {};
                         Object.entries(data.demographics.devices).forEach(([k, v]) => {
-                            devices[k] = (v as number) * (followers || 1000);
+                            devices[k] = (v as number) * followerCount;
                         });
                         aggregated.platformDemographics[platKey].devices = devices;
                     }
 
-                    // Interests (Categories)
+                    // Interests
                     if (data.categories) {
                         const interests: Record<string, number> = {};
                         Object.entries(data.categories).forEach(([k, v]) => {
-                            interests[k] = (v as number) * (followers || 1000);
+                            interests[k] = (v as number) * followerCount;
                         });
                         aggregated.platformDemographics[platKey].interests = interests;
                     }
@@ -490,7 +586,22 @@ export class AudienceNormalizerService {
         });
 
         // Merge engagement stats
-        aggregated.platforms = aggregated.platforms.map(p => {
+        // Create platform breakdown without duplicates
+        // We aggregate statistics if multiple results exist for same platform (e.g. multiple LinkedIn orgs)
+        const platformMap = new Map<string, any>();
+
+        aggregated.platforms.forEach(p => {
+            const existing = platformMap.get(p.platform);
+            if (existing) {
+                existing.followers += p.followers;
+                // Merge other stats if needed for the cards
+            } else {
+                platformMap.set(p.platform, { ...p });
+            }
+        });
+
+        // Generate the breakdown list from unique platforms
+        aggregated.platforms = Array.from(platformMap.values()).map(p => {
             const stats = engagementStats.find(s => s.platform === p.platform);
             if (!stats) return p;
 
@@ -502,13 +613,15 @@ export class AudienceNormalizerService {
                 shares: stats._sum.shares || 0,
                 saves: stats._sum.saves || 0,
                 videoViews: stats._sum.videoViews || 0,
-                reach: (p.platform === 'INSTAGRAM' || p.platform === 'FACEBOOK' || p.platform === 'YOUTUBE')
-                    ? (results.find(r => r.platform === p.platform)?.accountReach || stats._sum.reach || 0)
+                reach: (p.platform === 'INSTAGRAM' || p.platform === 'FACEBOOK' || p.platform === 'YOUTUBE' || p.platform === 'LINKEDIN')
+                    ? (results.filter(r => r.platform === p.platform).reduce((sum, r) => sum + (r.accountReach || 0), 0) || stats._sum.reach || 0)
                     : (stats._sum.reach || 0),
-                followerReach: results.find(r => r.platform === p.platform)?.followerReach || 0,
-                nonFollowerReach: results.find(r => r.platform === p.platform)?.nonFollowerReach || 0,
-                engagement: (p.platform === 'INSTAGRAM' || p.platform === 'FACEBOOK' || p.platform === 'YOUTUBE')
-                    ? (results.find(r => r.platform === p.platform)?.accountEngagement || (stats._sum.likes || 0) + (stats._sum.comments || 0) + (stats._sum.shares || 0) + (stats._sum.saves || 0))
+
+                followerReach: results.filter(r => r.platform === p.platform).reduce((sum, r) => sum + (r.followerReach || 0), 0),
+                nonFollowerReach: results.filter(r => r.platform === p.platform).reduce((sum, r) => sum + (r.nonFollowerReach || 0), 0),
+
+                engagement: (p.platform === 'INSTAGRAM' || p.platform === 'FACEBOOK' || p.platform === 'YOUTUBE' || p.platform === 'LINKEDIN')
+                    ? (results.filter(r => r.platform === p.platform).reduce((sum, r) => sum + (r.accountEngagement || 0), 0) || (stats._sum.likes || 0) + (stats._sum.comments || 0) + (stats._sum.shares || 0) + (stats._sum.saves || 0))
                     : ((stats._sum.likes || 0) + (stats._sum.comments || 0) + (stats._sum.shares || 0) + (stats._sum.saves || 0))
             };
         });

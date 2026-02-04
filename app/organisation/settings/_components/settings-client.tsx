@@ -460,12 +460,26 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                           <h3 className="font-medium">{platform.name}</h3>
                           <p className="text-sm text-muted-foreground">{platform.description}</p>
                           {platform.connected && platform.accountName && (
-                            <p className="text-xs text-green-600 font-medium mt-1">
-                              Connected as: {platform.accountName}
-                              {(platform as any).followerCount !== undefined && (platform as any).followerCount !== null && (
-                                <span> • {(platform as any).followerCount} followers</span>
-                              )}
-                            </p>
+                            <div className="space-y-1 mt-1">
+                              <p className="text-xs text-green-600 font-medium">
+                                Connected as: {platform.accountName}
+                                {(platform as any).followerCount !== undefined && (platform as any).followerCount !== null && (
+                                  <span> • {(platform as any).followerCount} followers</span>
+                                )}
+                              </p>
+                              {/* {platform.id === 'LINKEDIN' && socialStatus?.linkedin?.hasOrganizations && (
+                                <div className="mt-2 pt-1 border-t border-muted/50">
+                                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1">Associated Company Pages</p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {socialStatus.linkedin.organizations.map((org: any) => (
+                                      <Badge key={org.id} variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-slate-100 text-slate-700 border-none font-normal">
+                                        {org.name}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )} */}
+                            </div>
                           )}
                         </div>
                       </div>

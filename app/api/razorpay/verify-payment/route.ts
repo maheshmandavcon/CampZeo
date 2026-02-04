@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { sendPaymentReceipt } from "@/lib/email";
 import { logError, logWarning, logInfo } from "@/lib/audit-logger";
 
-export async function POST(req: Request) {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(req: Request) {
+
         const user = await currentUser();
 
         if (!user) {
@@ -194,12 +195,7 @@ export async function POST(req: Request) {
                 status: payment.status,
             },
         });
-    } catch (error: any) {
-        console.error("Error verifying payment:", error);
-        await logError("Failed to verify payment", { userId: "unknown" }, error);
-        return NextResponse.json(
-            { error: "Failed to verify payment" },
-            { status: 500 }
-        );
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/razorpay/verify-payment");

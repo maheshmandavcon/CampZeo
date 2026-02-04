@@ -6,8 +6,9 @@ import { getPinterestBoards, createPinterestBoard } from '@/lib/pinterest';
 
 import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
 
-export async function GET() {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler() {
+
         const { userId } = await auth();
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -37,14 +38,13 @@ export async function GET() {
         const boards = await getPinterestBoards(user.pinterestAccessToken);
 
         return NextResponse.json({ boards });
-    } catch (error) {
-        console.error('Error fetching Pinterest boards:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-    }
+    
 }
 
-export async function POST(req: Request) {
-    try {
+export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/pinterest/boards");
+
+async function postHandler(req: Request) {
+
         const { userId } = await auth();
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -96,8 +96,7 @@ export async function POST(req: Request) {
             }
             throw error; // Re-throw to be caught by outer catch
         }
-    } catch (error: any) {
-        console.error('Error creating Pinterest board:', error);
-        return NextResponse.json({ error: error.message || 'Failed to create board' }, { status: 500 });
-    }
+    
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/pinterest/boards");

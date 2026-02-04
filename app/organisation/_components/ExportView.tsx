@@ -5,14 +5,58 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Download, FileDown, Calendar as CalendarIcon, Filter } from "lucide-react";
+import { Download, FileDown, Calendar as CalendarIcon, Filter, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import { useEffect } from "react";
 
 export default function ExportView() {
     const [platform, setPlatform] = useState("all");
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
     const [isExporting, setIsExporting] = useState(false);
+    const [previewData, setPreviewData] = useState<any[]>([]);
+    const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+
+    const fetchPreview = async () => {
+        try {
+            setIsLoadingPreview(true);
+            const params = new URLSearchParams({
+                platform,
+                startDate,
+                endDate,
+                preview: 'true'
+            });
+
+            const response = await fetch(`/api/Organisation/posts/export?${params.toString()}`);
+            if (!response.ok) throw new Error('Failed to fetch preview');
+
+            const data = await response.json();
+            // Data structure: { summary: [], posts: [], analytics: [] }
+            // We'll show the 'posts' array as it's the main detailed view
+            setPreviewData(data.posts || []);
+        } catch (error) {
+            console.error('Preview error:', error);
+            // Silent error for preview, or maybe toast?
+            // toast.error('Failed to load preview');
+        } finally {
+            setIsLoadingPreview(false);
+        }
+    };
+
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            fetchPreview();
+        }, 500); // 500ms debounce
+        return () => clearTimeout(timeoutId);
+    }, [platform, startDate, endDate]);
 
     const handleExport = async (format: 'csv' | 'xlsx') => {
         try {
@@ -27,17 +71,26 @@ export default function ExportView() {
             const response = await fetch(`/api/Organisation/posts/export?${params.toString()}`);
             if (!response.ok) throw new Error('Export failed');
 
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = `posts_export_${new Date().toISOString().split('T')[0]}.${format}`;
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = filenameMatch[1];
+                }
+            }
+
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `posts_export_${new Date().toISOString().split('T')[0]}.${format}`;
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
 
-            toast.success(`Posts exported successfully as ${format.toUpperCase()}`);
+            toast.success(`Posts exported successfully`);
         } catch (error) {
             console.error('Export error:', error);
             toast.error('Failed to export posts');
@@ -122,7 +175,7 @@ export default function ExportView() {
                 </CardContent>
             </Card>
 
-            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex gap-3">
+            {/* <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex gap-3">
                 <div className="p-2 bg-blue-100 rounded-full h-fit">
                     <FileDown className="w-4 h-4 text-blue-600" />
                 </div>
@@ -132,7 +185,58 @@ export default function ExportView() {
                         Exported files for "Past" posts include live links and 24h engagement snapshots if available.
                     </p>
                 </div>
-            </div>
+            </div> */}
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Data Preview</CardTitle>
+                    <CardDescription>
+                        Preview of the "Posts Data" sheet based on current filters.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {isLoadingPreview ? (
+                        <div className="flex justify-center items-center py-12">
+                            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Campaign</TableHead>
+                                        <TableHead>Platform</TableHead>
+                                        <TableHead>Subject</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Scheduled</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {previewData.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={5} className="text-center h-24">
+                                                No posts found for the selected filters.
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        previewData.map((row, i) => (
+                                            <TableRow key={i}>
+                                                <TableCell>{row.Campaign}</TableCell>
+                                                <TableCell>{row.Platform}</TableCell>
+                                                <TableCell className="max-w-[200px] truncate" title={row.Subject}>
+                                                    {row.Subject || row.Message || '-'}
+                                                </TableCell>
+                                                <TableCell>{row.Status}</TableCell>
+                                                <TableCell>{row['Scheduled Date']}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
         </div>
     );
 }

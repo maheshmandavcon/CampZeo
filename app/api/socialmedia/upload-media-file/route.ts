@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { put } from '@vercel/blob';
 import crypto from "crypto";
 
+import { withErrorHandling } from '@/lib/api-handler';
 // File size limits (in bytes)
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB for images
 // NOTE: Vercel Serverless Functions have a request body limit of 4.5MB.
@@ -13,8 +14,8 @@ const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB for videos
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'];
 
-export async function POST(request: NextRequest) {
-    try {
+async function postHandler(request: NextRequest) {
+
         const formData = await request.formData();
         const file = formData.get("file") as File;
 
@@ -71,16 +72,14 @@ export async function POST(request: NextRequest) {
             isVideo
         });
 
-    } catch (error) {
-        console.error("Error uploading file:", error);
-        return NextResponse.json({
-            error: error instanceof Error ? error.message : "Upload failed"
-        }, { status: 500 });
-    }
+    
 }
 
+export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/upload-media-file");
+
 // Optional: Add GET endpoint to retrieve upload info
-export async function GET() {
+async function getHandler() {
+
     return NextResponse.json({
         maxImageSize: MAX_IMAGE_SIZE,
         maxVideoSize: MAX_VIDEO_SIZE,
@@ -89,4 +88,7 @@ export async function GET() {
         storage: 'vercel-blob',
         configured: !!process.env.BLOB_READ_WRITE_TOKEN
     });
+
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/upload-media-file");

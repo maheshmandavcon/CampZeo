@@ -3,8 +3,9 @@ import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 
-export async function GET() {
-    try {
+import { withErrorHandling } from '@/lib/api-handler';
+async function getHandler() {
+
         const user = await currentUser();
         if (!user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -214,12 +215,13 @@ export async function GET() {
                 let name = "Connected";
                 let followerCount: number | null = null;
                 const urn = dbUser.linkedInAuthUrn;
+                const token = dbUser.linkedInAccessToken;
 
                 if (urn && urn.startsWith("urn:li:organization:")) {
                     const orgId = urn.split(":").pop();
                     const res = await fetchWithTimeout(`https://api.linkedin.com/v2/organizations/${orgId}`, {
                         headers: {
-                            Authorization: `Bearer ${dbUser.linkedInAccessToken}`,
+                            Authorization: `Bearer ${token}`,
                             "X-Restli-Protocol-Version": "2.0.0"
                         }
                     });
@@ -232,7 +234,7 @@ export async function GET() {
                     try {
                         const followersRes = await fetchWithTimeout(`https://api.linkedin.com/v2/networkSizes/${urn}?edgeType=CompanyFollowedByMember`, {
                             headers: {
-                                Authorization: `Bearer ${dbUser.linkedInAccessToken}`,
+                                Authorization: `Bearer ${token}`,
                                 "X-Restli-Protocol-Version": "2.0.0"
                             }
                         });
@@ -246,7 +248,7 @@ export async function GET() {
                 } else {
                     // Default to profile
                     const res = await fetchWithTimeout(`https://api.linkedin.com/v2/me`, {
-                        headers: { Authorization: `Bearer ${dbUser.linkedInAccessToken}` }
+                        headers: { Authorization: `Bearer ${token}` }
                     });
                     if (res.ok) {
                         const data = await res.json();
@@ -255,7 +257,52 @@ export async function GET() {
                         name = `${firstName} ${lastName}`;
                     }
                 }
-                status.linkedin = { connected: true, name, followerCount };
+
+                // [NEW] Check if this user has any associated organizations (Company Pages)
+                let organizations: any[] = [];
+                try {
+                    const aclsRes = await fetchWithTimeout("https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED", {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            "X-Restli-Protocol-Version": "2.0.0"
+                        }
+                    });
+
+                    if (aclsRes.ok) {
+                        const aclsData = await aclsRes.json();
+                        if (aclsData.elements && aclsData.elements.length > 0) {
+                            for (const element of aclsData.elements) {
+                                const orgUrn = element.organizationalTarget;
+                                const orgId = orgUrn.split(":").pop();
+
+                                // Get org details (briefly)
+                                const orgRes = await fetchWithTimeout(`https://api.linkedin.com/v2/organizations/${orgId}`, {
+                                    headers: {
+                                        Authorization: `Bearer ${token}`,
+                                        "X-Restli-Protocol-Version": "2.0.0"
+                                    }
+                                });
+                                if (orgRes.ok) {
+                                    const orgData = await orgRes.json();
+                                    organizations.push({
+                                        id: orgUrn,
+                                        name: orgData.localizedName
+                                    });
+                                }
+                            }
+                        }
+                    }
+                } catch (orgError) {
+                    console.error("[Social Status] LinkedIn Organization Fetch Error:", orgError);
+                }
+
+                status.linkedin = {
+                    connected: true,
+                    name,
+                    followerCount,
+                    hasOrganizations: organizations.length > 0,
+                    organizations: organizations
+                };
             } catch (e) {
                 status.linkedin = { connected: true, name: "Connected" };
             }
@@ -340,8 +387,7 @@ export async function GET() {
         }
 
         return NextResponse.json(status);
-    } catch (error) {
-        console.error("Error fetching social status:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
+    
 }
+
+export const GET = withErrorHandling(getHandler, "GET /api/user/social-status");

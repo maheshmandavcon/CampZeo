@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 
-export async function POST(req: Request) {
+import { withErrorHandling } from '@/lib/api-handler';
+async function postHandler(req: Request) {
+
     console.log("POST /api/webhooks/mailgun hit");
 
     try {
@@ -39,4 +41,7 @@ export async function POST(req: Request) {
         console.error("Error processing Mailgun webhook:", error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
+
 }
+
+export const POST = withErrorHandling(postHandler, "POST /api/webhooks/mailgun");
