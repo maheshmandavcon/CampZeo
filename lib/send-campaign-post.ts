@@ -8,6 +8,7 @@ import { postToInstagram, getInstagramPostInsights } from '@/lib/instagram';
 import { postToYouTube, postYouTubeCommunity, createYouTubePlaylist, addVideoToPlaylist, getYouTubeVideoInsights } from '@/lib/youtube';
 import { postToPinterest, createPinterestBoard, getPinterestPostInsights } from '@/lib/pinterest';
 import { sendSms, sendWhatsapp } from '@/lib/twilio';
+import { createBoostedAd } from '@/lib/meta-ads';
 
 /**
  * Clean up Vercel Storage blobs after successful publication and update DB with platform URLs
@@ -69,7 +70,8 @@ async function cleanupBlobs(urls: (string | string[] | null | undefined)[]) {
  */
 export async function sendCampaignPost(
     post: any,
-    contactIds?: number[]
+    contactIds?: number[],
+    options?: { forceSchedule?: boolean }
 ): Promise<{ success: boolean; sent: number; failed: number; error?: string }> {
     try {
         const isSocialPlatform = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(post.type);
@@ -148,7 +150,8 @@ export async function sendCampaignPost(
                     where: { id: post.id },
                     data: {
                         isPostSent: true,
-                        publishedDate: new Date(),
+                        publishedDate: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
+                        status: (options?.forceSchedule || post.status === 'SCHEDULED') ? 'SCHEDULED' : 'PUBLISHED',
                         mediaUrls: finalMediaUrls,
                         videoUrl: finalVideoUrl,
                         liveLink: finalLiveLink
@@ -167,8 +170,8 @@ export async function sendCampaignPost(
                             ((finalMediaUrls[0] || finalVideoUrl || '').match(/\.(mp4|mov|webm)$/i) ? 'VIDEO' : 'IMAGE')
                             : 'TEXT',
                         accessToken: dbUser.linkedInAccessToken,
-                        published: true,
-                        publishedAt: new Date(),
+                        published: !(options?.forceSchedule || post.status === 'SCHEDULED'),
+                        publishedAt: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
                     }
                 });
 
@@ -197,6 +200,12 @@ export async function sendCampaignPost(
                 // User logic: explicitly check check metadata.isReel. If not set, it is a standard post. 
                 // Multiple videos are handled by postToFacebook automatically as an album/feed post.
 
+                // If forceSchedule is true and there is no scheduledPostTime, default to 1 day from now
+                let scheduledTime = post.scheduledPostTime;
+                if (options?.forceSchedule && !scheduledTime) {
+                    scheduledTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+                }
+
                 const platformResponse = await postToFacebook(
                     {
                         accessToken: fbToken,
@@ -204,7 +213,10 @@ export async function sendCampaignPost(
                     },
                     post.message || post.subject || "",
                     mediaToUse,
-                    { isReel: metadata?.isReel }
+                    {
+                        isReel: metadata?.isReel,
+                        scheduledPublishTime: scheduledTime ? Math.floor(scheduledTime.getTime() / 1000) : undefined
+                    }
                 );
 
                 let finalMediaUrls = post.mediaUrls;
@@ -227,13 +239,13 @@ export async function sendCampaignPost(
                     where: { id: post.id },
                     data: {
                         isPostSent: true,
-                        publishedDate: new Date(),
+                        publishedDate: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
+                        status: (options?.forceSchedule || post.status === 'SCHEDULED') ? 'SCHEDULED' : 'PUBLISHED',
                         mediaUrls: finalMediaUrls,
                         videoUrl: finalVideoUrl,
                         liveLink: finalLiveLink
                     }
                 });
-
                 await prisma.postTransaction.create({
                     data: {
                         refId: post.id,
@@ -244,10 +256,29 @@ export async function sendCampaignPost(
                         mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
                         postType: metadata?.isReel ? 'REEL' : ((finalMediaUrls.length > 0 || finalVideoUrl) ? 'IMAGE' : 'TEXT'),
                         accessToken: fbToken,
-                        published: true,
-                        publishedAt: new Date(),
+                        published: !(options?.forceSchedule || post.status === 'SCHEDULED'),
+                        publishedAt: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
                     }
                 });
+
+                // Handle Meta Boosting
+                if (metadata?.metaBoost?.enabled) {
+                    try {
+                        console.log(`[Facebook] Triggering boost for post ${platformResponse.id}`);
+                        await createBoostedAd({
+                            adAccountId: metadata.metaBoost.adAccountId,
+                            accessToken: dbUser.facebookAccessToken || fbToken, // Ad accounts need User Token
+                            postId: platformResponse.id,
+                            name: post.subject || post.message?.substring(0, 20) || "Boosted Post",
+                            budget: metadata.metaBoost.budget,
+                            days: metadata.metaBoost.duration,
+                            objective: metadata.metaBoost.objective
+                        });
+                        console.log(`[Facebook] Boost created successfully for post ${platformResponse.id}`);
+                    } catch (boostError) {
+                        console.error(`[Facebook] Meta Boosting failed:`, boostError);
+                    }
+                }
 
                 await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };
@@ -271,6 +302,12 @@ export async function sendCampaignPost(
                 // If using videoUrl logic or isReel is set, treat as video
                 const isVideoContent = (!post.mediaUrls.length && !!post.videoUrl) || (post.metadata as any)?.isReel;
 
+                // If forceSchedule is true and there is no scheduledPostTime, default to 1 day from now
+                let scheduledTime = post.scheduledPostTime;
+                if (options?.forceSchedule && !scheduledTime) {
+                    scheduledTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+                }
+
                 let platformResponse;
                 try {
                     platformResponse = await postToInstagram(
@@ -283,7 +320,8 @@ export async function sendCampaignPost(
                         {
                             isReel: (post.metadata as any)?.isReel,
                             shareToFeed: true,
-                            isVideo: isVideoContent
+                            isVideo: isVideoContent,
+                            scheduledPublishTime: scheduledTime ? Math.floor(scheduledTime.getTime() / 1000) : undefined
                         }
                     );
                 } catch (igError: any) {
@@ -318,7 +356,8 @@ export async function sendCampaignPost(
                     where: { id: post.id },
                     data: {
                         isPostSent: true,
-                        publishedDate: new Date(),
+                        publishedDate: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
+                        status: (options?.forceSchedule || post.status === 'SCHEDULED') ? 'SCHEDULED' : 'PUBLISHED',
                         mediaUrls: finalMediaUrls,
                         videoUrl: finalVideoUrl,
                         liveLink: finalLiveLink
@@ -336,7 +375,6 @@ export async function sendCampaignPost(
                     const firstMedia = finalMediaUrls[0];
                     postType = firstMedia?.match(/\.(mp4|mov|webm)$/i) ? 'VIDEO' : 'IMAGE';
                 }
-
                 await prisma.postTransaction.create({
                     data: {
                         refId: post.id,
@@ -347,10 +385,29 @@ export async function sendCampaignPost(
                         mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
                         postType,
                         accessToken: igToken!,
-                        published: true,
-                        publishedAt: new Date(),
+                        published: !(options?.forceSchedule || post.status === 'SCHEDULED'),
+                        publishedAt: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
                     }
                 });
+
+                // Handle Meta Boosting
+                if (metadata?.metaBoost?.enabled) {
+                    try {
+                        console.log(`[Instagram] Triggering boost for post ${platformResponse.id}`);
+                        await createBoostedAd({
+                            adAccountId: metadata.metaBoost.adAccountId,
+                            accessToken: dbUser.facebookAccessToken || igToken!, // Ad accounts need User Token
+                            postId: platformResponse.id,
+                            name: post.subject || post.message?.substring(0, 20) || "Boosted Post",
+                            budget: metadata.metaBoost.budget,
+                            days: metadata.metaBoost.duration,
+                            objective: metadata.metaBoost.objective
+                        });
+                        console.log(`[Instagram] Boost created successfully for post ${platformResponse.id}`);
+                    } catch (boostError) {
+                        console.error(`[Instagram] Meta Boosting failed:`, boostError);
+                    }
+                }
 
                 await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };
@@ -776,6 +833,7 @@ export async function sendCampaignPost(
                 data: {
                     failureReason: errorMessage.substring(0, 1000), // Ensure it's not too long just in case
                     isPostSent: false,
+                    status: 'DRAFT'
                 }
             });
             console.log(`[sendCampaignPost] Successfully saved failure reason. Updated record ID: ${updated.id}`);

@@ -11,7 +11,7 @@ import {
   FileStack,
   UserCircle,
   Home,
-  Bell, CurrencyIcon, PieChart
+  Bell, CurrencyIcon, PieChart, Target
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -31,6 +31,7 @@ const navItems = [
   { href: "/organisation/settings", label: "Accounts", icon: UserCircle },
   { href: "/organisation/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/organisation/reports", label: "Reports", icon: PieChart },
+  { href: "/organisation/leads", label: "Leads", icon: Target },
   { href: "/organisation/billing", label: "Billing", icon: CurrencyIcon },
 ];
 

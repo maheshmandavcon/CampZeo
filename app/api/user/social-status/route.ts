@@ -114,7 +114,10 @@ export async function GET() {
             }
 
             if (fbStatus) {
-                status.facebook = fbStatus;
+                status.facebook = {
+                    ...fbStatus,
+                    pageId: dbUser.facebookPageId
+                };
                 // If it's a session expired error, override name for UI clarity
                 if (fbStatus.error === "Session Expired") {
                     status.facebook.name = "Session Expired (Re-connect)";

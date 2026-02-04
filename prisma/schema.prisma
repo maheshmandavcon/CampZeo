@@ -73,6 +73,7 @@ model Organisation {
   audienceInsights      AudienceInsight[]
   subscriptions         Subscription[]
   users                 User[]
+  leads                 Lead[]
 }
 
 model AudienceInsight {
@@ -109,6 +110,7 @@ model Campaign {
   posts          CampaignPost[]
   notifications  Notification[]
   contacts       Contact[]      @relation("CampaignToContact")
+  leads          Lead[]
 }
 
 model CampaignPost {
@@ -136,6 +138,7 @@ model CampaignPost {
   isDeleted            Boolean       @default(false)
   campaign             Campaign?     @relation(fields: [campaignId], references: [id])
   audits               PostAudit[]   // [NEW] Relation to audit trail
+  failureReason        String?       // [NEW] Reason for posting failure
 }
 
 model PostAudit {
@@ -425,6 +428,20 @@ model SocialMetricHistory {
 
   @@index([organisationId, platform, recordedAt])
   @@index([metricName, recordedAt])
+}
+
+model Lead {
+  id              Int          @id @default(autoincrement())
+  organisationId  Int
+  campaignId      Int?
+  metaLeadId      String       @unique
+  formId          String?
+  data            Json         // Stores lead fields (email, name, phone, etc.)
+  status          String       @default("NEW")
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  organisation    Organisation @relation(fields: [organisationId], references: [id])
+  campaign        Campaign?    @relation(fields: [campaignId], references: [id])
 }
 
 enum PostStatus {

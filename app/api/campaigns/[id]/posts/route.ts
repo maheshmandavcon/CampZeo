@@ -146,7 +146,8 @@ export async function POST(
             facebookPageId,
             facebookPageAccessToken,
             instagramBusinessId,
-            linkedInUrn
+            linkedInUrn,
+            metaBoost
         } = body;
 
         // Validation
@@ -178,7 +179,8 @@ export async function POST(
                 postType: contentType,
                 facebookPageId,
                 facebookPageAccessToken,
-                instagramBusinessId
+                instagramBusinessId,
+                metaBoost: metaBoost || undefined
             };
         } else if (type === 'LINKEDIN') {
             metadata = {
