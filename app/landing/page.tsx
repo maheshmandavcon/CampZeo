@@ -39,8 +39,8 @@ export default function LandingPage() {
             Start your free 14-day trial today.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button className="cursor-pointer" size="lg" onClick={() => router.push("/coming-soon")}>
-             {/* <Button className="cursor-pointer" size="lg" onClick={() => router.push("/sign-up")}> */}
+            {/* <Button className="cursor-pointer" size="lg" onClick={() => router.push("/coming-soon")}> */}
+             <Button className="cursor-pointer" size="lg" onClick={() => router.push("/sign-up")}>
               Start Free Trial
               <ArrowRight className="ml-2 size-4" />
             </Button>
@@ -280,9 +280,9 @@ export default function LandingPage() {
                 size="lg"
                 variant="outline"
                 className="bg-transparent border-white text-white cursor-pointer hover:bg-white/50 hover:text-red-500 text-base font-semibold h-12 px-8"
-                onClick={() => router.push("/coming-soon")}
-              >
-                 {/* onClick={() => router.push("/sign-up")} */}
+                  onClick={() => router.push("/sign-up")} 
+                >
+                {/* onClick={() => router.push("/coming-soon")} */}
                 Start Free Trial
               </Button>
             </div>
