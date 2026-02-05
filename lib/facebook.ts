@@ -1000,3 +1000,158 @@ export async function getFacebookAccountInsights(
         return { reach: 0, impressions: 0, engagement: 0, followerCount: 0, pageViews: 0, pageLikes: 0, engagedUsers: 0 };
     }
 }
+
+export interface FacebookLeadForm {
+    id: string;
+    name: string;
+    status: string;
+    leadgen_export_csv_url?: string;
+    questions?: any[];
+    privacy_policy_url?: string;
+    created_time?: string;
+}
+
+/**
+ * Fetch lead forms for a Facebook Page
+ */
+export async function getFacebookLeadForms(
+    pageId: string,
+    accessToken: string
+): Promise<FacebookLeadForm[]> {
+    try {
+        const fields = 'id,name,status,privacy_policy_url,questions,created_time';
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/${pageId}/leadgen_forms?fields=${fields}&access_token=${accessToken}`
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(`Failed to fetch lead forms: ${JSON.stringify(error)}`);
+        }
+
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('[Facebook] Error fetching lead forms:', error);
+        throw error;
+    }
+}
+
+/**
+ * Create a lead form for a Facebook Page
+ */
+export async function createFacebookLeadForm(
+    pageId: string,
+    accessToken: string,
+    formData: {
+        name: string;
+        privacy_policy_url: string;
+        questions: any[];
+        follow_up_action_url?: string;
+    }
+) {
+    try {
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/${pageId}/leadgen_forms`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    ...formData,
+                    access_token: accessToken,
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(`Failed to create lead form: ${JSON.stringify(error)}`);
+        }
+
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('[Facebook] Error creating lead form:', error);
+        throw error;
+    }
+}
+
+export interface FacebookLead {
+    id: string;
+    created_time: string;
+    ad_id?: string;
+    ad_name?: string;
+    adset_id?: string;
+    adset_name?: string;
+    campaign_id?: string;
+    campaign_name?: string;
+    form_id: string;
+    field_data: {
+        name: string;
+        values: string[];
+    }[];
+}
+
+/**
+ * Fetch leads for a specific Facebook Ad or Form
+ */
+export async function getFacebookLeads(
+    objectId: string, // Ad ID or Form ID
+    accessToken: string,
+    limit: number = 100
+): Promise<FacebookLead[]> {
+    try {
+        const fields = 'id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,field_data';
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/${objectId}/leads?fields=${fields}&limit=${limit}&access_token=${accessToken}`
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(`Failed to fetch leads for ${objectId}: ${JSON.stringify(error)}`);
+        }
+
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('[Facebook] Error fetching leads:', error);
+        throw error;
+    }
+}
+
+export interface FacebookAd {
+    id: string;
+    name: string;
+    status: string;
+    adset?: { id: string, name: string };
+    campaign?: { id: string, name: string };
+}
+
+/**
+ * Fetch Ads for a Facebook Page (boosted posts appear here)
+ */
+export async function getFacebookAds(
+    pageId: string,
+    accessToken: string
+): Promise<FacebookAd[]> {
+    try {
+        const fields = 'id,name,status,adset{id,name},campaign{id,name}';
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/${pageId}/ads?fields=${fields}&access_token=${accessToken}`
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            console.warn(`[Facebook] Failed to fetch ads for page ${pageId}:`, error);
+            return [];
+        }
+
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('[Facebook] Error fetching ads:', error);
+        return [];
+    }
+}
