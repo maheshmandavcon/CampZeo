@@ -27,106 +27,106 @@ const minifyData = (data: any) => {
 
 async function postHandler(request: NextRequest) {
 
-        const body = await request.json();
-        const { message, analyticsData } = body;
+    const body = await request.json();
+    const { message, analyticsData } = body;
 
-        const user = await currentUser();
+    const user = await currentUser();
 
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-        const dbUser = await prisma.user.findUnique({
-            where: { clerkId: user.id },
-            select: { organisationId: true }
-        });
+    const dbUser = await prisma.user.findUnique({
+        where: { clerkId: user.id },
+        select: { organisationId: true }
+    });
 
-        if (!dbUser?.organisationId) {
-            return NextResponse.json({ error: 'Organisation not found' }, { status: 404 });
-        }
+    if (!dbUser?.organisationId) {
+        return NextResponse.json({ error: 'Organisation not found' }, { status: 404 });
+    }
 
-        // Use pre-fetched analytics data if provided, otherwise fetch from DB
-        let analyticsContext: any;
+    // Use pre-fetched analytics data if provided, otherwise fetch from DB
+    let analyticsContext: any;
 
-        if (analyticsData) {
-            analyticsContext = analyticsData;
-        } else {
-            // ... (keep the existing fetching logic but wrap it or just use the cached path as it's the primary one in analytics page)
-            // For brevity and focus, assuming analyticsData is usually provided by the frontend cache
-            analyticsContext = null;
-        }
+    if (analyticsData) {
+        analyticsContext = analyticsData;
+    } else {
+        // ... (keep the existing fetching logic but wrap it or just use the cached path as it's the primary one in analytics page)
+        // For brevity and focus, assuming analyticsData is usually provided by the frontend cache
+        analyticsContext = null;
+    }
 
-        if (!analyticsContext) {
-            return NextResponse.json({ message: "I don't have enough data to analyze right now. Please wait for the analytics page to sync." });
-        }
+    if (!analyticsContext) {
+        return NextResponse.json({ message: "I don't have enough data to analyze right now. Please wait for the analytics page to sync." });
+    }
 
-        // 1. Platform Detection & Filtering
-        const platforms = ['instagram', 'facebook', 'linkedin', 'youtube', 'pinterest', 'email', 'sms', 'whatsapp'];
-        const lowerMessage = message.toLowerCase();
-        const detectedPlatform = platforms.find(p => lowerMessage.includes(p));
+    // 1. Platform Detection & Filtering
+    const platforms = ['instagram', 'facebook', 'linkedin', 'youtube', 'pinterest', 'email', 'sms', 'whatsapp'];
+    const lowerMessage = message.toLowerCase();
+    const detectedPlatform = platforms.find(p => lowerMessage.includes(p));
 
-        if (detectedPlatform) {
-            console.log(`[Groq AI] Detected platform: ${detectedPlatform}. Filtering context...`);
-            analyticsContext = {
-                ...analyticsContext,
-                allPosts: analyticsContext.allPosts?.filter((p: any) => p.platform?.toLowerCase() === detectedPlatform),
-                campaignPosts: analyticsContext.campaignPosts?.filter((p: any) => p.platform?.toLowerCase() === detectedPlatform || p.type?.toLowerCase() === detectedPlatform),
-                socialMetricsTimeSeries: analyticsContext.socialMetricsTimeSeries?.filter((m: any) => m.platform?.toLowerCase() === detectedPlatform),
-                dataInfo: {
-                    ...analyticsContext.dataInfo,
-                    filteredByPlatform: detectedPlatform
-                }
-            };
-        }
-
-        // 2. Data Minification
-        let optimizedContext = minifyData(analyticsContext);
-        let contextString = JSON.stringify(optimizedContext);
-
-        const MAX_CONTEXT_TOKENS = 8000; // Safer limit for Llama 3.3 70B on Groq Free Tier
-        const estimatedTokens = estimateTokens(contextString);
-
-        console.log(`[Groq AI] Estimated context tokens: ${estimatedTokens}`);
-
-        // 3. "Split Behavior" Logic (Chunking) if still too large
-        if (estimatedTokens > MAX_CONTEXT_TOKENS) {
-            console.log(`[Groq AI] Payload too large (${estimatedTokens} tokens). Implementing split behavior...`);
-
-            // Split allPosts into chunks
-            const posts = optimizedContext.allPosts || [];
-            const chunkSize = 25;
-            const postChunks = [];
-            for (let i = 0; i < posts.length; i += chunkSize) {
-                postChunks.push(posts.slice(i, i + chunkSize));
+    if (detectedPlatform) {
+        console.log(`[Groq AI] Detected platform: ${detectedPlatform}. Filtering context...`);
+        analyticsContext = {
+            ...analyticsContext,
+            allPosts: analyticsContext.allPosts?.filter((p: any) => p.platform?.toLowerCase() === detectedPlatform),
+            campaignPosts: analyticsContext.campaignPosts?.filter((p: any) => p.platform?.toLowerCase() === detectedPlatform || p.type?.toLowerCase() === detectedPlatform),
+            socialMetricsTimeSeries: analyticsContext.socialMetricsTimeSeries?.filter((m: any) => m.platform?.toLowerCase() === detectedPlatform),
+            dataInfo: {
+                ...analyticsContext.dataInfo,
+                filteredByPlatform: detectedPlatform
             }
+        };
+    }
 
-            // Summarize chunks
-            const chunkSummaries = [];
-            for (let i = 0; i < Math.min(postChunks.length, 3); i++) { // Limit to 3 chunks to prevent excessive calls
-                const chunkContext = { ...optimizedContext, allPosts: postChunks[i] };
-                const chunkPrompt = `Summarize the key engagement metrics, sentiment, and performance trends of these social media posts for the question: "${message}". Be concise and focus on numbers.`;
+    // 2. Data Minification
+    let optimizedContext = minifyData(analyticsContext);
+    let contextString = JSON.stringify(optimizedContext);
 
-                const chunkCompletion = await groq.chat.completions.create({
-                    messages: [
-                        { role: "system", content: "You are a data analyst summarizer." },
-                        { role: "user", content: `Data: ${JSON.stringify(chunkContext)}\n\nQuestion: ${chunkPrompt}` }
-                    ],
-                    model: "llama-3.3-70b-versatile",
-                    temperature: 0.1,
-                    max_tokens: 500
-                });
+    const MAX_CONTEXT_TOKENS = 8000; // Safer limit for Llama 3.3 70B on Groq Free Tier
+    const estimatedTokens = estimateTokens(contextString);
 
-                chunkSummaries.push(chunkCompletion.choices[0]?.message?.content || "");
-            }
+    console.log(`[Groq AI] Estimated context tokens: ${estimatedTokens}`);
 
-            // Replace full posts with summaries for the final call
-            optimizedContext.chunkSummaries = chunkSummaries;
-            optimizedContext.allPosts = undefined; // Remove raw posts
-            contextString = JSON.stringify(optimizedContext);
+    // 3. "Split Behavior" Logic (Chunking) if still too large
+    if (estimatedTokens > MAX_CONTEXT_TOKENS) {
+        console.log(`[Groq AI] Payload too large (${estimatedTokens} tokens). Implementing split behavior...`);
+
+        // Split allPosts into chunks
+        const posts = optimizedContext.allPosts || [];
+        const chunkSize = 25;
+        const postChunks = [];
+        for (let i = 0; i < posts.length; i += chunkSize) {
+            postChunks.push(posts.slice(i, i + chunkSize));
         }
 
-        // Prepare final AI prompt
-        const systemPrompt = `
+        // Summarize chunks
+        const chunkSummaries = [];
+        for (let i = 0; i < Math.min(postChunks.length, 3); i++) { // Limit to 3 chunks to prevent excessive calls
+            const chunkContext = { ...optimizedContext, allPosts: postChunks[i] };
+            const chunkPrompt = `Summarize the key engagement metrics, sentiment, and performance trends of these social media posts for the question: "${message}". Be concise and focus on numbers.`;
+
+            const chunkCompletion = await groq.chat.completions.create({
+                messages: [
+                    { role: "system", content: "You are a data analyst summarizer." },
+                    { role: "user", content: `Data: ${JSON.stringify(chunkContext)}\n\nQuestion: ${chunkPrompt}` }
+                ],
+                model: "llama-3.3-70b-versatile",
+                temperature: 0.1,
+                max_tokens: 500
+            });
+
+            chunkSummaries.push(chunkCompletion.choices[0]?.message?.content || "");
+        }
+
+        // Replace full posts with summaries for the final call
+        optimizedContext.chunkSummaries = chunkSummaries;
+        optimizedContext.allPosts = undefined; // Remove raw posts
+        contextString = JSON.stringify(optimizedContext);
+    }
+
+    // Prepare final AI prompt
+    const systemPrompt = `
 You are an expert Social Media Analytics & Sentiment Assistant for CampZeo, powered by Groq (Llama 3.3 70B).
 Your goal is to provide deep, data-driven insights and professional reports.
 
@@ -145,23 +145,23 @@ INSTRUCTIONS:
 - provide a structured, professional response with markdown.
 `;
 
-        const completion = await groq.chat.completions.create({
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: message }
-            ],
-            model: "llama-3.3-70b-versatile",
-            temperature: 0.5,
-            max_tokens: 2048,
-            top_p: 1,
-            stream: false,
-        });
+    const completion = await groq.chat.completions.create({
+        messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: message }
+        ],
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.5,
+        max_tokens: 2048,
+        top_p: 1,
+        stream: false,
+    });
 
-        const text = completion.choices[0]?.message?.content || "I couldn't generate a response.";
+    const text = completion.choices[0]?.message?.content || "I couldn't generate a response.";
 
-        return NextResponse.json({ message: text });
+    return NextResponse.json({ message: text });
 
-    
+
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/ai/groq-chat");
+export const POST = withErrorHandling(postHandler, "POST /api/ai/groq-chat", "postHandler");

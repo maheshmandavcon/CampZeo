@@ -135,4 +135,4 @@ async function getHandler() {
 
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/user/sync");
+export const GET = withErrorHandling(getHandler, "GET /api/user/sync", "getHandler");

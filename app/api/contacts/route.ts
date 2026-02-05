@@ -100,7 +100,7 @@ async function getContactsHandler(request: NextRequest, context: any) {
     });
 }
 
-export const GET = withErrorHandling(getContactsHandler, "GET /api/contacts");
+export const GET = withErrorHandling(getContactsHandler, "GET /api/contacts", "getContactsHandler");
 
 // POST - Create new contact
 async function createContactHandler(request: NextRequest, context: any) {
@@ -220,7 +220,7 @@ async function createContactHandler(request: NextRequest, context: any) {
     return NextResponse.json(contact, { status: 201 });
 }
 
-export const POST = withErrorHandling(createContactHandler, "POST /api/contacts");
+export const POST = withErrorHandling(createContactHandler, "POST /api/contacts", "createContactHandler");
 
 // DELETE - Bulk delete contacts
 async function deleteContactsHandler(request: NextRequest, context: any) {
@@ -270,4 +270,4 @@ async function deleteContactsHandler(request: NextRequest, context: any) {
     });
 }
 
-export const DELETE = withErrorHandling(deleteContactsHandler, "DELETE /api/contacts");
+export const DELETE = withErrorHandling(deleteContactsHandler, "DELETE /api/contacts", "deleteContactsHandler");

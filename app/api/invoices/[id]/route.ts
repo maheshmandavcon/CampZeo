@@ -73,4 +73,4 @@ async function getHandler(
     return NextResponse.json({ invoice });
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/invoices/:id");
+export const GET = withErrorHandling(getHandler, "GET /api/invoices/:id", "getHandler");

@@ -226,4 +226,4 @@ async function schedulerHandler(request: NextRequest) {
     });
 }
 
-export const GET = withErrorHandling(schedulerHandler as any, "GET /api/scheduler/campaign-posts");
+export const GET = withErrorHandling(schedulerHandler as any, "GET /api/scheduler/campaign-posts", "schedulerHandler");

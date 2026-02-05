@@ -167,6 +167,6 @@ async function deleteHandler(
     });
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/templates/:id");
-export const PUT = withErrorHandling(putHandler, "PUT /api/templates/:id");
-export const DELETE = withErrorHandling(deleteHandler, "DELETE /api/templates/:id");
+export const GET = withErrorHandling(getHandler, "GET /api/templates/:id", "getHandler");
+export const PUT = withErrorHandling(putHandler, "PUT /api/templates/:id", "putHandler");
+export const DELETE = withErrorHandling(deleteHandler, "DELETE /api/templates/:id", "deleteHandler");

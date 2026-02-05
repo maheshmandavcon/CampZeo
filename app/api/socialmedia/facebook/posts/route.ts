@@ -39,4 +39,4 @@ async function getHandler(request: NextRequest) {
 
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/facebook/posts");
+export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/facebook/posts", "getHandler");

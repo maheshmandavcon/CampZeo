@@ -92,7 +92,7 @@ async function getCampaignsHandler(request: NextRequest) {
     });
 }
 
-export const GET = withErrorHandling(getCampaignsHandler, "GET /api/campaigns");
+export const GET = withErrorHandling(getCampaignsHandler, "GET /api/campaigns", "getCampaignsHandler");
 
 // POST - Create a new campaign
 async function createCampaignHandler(request: NextRequest) {
@@ -160,4 +160,4 @@ async function createCampaignHandler(request: NextRequest) {
     return NextResponse.json({ campaign }, { status: 201 });
 }
 
-export const POST = withErrorHandling(createCampaignHandler, "POST /api/campaigns");
+export const POST = withErrorHandling(createCampaignHandler, "POST /api/campaigns", "createCampaignHandler");

@@ -9,94 +9,94 @@ import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
 import { withErrorHandling } from '@/lib/api-handler';
 async function getHandler() {
 
-        const { userId } = await auth();
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    const { userId } = await auth();
+    if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-        let targetUserId = userId;
-        const impersonatedOrgId = await getImpersonatedOrganisationId();
+    let targetUserId = userId;
+    const impersonatedOrgId = await getImpersonatedOrganisationId();
 
-        if (impersonatedOrgId) {
-            const orgUser = await prisma.user.findFirst({
-                where: { organisationId: impersonatedOrgId }
-            });
-            if (orgUser) {
-                targetUserId = orgUser.clerkId;
-            }
-        }
-
-        const user = await prisma.user.findUnique({
-            where: { clerkId: targetUserId },
-            select: { pinterestAccessToken: true }
+    if (impersonatedOrgId) {
+        const orgUser = await prisma.user.findFirst({
+            where: { organisationId: impersonatedOrgId }
         });
-
-        if (!user || !user.pinterestAccessToken) {
-            return NextResponse.json({ error: 'Pinterest not connected' }, { status: 400 });
+        if (orgUser) {
+            targetUserId = orgUser.clerkId;
         }
+    }
 
-        const boards = await getPinterestBoards(user.pinterestAccessToken);
+    const user = await prisma.user.findUnique({
+        where: { clerkId: targetUserId },
+        select: { pinterestAccessToken: true }
+    });
 
-        return NextResponse.json({ boards });
-    
+    if (!user || !user.pinterestAccessToken) {
+        return NextResponse.json({ error: 'Pinterest not connected' }, { status: 400 });
+    }
+
+    const boards = await getPinterestBoards(user.pinterestAccessToken);
+
+    return NextResponse.json({ boards });
+
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/pinterest/boards");
+export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/pinterest/boards", "getHandler");
 
 async function postHandler(req: Request) {
 
-        const { userId } = await auth();
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    const { userId } = await auth();
+    if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-        let targetUserId = userId;
-        const impersonatedOrgId = await getImpersonatedOrganisationId();
+    let targetUserId = userId;
+    const impersonatedOrgId = await getImpersonatedOrganisationId();
 
-        if (impersonatedOrgId) {
-            const orgUser = await prisma.user.findFirst({
-                where: { organisationId: impersonatedOrgId }
-            });
-            if (orgUser) {
-                targetUserId = orgUser.clerkId;
-            }
-        }
-
-        const user = await prisma.user.findUnique({
-            where: { clerkId: targetUserId },
-            select: { pinterestAccessToken: true, clerkId: true }
+    if (impersonatedOrgId) {
+        const orgUser = await prisma.user.findFirst({
+            where: { organisationId: impersonatedOrgId }
         });
-
-        if (!user || !user.pinterestAccessToken) {
-            return NextResponse.json({ error: 'Pinterest not connected' }, { status: 400 });
+        if (orgUser) {
+            targetUserId = orgUser.clerkId;
         }
+    }
 
-        const body = await req.json();
-        const { name, description, privacy } = body;
+    const user = await prisma.user.findUnique({
+        where: { clerkId: targetUserId },
+        select: { pinterestAccessToken: true, clerkId: true }
+    });
 
-        if (!name) {
-            return NextResponse.json({ error: 'Board name is required' }, { status: 400 });
+    if (!user || !user.pinterestAccessToken) {
+        return NextResponse.json({ error: 'Pinterest not connected' }, { status: 400 });
+    }
+
+    const body = await req.json();
+    const { name, description, privacy } = body;
+
+    if (!name) {
+        return NextResponse.json({ error: 'Board name is required' }, { status: 400 });
+    }
+
+    try {
+        const board = await createPinterestBoard(
+            user.pinterestAccessToken,
+            name,
+            description,
+            privacy // 'PUBLIC' or 'SECRET'
+        );
+        return NextResponse.json({ board });
+    } catch (error: any) {
+        // If authentication fails, clear the token so frontend shows "Connect" again
+        if (error.message && error.message.includes('Authentication failed')) {
+            await prisma.user.update({
+                where: { clerkId: user.clerkId },
+                data: { pinterestAccessToken: null, pinterestAuthUrn: null }
+            });
         }
+        throw error; // Re-throw to be caught by outer catch
+    }
 
-        try {
-            const board = await createPinterestBoard(
-                user.pinterestAccessToken,
-                name,
-                description,
-                privacy // 'PUBLIC' or 'SECRET'
-            );
-            return NextResponse.json({ board });
-        } catch (error: any) {
-            // If authentication fails, clear the token so frontend shows "Connect" again
-            if (error.message && error.message.includes('Authentication failed')) {
-                await prisma.user.update({
-                    where: { clerkId: user.clerkId },
-                    data: { pinterestAccessToken: null, pinterestAuthUrn: null }
-                });
-            }
-            throw error; // Re-throw to be caught by outer catch
-        }
-    
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/pinterest/boards");
+export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/pinterest/boards", "postHandler");

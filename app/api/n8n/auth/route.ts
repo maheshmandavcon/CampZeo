@@ -18,4 +18,4 @@ async function postHandler(request: NextRequest) {
 
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/n8n/auth");
+export const POST = withErrorHandling(postHandler, "POST /api/n8n/auth", "postHandler");

@@ -11,159 +11,159 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 async function postHandler(request: NextRequest) {
 
-        const body = await request.json();
-        const { message, analyticsData } = body;
+    const body = await request.json();
+    const { message, analyticsData } = body;
 
-        const user = await currentUser();
+    const user = await currentUser();
 
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-        const dbUser = await prisma.user.findUnique({
-            where: { clerkId: user.id },
-            select: { organisationId: true }
+    const dbUser = await prisma.user.findUnique({
+        where: { clerkId: user.id },
+        select: { organisationId: true }
+    });
+
+    if (!dbUser?.organisationId) {
+        return NextResponse.json({ error: 'Organisation not found' }, { status: 404 });
+    }
+
+    // Use pre-fetched analytics data if provided, otherwise fetch from DB
+    let analyticsContext;
+
+    if (analyticsData) {
+        console.log('[AI Chat] Using pre-fetched analytics data from cache');
+        analyticsContext = analyticsData;
+    } else {
+        console.log('[AI Chat] No cached data provided, fetching from database...');
+        const orgId = dbUser.organisationId;
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        // 1. Fetch Social Metric History (Granular time-series data)
+        const socialMetrics = await prisma.socialMetricHistory.findMany({
+            where: {
+                organisationId: orgId,
+                recordedAt: { gte: thirtyDaysAgo }
+            },
+            orderBy: { recordedAt: 'desc' },
+            take: 200
         });
 
-        if (!dbUser?.organisationId) {
-            return NextResponse.json({ error: 'Organisation not found' }, { status: 404 });
-        }
+        // 2. Fetch Published Posts (PostTransaction)
+        const postTransactions = await prisma.postTransaction.findMany({
+            where: {
+                refId: orgId,
+                published: true
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 50
+        });
 
-        // Use pre-fetched analytics data if provided, otherwise fetch from DB
-        let analyticsContext;
-
-        if (analyticsData) {
-            console.log('[AI Chat] Using pre-fetched analytics data from cache');
-            analyticsContext = analyticsData;
-        } else {
-            console.log('[AI Chat] No cached data provided, fetching from database...');
-            const orgId = dbUser.organisationId;
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-            // 1. Fetch Social Metric History (Granular time-series data)
-            const socialMetrics = await prisma.socialMetricHistory.findMany({
-                where: {
-                    organisationId: orgId,
-                    recordedAt: { gte: thirtyDaysAgo }
+        // 3. Fetch Campaign Posts for campaign-wise analysis
+        const campaignPosts = await prisma.campaignPost.findMany({
+            where: {
+                campaign: {
+                    organisationId: orgId
                 },
-                orderBy: { recordedAt: 'desc' },
-                take: 200
-            });
-
-            // 2. Fetch Published Posts (PostTransaction)
-            const postTransactions = await prisma.postTransaction.findMany({
-                where: {
-                    refId: orgId,
-                    published: true
-                },
-                orderBy: { createdAt: 'desc' },
-                take: 50
-            });
-
-            // 3. Fetch Campaign Posts for campaign-wise analysis
-            const campaignPosts = await prisma.campaignPost.findMany({
-                where: {
-                    campaign: {
-                        organisationId: orgId
-                    },
-                    isDeleted: false
-                },
-                include: {
-                    campaign: {
-                        select: {
-                            id: true,
-                            name: true
-                        }
+                isDeleted: false
+            },
+            include: {
+                campaign: {
+                    select: {
+                        id: true,
+                        name: true
                     }
-                },
-                orderBy: { createdAt: 'desc' },
-                take: 50
-            });
-
-            // 4. Fetch Post Insights with complete details
-            const allPostIds = [...postTransactions.map(p => p.postId), ...campaignPosts.map(p => p.id.toString())];
-            const postInsights = await prisma.postInsight.findMany({
-                where: {
-                    postId: { in: allPostIds }
                 }
-            });
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 50
+        });
 
-            // 5. Prepare RAW data arrays for AI (no aggregation - let AI analyze directly)
+        // 4. Fetch Post Insights with complete details
+        const allPostIds = [...postTransactions.map(p => p.postId), ...campaignPosts.map(p => p.id.toString())];
+        const postInsights = await prisma.postInsight.findMany({
+            where: {
+                postId: { in: allPostIds }
+            }
+        });
 
-            // Map post insights with their corresponding post details
-            const postsWithInsights = postTransactions.map(post => {
-                const insight = postInsights.find(i => i.postId === post.postId);
-                return {
-                    postId: post.postId,
-                    platform: post.platform,
-                    message: post.message?.substring(0, 100), // Truncate for context size
-                    publishedAt: post.publishedAt,
-                    metrics: insight ? {
-                        likes: insight.likes,
-                        comments: insight.comments,
-                        reach: insight.reach,
-                        impressions: insight.impressions,
-                        engagementRate: insight.engagementRate,
-                        lastUpdated: insight.lastUpdated
-                    } : null
-                };
-            });
+        // 5. Prepare RAW data arrays for AI (no aggregation - let AI analyze directly)
 
-            // Map campaign posts with insights
-            const campaignPostsWithInsights = campaignPosts.map(post => {
-                const insight = postInsights.find(i => i.postId === post.id.toString());
-                return {
-                    postId: post.id,
-                    campaignName: post.campaign?.name || 'Uncategorized',
-                    platform: post.type,
-                    subject: post.subject,
-                    scheduledTime: post.scheduledPostTime,
-                    metrics: insight ? {
-                        likes: insight.likes,
-                        comments: insight.comments,
-                        reach: insight.reach,
-                        impressions: insight.impressions,
-                        engagementRate: insight.engagementRate,
-                        lastUpdated: insight.lastUpdated
-                    } : null
-                };
-            });
-
-            // Raw social metrics array (time-series data)
-            const rawSocialMetrics = socialMetrics.map(m => ({
-                platform: m.platform,
-                metricName: m.metricName,
-                value: m.value,
-                recordedAt: m.recordedAt.toISOString().split('T')[0]
-            }));
-
-            // Prepare comprehensive RAW data context for AI
-            analyticsContext = {
-                // RAW ARRAYS - AI will analyze these directly
-                allPosts: postsWithInsights,
-                campaignPosts: campaignPostsWithInsights,
-                socialMetricsTimeSeries: rawSocialMetrics,
-
-                // Metadata
-                dataInfo: {
-                    totalPostsWithInsights: postsWithInsights.filter(p => p.metrics).length,
-                    totalCampaignPosts: campaignPostsWithInsights.length,
-                    totalSocialMetricRecords: rawSocialMetrics.length,
-                    dateRange: {
-                        from: thirtyDaysAgo.toISOString().split('T')[0],
-                        to: new Date().toISOString().split('T')[0]
-                    },
-                    platformsAvailable: [...new Set([
-                        ...postsWithInsights.map(p => p.platform),
-                        ...rawSocialMetrics.map(m => m.platform)
-                    ])]
-                }
+        // Map post insights with their corresponding post details
+        const postsWithInsights = postTransactions.map(post => {
+            const insight = postInsights.find(i => i.postId === post.postId);
+            return {
+                postId: post.postId,
+                platform: post.platform,
+                message: post.message?.substring(0, 100), // Truncate for context size
+                publishedAt: post.publishedAt,
+                metrics: insight ? {
+                    likes: insight.likes,
+                    comments: insight.comments,
+                    reach: insight.reach,
+                    impressions: insight.impressions,
+                    engagementRate: insight.engagementRate,
+                    lastUpdated: insight.lastUpdated
+                } : null
             };
-        }
+        });
 
-        // Prepare AI prompt
-        const systemPrompt = `
+        // Map campaign posts with insights
+        const campaignPostsWithInsights = campaignPosts.map(post => {
+            const insight = postInsights.find(i => i.postId === post.id.toString());
+            return {
+                postId: post.id,
+                campaignName: post.campaign?.name || 'Uncategorized',
+                platform: post.type,
+                subject: post.subject,
+                scheduledTime: post.scheduledPostTime,
+                metrics: insight ? {
+                    likes: insight.likes,
+                    comments: insight.comments,
+                    reach: insight.reach,
+                    impressions: insight.impressions,
+                    engagementRate: insight.engagementRate,
+                    lastUpdated: insight.lastUpdated
+                } : null
+            };
+        });
+
+        // Raw social metrics array (time-series data)
+        const rawSocialMetrics = socialMetrics.map(m => ({
+            platform: m.platform,
+            metricName: m.metricName,
+            value: m.value,
+            recordedAt: m.recordedAt.toISOString().split('T')[0]
+        }));
+
+        // Prepare comprehensive RAW data context for AI
+        analyticsContext = {
+            // RAW ARRAYS - AI will analyze these directly
+            allPosts: postsWithInsights,
+            campaignPosts: campaignPostsWithInsights,
+            socialMetricsTimeSeries: rawSocialMetrics,
+
+            // Metadata
+            dataInfo: {
+                totalPostsWithInsights: postsWithInsights.filter(p => p.metrics).length,
+                totalCampaignPosts: campaignPostsWithInsights.length,
+                totalSocialMetricRecords: rawSocialMetrics.length,
+                dateRange: {
+                    from: thirtyDaysAgo.toISOString().split('T')[0],
+                    to: new Date().toISOString().split('T')[0]
+                },
+                platformsAvailable: [...new Set([
+                    ...postsWithInsights.map(p => p.platform),
+                    ...rawSocialMetrics.map(m => m.platform)
+                ])]
+            }
+        };
+    }
+
+    // Prepare AI prompt
+    const systemPrompt = `
 You are an expert Social Media Analytics Assistant for CampZeo.
 Your goal is to provide insightful, data-driven answers by analyzing RAW data arrays.
 
@@ -189,66 +189,66 @@ Return JSON with:
 - recommendation: Actionable advice if applicable
 `;
 
-        // Generate AI response with structured JSON output
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
-            generationConfig: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: "object",
-                    properties: {
-                        answer: { type: "string" },
-                        metrics: {
-                            type: "object",
-                            properties: {
-                                value: { type: "number" },
-                                unit: { type: "string" }
-                            }
-                        },
-                        trend: { type: "string" },
-                        recommendation: { type: "string" }
+    // Generate AI response with structured JSON output
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: "object",
+                properties: {
+                    answer: { type: "string" },
+                    metrics: {
+                        type: "object",
+                        properties: {
+                            value: { type: "number" },
+                            unit: { type: "string" }
+                        }
                     },
-                    required: ["answer"]
-                }
+                    trend: { type: "string" },
+                    recommendation: { type: "string" }
+                },
+                required: ["answer"]
             }
-        });
-
-        const chat = model.startChat({
-            history: [
-                {
-                    role: "user",
-                    parts: [{ text: systemPrompt }],
-                },
-                {
-                    role: "model",
-                    parts: [{
-                        text: JSON.stringify({
-                            answer: "I've analyzed your social media analytics data. I can help you understand your performance across platforms, campaigns, and engagement trends. What would you like to know?",
-                            trend: "ready",
-                            recommendation: "Ask me about your metrics!"
-                        })
-                    }],
-                },
-            ],
-        });
-
-        const result = await chat.sendMessage(message);
-        const response = result.response;
-        const text = response.text();
-
-        // Parse JSON response
-        let parsedResponse;
-        try {
-            parsedResponse = JSON.parse(text);
-        } catch (e) {
-            // Fallback if JSON parsing fails
-            parsedResponse = { answer: text };
         }
+    });
 
-        // Return the answer field as the message
-        return NextResponse.json({ message: parsedResponse.answer || text });
+    const chat = model.startChat({
+        history: [
+            {
+                role: "user",
+                parts: [{ text: systemPrompt }],
+            },
+            {
+                role: "model",
+                parts: [{
+                    text: JSON.stringify({
+                        answer: "I've analyzed your social media analytics data. I can help you understand your performance across platforms, campaigns, and engagement trends. What would you like to know?",
+                        trend: "ready",
+                        recommendation: "Ask me about your metrics!"
+                    })
+                }],
+            },
+        ],
+    });
 
-    
+    const result = await chat.sendMessage(message);
+    const response = result.response;
+    const text = response.text();
+
+    // Parse JSON response
+    let parsedResponse;
+    try {
+        parsedResponse = JSON.parse(text);
+    } catch (e) {
+        // Fallback if JSON parsing fails
+        parsedResponse = { answer: text };
+    }
+
+    // Return the answer field as the message
+    return NextResponse.json({ message: parsedResponse.answer || text });
+
+
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/ai/chat");
+export const POST = withErrorHandling(postHandler, "POST /api/ai/chat", "postHandler");

@@ -6,50 +6,50 @@ import { logError, logWarning, logInfo } from "@/lib/audit-logger";
 import { withErrorHandling } from '@/lib/api-handler';
 async function postHandler(req: Request) {
 
-        const body = await req.text();
-        const signature = req.headers.get("x-razorpay-signature");
+    const body = await req.text();
+    const signature = req.headers.get("x-razorpay-signature");
 
-        if (!signature) {
-            return NextResponse.json({ error: "No signature found" }, { status: 400 });
-        }
+    if (!signature) {
+        return NextResponse.json({ error: "No signature found" }, { status: 400 });
+    }
 
-        // Verify webhook signature
-        const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || "";
-        const isValid = verifyWebhookSignature(body, signature, webhookSecret);
+    // Verify webhook signature
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || "";
+    const isValid = verifyWebhookSignature(body, signature, webhookSecret);
 
-        if (!isValid) {
-            console.error("Invalid webhook signature");
-            await logWarning("Invalid razorpay webhook signature", { action: "webhook-verification" });
-            return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-        }
+    if (!isValid) {
+        console.error("Invalid webhook signature");
+        await logWarning("Invalid razorpay webhook signature", { action: "webhook-verification" });
+        return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+    }
 
-        const event = JSON.parse(body);
-        console.log("Razorpay webhook event:", event.event);
+    const event = JSON.parse(body);
+    console.log("Razorpay webhook event:", event.event);
 
-        // Handle different webhook events
-        switch (event.event) {
-            case "payment.authorized":
-            case "payment.captured":
-                await handlePaymentSuccess(event.payload.payment.entity);
-                break;
+    // Handle different webhook events
+    switch (event.event) {
+        case "payment.authorized":
+        case "payment.captured":
+            await handlePaymentSuccess(event.payload.payment.entity);
+            break;
 
-            case "payment.failed":
-                await handlePaymentFailed(event.payload.payment.entity);
-                break;
+        case "payment.failed":
+            await handlePaymentFailed(event.payload.payment.entity);
+            break;
 
-            case "order.paid":
-                console.log("Order paid:", event.payload.order.entity);
-                break;
+        case "order.paid":
+            console.log("Order paid:", event.payload.order.entity);
+            break;
 
-            default:
-                console.log("Unhandled event:", event.event);
-        }
+        default:
+            console.log("Unhandled event:", event.event);
+    }
 
-        return NextResponse.json({ received: true });
-    
+    return NextResponse.json({ received: true });
+
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/razorpay/webhook");
+export const POST = withErrorHandling(postHandler, "POST /api/razorpay/webhook", "postHandler");
 
 async function handlePaymentSuccess(payment: any) {
     try {
