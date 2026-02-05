@@ -93,7 +93,7 @@ async function postHandler(req: Request) {
                     email: email,
                     firstName: first_name || null,
                     lastName: last_name || null,
-                    role: 'ORGANISATION_USER', 
+                    role: 'ORGANISATION_USER',
                 }
             })
 
@@ -144,7 +144,7 @@ async function postHandler(req: Request) {
         const { id } = evt.data
 
         try {
-         
+
             await prisma.user.delete({
                 where: { clerkId: id as string }
             })
@@ -162,5 +162,5 @@ async function postHandler(req: Request) {
 
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/webhooks/clerk");
+export const POST = withErrorHandling(postHandler, "POST /api/webhooks/clerk", "postHandler");
 

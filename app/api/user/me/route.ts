@@ -6,106 +6,106 @@ import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 import { withErrorHandling } from '@/lib/api-handler';
 async function getHandler() {
 
-        const user = await currentUser();
+    const user = await currentUser();
 
-        if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+    if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        const dbUser = await prisma.user.findUnique({
-            where: { clerkId: user.id },
-            include: {
-                organisation: {
-                    include: {
-                        organisationPlatforms: true,
-                        subscriptions: {
-                            orderBy: { createdAt: 'desc' },
-                            take: 1,
-                            include: { plan: true }
-                        }
+    const dbUser = await prisma.user.findUnique({
+        where: { clerkId: user.id },
+        include: {
+            organisation: {
+                include: {
+                    organisationPlatforms: true,
+                    subscriptions: {
+                        orderBy: { createdAt: 'desc' },
+                        take: 1,
+                        include: { plan: true }
                     }
-                }
-            },
-        });
-
-        if (!dbUser) {
-            return NextResponse.json({ error: "User not found" }, { status: 404 });
-        }
-
-        // Handle Admin Impersonation
-        let effectiveOrganisationId = dbUser.organisationId;
-        let effectiveOrganisation = dbUser.organisation;
-
-        if (dbUser.role === 'ADMIN_USER') {
-            const impersonatedId = await getImpersonatedOrganisationId();
-            if (impersonatedId) {
-                effectiveOrganisationId = impersonatedId;
-                // Fetch the impersonated organisation
-                const org = await prisma.organisation.findUnique({
-                    where: { id: impersonatedId },
-                    include: {
-                        organisationPlatforms: true,
-                        subscriptions: {
-                            orderBy: { createdAt: 'desc' },
-                            take: 1,
-                            include: { plan: true }
-                        }
-                    }
-                });
-                if (org) {
-                    effectiveOrganisation = org;
                 }
             }
+        },
+    });
+
+    if (!dbUser) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Handle Admin Impersonation
+    let effectiveOrganisationId = dbUser.organisationId;
+    let effectiveOrganisation = dbUser.organisation;
+
+    if (dbUser.role === 'ADMIN_USER') {
+        const impersonatedId = await getImpersonatedOrganisationId();
+        if (impersonatedId) {
+            effectiveOrganisationId = impersonatedId;
+            // Fetch the impersonated organisation
+            const org = await prisma.organisation.findUnique({
+                where: { id: impersonatedId },
+                include: {
+                    organisationPlatforms: true,
+                    subscriptions: {
+                        orderBy: { createdAt: 'desc' },
+                        take: 1,
+                        include: { plan: true }
+                    }
+                }
+            });
+            if (org) {
+                effectiveOrganisation = org;
+            }
         }
+    }
 
-        return NextResponse.json({
-            id: dbUser.id,
-            clerkId: dbUser.clerkId,
-            email: dbUser.email,
-            firstName: dbUser.firstName,
-            lastName: dbUser.lastName,
-            mobile: dbUser.mobile,
-            role: dbUser.role,
-            organisationId: effectiveOrganisationId,
-            organisation: effectiveOrganisation,
+    return NextResponse.json({
+        id: dbUser.id,
+        clerkId: dbUser.clerkId,
+        email: dbUser.email,
+        firstName: dbUser.firstName,
+        lastName: dbUser.lastName,
+        mobile: dbUser.mobile,
+        role: dbUser.role,
+        organisationId: effectiveOrganisationId,
+        organisation: effectiveOrganisation,
 
-            // Social tokens status
-            facebookConnected: !!dbUser.facebookAccessToken,
-            instagramConnected: !!dbUser.instagramAccessToken,
-            linkedInConnected: !!dbUser.linkedInAccessToken,
-            youtubeConnected: !!dbUser.youtubeAccessToken,
-            pinterestConnected: !!dbUser.pinterestAccessToken,
+        // Social tokens status
+        facebookConnected: !!dbUser.facebookAccessToken,
+        instagramConnected: !!dbUser.instagramAccessToken,
+        linkedInConnected: !!dbUser.linkedInAccessToken,
+        youtubeConnected: !!dbUser.youtubeAccessToken,
+        pinterestConnected: !!dbUser.pinterestAccessToken,
 
-            createdAt: dbUser.createdAt,
-            updatedAt: dbUser.updatedAt,
-        });
-    
+        createdAt: dbUser.createdAt,
+        updatedAt: dbUser.updatedAt,
+    });
+
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/user/me");
+export const GET = withErrorHandling(getHandler, "GET /api/user/me", "getHandler");
 
 async function putHandler(req: Request) {
 
-        const user = await currentUser();
+    const user = await currentUser();
 
-        if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+    if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        const body = await req.json();
-        const { firstName, lastName, mobile } = body;
+    const body = await req.json();
+    const { firstName, lastName, mobile } = body;
 
-        const updatedUser = await prisma.user.update({
-            where: { clerkId: user.id },
-            data: {
-                firstName,
-                lastName,
-                mobile,
-            },
-        });
+    const updatedUser = await prisma.user.update({
+        where: { clerkId: user.id },
+        data: {
+            firstName,
+            lastName,
+            mobile,
+        },
+    });
 
-        return NextResponse.json(updatedUser);
-    
+    return NextResponse.json(updatedUser);
+
 }
 
-export const PUT = withErrorHandling(putHandler, "PUT /api/user/me");
+export const PUT = withErrorHandling(putHandler, "PUT /api/user/me", "putHandler");

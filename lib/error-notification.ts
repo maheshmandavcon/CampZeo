@@ -143,7 +143,7 @@ export async function notifyAdminOfError(apiName: string, error: any, context?: 
             <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
                 <div style="background-color: #dc2626; padding: 20px; color: white;">
                     <h1 style="margin: 0; font-size: 20px;">System Error Alert</h1>
-                    <p style="margin: 5px 0 0; opacity: 0.9;">${apiName}</p>
+                    <p style="margin: 5px 0 0; opacity: 0.9; font-weight: bold;">API/Function: ${apiName}</p>
                 </div>
                 
                 <div style="padding: 20px; background-color: #fff;">
@@ -158,7 +158,11 @@ export async function notifyAdminOfError(apiName: string, error: any, context?: 
                     ${context ? `
                     <div style="margin-bottom: 20px;">
                         <h3 style="color: #4b5563;">Request Context</h3>
-                        <pre style="background-color: #f3f4f6; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px; border: 1px solid #e5e7eb;">${safeJsonStringify(context, 2)}</pre>
+                        <div style="background-color: #f3f4f6; padding: 15px; border-radius: 4px; border: 1px solid #e5e7eb;">
+                            <p style="margin: 0 0 10px; font-size: 13px;"><strong>URL:</strong> ${context.url || 'N/A'}</p>
+                            <p style="margin: 0 0 10px; font-size: 13px;"><strong>Method:</strong> ${context.method || 'N/A'}</p>
+                            <pre style="margin: 0; overflow-x: auto; font-size: 12px;">${safeJsonStringify(context, 2)}</pre>
+                        </div>
                     </div>
                     ` : ''}
 

@@ -6,79 +6,79 @@ import { logInfo, logError, logWarning } from "@/lib/audit-logger";
 import { withErrorHandling } from '@/lib/api-handler';
 async function postHandler(req: Request) {
 
-        const user = await currentUser();
+    const user = await currentUser();
 
-        if (!user) {
-            await logWarning("Unauthorized access attempt to cancel subscription", { action: "cancel-subscription" });
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+    if (!user) {
+        await logWarning("Unauthorized access attempt to cancel subscription", { action: "cancel-subscription" });
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        const dbUser = await prisma.user.findUnique({
-            where: { clerkId: user.id },
-            include: { organisation: true },
-        });
+    const dbUser = await prisma.user.findUnique({
+        where: { clerkId: user.id },
+        include: { organisation: true },
+    });
 
-        if (!dbUser || !dbUser.organisationId) {
-            return NextResponse.json(
-                { error: "User not found or no organisation" },
-                { status: 404 }
-            );
-        }
+    if (!dbUser || !dbUser.organisationId) {
+        return NextResponse.json(
+            { error: "User not found or no organisation" },
+            { status: 404 }
+        );
+    }
 
-        const { immediate, reason } = await req.json();
+    const { immediate, reason } = await req.json();
 
-        // Find active subscription
-        const subscription = await prisma.subscription.findFirst({
-            where: {
-                organisationId: dbUser.organisationId,
-                status: { in: ["ACTIVE", "CANCELING"] },
-            },
-            orderBy: {
-                createdAt: "desc",
-            },
-        });
-
-        if (!subscription) {
-            return NextResponse.json(
-                { error: "No active subscription found" },
-                { status: 404 }
-            );
-        }
-
-        // Update subscription based on cancellation type
-        const updatedSubscription = await prisma.subscription.update({
-            where: { id: subscription.id },
-            data: {
-                status: immediate ? "CANCELED" : "CANCELING",
-                endDate: immediate ? new Date() : subscription.endDate,
-                autoRenew: false,
-            },
-        });
-
-        // Create audit log
-        await logInfo("Subscription cancelled", {
-            action: "cancel",
-            resourceType: "subscription",
-            subscriptionId: subscription.id,
+    // Find active subscription
+    const subscription = await prisma.subscription.findFirst({
+        where: {
             organisationId: dbUser.organisationId,
-            immediate,
-            reason,
-            userId: user.id,
-        });
+            status: { in: ["ACTIVE", "CANCELING"] },
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+    });
 
-        return NextResponse.json({
-            success: true,
-            message: immediate
-                ? "Subscription cancelled immediately"
-                : "Subscription will be cancelled at the end of the billing period",
-            subscription: {
-                id: updatedSubscription.id,
-                status: updatedSubscription.status,
-                endDate: updatedSubscription.endDate?.toISOString() || null,
-                autoRenew: updatedSubscription.autoRenew,
-            },
-        });
-    
+    if (!subscription) {
+        return NextResponse.json(
+            { error: "No active subscription found" },
+            { status: 404 }
+        );
+    }
+
+    // Update subscription based on cancellation type
+    const updatedSubscription = await prisma.subscription.update({
+        where: { id: subscription.id },
+        data: {
+            status: immediate ? "CANCELED" : "CANCELING",
+            endDate: immediate ? new Date() : subscription.endDate,
+            autoRenew: false,
+        },
+    });
+
+    // Create audit log
+    await logInfo("Subscription cancelled", {
+        action: "cancel",
+        resourceType: "subscription",
+        subscriptionId: subscription.id,
+        organisationId: dbUser.organisationId,
+        immediate,
+        reason,
+        userId: user.id,
+    });
+
+    return NextResponse.json({
+        success: true,
+        message: immediate
+            ? "Subscription cancelled immediately"
+            : "Subscription will be cancelled at the end of the billing period",
+        subscription: {
+            id: updatedSubscription.id,
+            status: updatedSubscription.status,
+            endDate: updatedSubscription.endDate?.toISOString() || null,
+            autoRenew: updatedSubscription.autoRenew,
+        },
+    });
+
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/subscription/cancel");
+export const POST = withErrorHandling(postHandler, "POST /api/subscription/cancel", "postHandler");

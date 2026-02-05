@@ -72,4 +72,4 @@ async function generateContentHandler(request: NextRequest) {
     });
 }
 
-export const POST = withErrorHandling(generateContentHandler, "POST /api/ai/generate-content");
+export const POST = withErrorHandling(generateContentHandler, "POST /api/ai/generate-content", "generateContentHandler");

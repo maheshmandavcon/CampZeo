@@ -76,163 +76,163 @@ function parseCSV(csvText: string): CSVRow[] {
 
 async function postHandler(request: NextRequest) {
 
-        const user = await currentUser();
-        if (!user) {
-            await logWarning("Unauthorized access attempt to import contacts", { action: "import-contacts" });
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const user = await currentUser();
+    if (!user) {
+        await logWarning("Unauthorized access attempt to import contacts", { action: "import-contacts" });
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const dbUser = await prisma.user.findUnique({
+        where: { clerkId: user.id },
+        select: { organisationId: true }
+    });
+
+    if (!dbUser?.organisationId) {
+        return NextResponse.json({ error: 'Organisation not found' }, { status: 404 });
+    }
+
+    const formData = await request.formData();
+    const file = formData.get('file') as File;
+
+    if (!file) {
+        return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    }
+
+    // Read file content
+    const csvText = await file.text();
+    const rows = parseCSV(csvText);
+
+    if (rows.length === 0) {
+        return NextResponse.json({ error: 'CSV file is empty' }, { status: 400 });
+    }
+
+    const result: ImportResult = {
+        success: 0,
+        failed: 0,
+        duplicates: 0,
+        errors: []
+    };
+
+    // Get existing contacts to check for duplicates
+    const existingContacts = await prisma.contact.findMany({
+        where: { organisationId: dbUser.organisationId },
+        select: { contactEmail: true, contactMobile: true }
+    });
+
+    const existingEmails = new Set(
+        existingContacts.map((c: any) => c.contactEmail?.toLowerCase()).filter(Boolean)
+    );
+    const existingMobiles = new Set(
+        existingContacts.map((c: any) => c.contactMobile).filter(Boolean)
+    );
+
+    // Validate and prepare contacts for import
+    const validContacts: Array<{
+        contactName: string | null;
+        contactEmail: string | null;
+        contactMobile: string | null;
+        contactWhatsApp: string | null;
+        organisationId: number;
+    }> = [];
+
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowNumber = i + 2; // +2 because of header row and 0-indexing
+        let hasError = false;
+
+        // Validate required fields (at least one contact method)
+        if (!row.contactName && !row.contactEmail && !row.contactMobile) {
+            result.errors.push({
+                row: rowNumber,
+                field: 'general',
+                message: 'At least one of name, email, or mobile is required',
+                data: row
+            });
+            result.failed++;
+            continue;
         }
 
-        const dbUser = await prisma.user.findUnique({
-            where: { clerkId: user.id },
-            select: { organisationId: true }
+        // Validate email format
+        if (row.contactEmail && !validateEmail(row.contactEmail)) {
+            result.errors.push({
+                row: rowNumber,
+                field: 'contactEmail',
+                message: 'Invalid email format',
+                data: row
+            });
+            hasError = true;
+        }
+
+        // Validate phone format
+        if (row.contactMobile && !validatePhone(row.contactMobile)) {
+            result.errors.push({
+                row: rowNumber,
+                field: 'contactMobile',
+                message: 'Invalid phone number format',
+                data: row
+            });
+            hasError = true;
+        }
+
+        if (row.contactWhatsApp && !validatePhone(row.contactWhatsApp)) {
+            result.errors.push({
+                row: rowNumber,
+                field: 'contactWhatsApp',
+                message: 'Invalid WhatsApp number format',
+                data: row
+            });
+            hasError = true;
+        }
+
+        // Check for duplicates
+        const isDuplicateEmail = row.contactEmail &&
+            existingEmails.has(row.contactEmail.toLowerCase());
+        const isDuplicateMobile = row.contactMobile &&
+            existingMobiles.has(row.contactMobile);
+
+        if (isDuplicateEmail || isDuplicateMobile) {
+            result.errors.push({
+                row: rowNumber,
+                field: isDuplicateEmail ? 'contactEmail' : 'contactMobile',
+                message: 'Duplicate contact already exists',
+                data: row
+            });
+            result.duplicates++;
+            continue;
+        }
+
+        if (hasError) {
+            result.failed++;
+            continue;
+        }
+
+        // Add to valid contacts
+        validContacts.push({
+            contactName: row.contactName || null,
+            contactEmail: row.contactEmail || null,
+            contactMobile: row.contactMobile || null,
+            contactWhatsApp: row.contactWhatsApp || null,
+            organisationId: dbUser.organisationId
         });
+    }
 
-        if (!dbUser?.organisationId) {
-            return NextResponse.json({ error: 'Organisation not found' }, { status: 404 });
-        }
-
-        const formData = await request.formData();
-        const file = formData.get('file') as File;
-
-        if (!file) {
-            return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-        }
-
-        // Read file content
-        const csvText = await file.text();
-        const rows = parseCSV(csvText);
-
-        if (rows.length === 0) {
-            return NextResponse.json({ error: 'CSV file is empty' }, { status: 400 });
-        }
-
-        const result: ImportResult = {
-            success: 0,
-            failed: 0,
-            duplicates: 0,
-            errors: []
-        };
-
-        // Get existing contacts to check for duplicates
-        const existingContacts = await prisma.contact.findMany({
-            where: { organisationId: dbUser.organisationId },
-            select: { contactEmail: true, contactMobile: true }
-        });
-
-        const existingEmails = new Set(
-            existingContacts.map((c: any) => c.contactEmail?.toLowerCase()).filter(Boolean)
-        );
-        const existingMobiles = new Set(
-            existingContacts.map((c: any) => c.contactMobile).filter(Boolean)
-        );
-
-        // Validate and prepare contacts for import
-        const validContacts: Array<{
-            contactName: string | null;
-            contactEmail: string | null;
-            contactMobile: string | null;
-            contactWhatsApp: string | null;
-            organisationId: number;
-        }> = [];
-
-        for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
-            const rowNumber = i + 2; // +2 because of header row and 0-indexing
-            let hasError = false;
-
-            // Validate required fields (at least one contact method)
-            if (!row.contactName && !row.contactEmail && !row.contactMobile) {
-                result.errors.push({
-                    row: rowNumber,
-                    field: 'general',
-                    message: 'At least one of name, email, or mobile is required',
-                    data: row
-                });
-                result.failed++;
-                continue;
-            }
-
-            // Validate email format
-            if (row.contactEmail && !validateEmail(row.contactEmail)) {
-                result.errors.push({
-                    row: rowNumber,
-                    field: 'contactEmail',
-                    message: 'Invalid email format',
-                    data: row
-                });
-                hasError = true;
-            }
-
-            // Validate phone format
-            if (row.contactMobile && !validatePhone(row.contactMobile)) {
-                result.errors.push({
-                    row: rowNumber,
-                    field: 'contactMobile',
-                    message: 'Invalid phone number format',
-                    data: row
-                });
-                hasError = true;
-            }
-
-            if (row.contactWhatsApp && !validatePhone(row.contactWhatsApp)) {
-                result.errors.push({
-                    row: rowNumber,
-                    field: 'contactWhatsApp',
-                    message: 'Invalid WhatsApp number format',
-                    data: row
-                });
-                hasError = true;
-            }
-
-            // Check for duplicates
-            const isDuplicateEmail = row.contactEmail &&
-                existingEmails.has(row.contactEmail.toLowerCase());
-            const isDuplicateMobile = row.contactMobile &&
-                existingMobiles.has(row.contactMobile);
-
-            if (isDuplicateEmail || isDuplicateMobile) {
-                result.errors.push({
-                    row: rowNumber,
-                    field: isDuplicateEmail ? 'contactEmail' : 'contactMobile',
-                    message: 'Duplicate contact already exists',
-                    data: row
-                });
-                result.duplicates++;
-                continue;
-            }
-
-            if (hasError) {
-                result.failed++;
-                continue;
-            }
-
-            // Add to valid contacts
-            validContacts.push({
-                contactName: row.contactName || null,
-                contactEmail: row.contactEmail || null,
-                contactMobile: row.contactMobile || null,
-                contactWhatsApp: row.contactWhatsApp || null,
-                organisationId: dbUser.organisationId
+    // Bulk insert valid contacts
+    if (validContacts.length > 0) {
+        // Process in chunks of 100 to avoid overwhelming the database
+        const chunkSize = 100;
+        for (let i = 0; i < validContacts.length; i += chunkSize) {
+            const chunk = validContacts.slice(i, i + chunkSize);
+            await prisma.contact.createMany({
+                data: chunk,
+                skipDuplicates: true
             });
         }
+        result.success = validContacts.length;
+    }
 
-        // Bulk insert valid contacts
-        if (validContacts.length > 0) {
-            // Process in chunks of 100 to avoid overwhelming the database
-            const chunkSize = 100;
-            for (let i = 0; i < validContacts.length; i += chunkSize) {
-                const chunk = validContacts.slice(i, i + chunkSize);
-                await prisma.contact.createMany({
-                    data: chunk,
-                    skipDuplicates: true
-                });
-            }
-            result.success = validContacts.length;
-        }
+    await logInfo("Contacts imported", { success: result.success, failed: result.failed, duplicates: result.duplicates, importedBy: user.id });
+    return NextResponse.json(result);
 
-        await logInfo("Contacts imported", { success: result.success, failed: result.failed, duplicates: result.duplicates, importedBy: user.id });
-        return NextResponse.json(result);
-    
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/contacts/import");
+export const POST = withErrorHandling(postHandler, "POST /api/contacts/import", "postHandler");
