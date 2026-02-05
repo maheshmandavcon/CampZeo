@@ -34,7 +34,7 @@ export async function postToFacebook(
     credentials: FacebookCredentials,
     message: string,
     mediaUrls?: string | string[] | null,
-    options?: { isReel?: boolean }
+    options?: { isReel?: boolean; scheduledPublishTime?: number }
 ) {
     const { accessToken, pageId } = credentials;
 
@@ -63,7 +63,8 @@ export async function postToFacebook(
                     message,
                     access_token: accessToken,
                     privacy: { value: 'EVERYONE' }, // Ensure post is public
-                    published: true
+                    published: options?.scheduledPublishTime ? false : true,
+                    scheduled_publish_time: options?.scheduledPublishTime
                 }),
             });
 
@@ -129,7 +130,8 @@ export async function postToFacebook(
                                 file_url: publicUrl,
                                 access_token: accessToken,
                                 privacy: { value: 'EVERYONE' },
-                                published: true
+                                published: options?.scheduledPublishTime ? false : true,
+                                scheduled_publish_time: options?.scheduledPublishTime
                             }),
                         });
 
@@ -156,7 +158,8 @@ export async function postToFacebook(
                                 url: publicUrl,
                                 access_token: accessToken,
                                 privacy: { value: 'EVERYONE' },
-                                published: true
+                                published: options?.scheduledPublishTime ? false : true,
+                                scheduled_publish_time: options?.scheduledPublishTime
                             }),
                         });
 
@@ -226,7 +229,8 @@ export async function postToFacebook(
                     attached_media: mediaIds.map(id => ({ media_fbid: id })),
                     access_token: accessToken,
                     privacy: { value: 'EVERYONE' },
-                    published: true
+                    published: options?.scheduledPublishTime ? false : true,
+                    scheduled_publish_time: options?.scheduledPublishTime
                 }),
             });
 
@@ -609,13 +613,28 @@ export async function getFacebookPostInsights(
             const error = await postResponse.json();
             const errorMessage = error.error?.message || "";
 
-            // If the error is specifically about the 'shares' or 'engagement' field (common on Photo nodes), retry without them
-            if (errorMessage.includes('nonexisting field') && (errorMessage.includes('shares') || errorMessage.includes('engagement'))) {
+            // If the error is specifically about non-existing fields (common on Photo/Video nodes), retry without them
+            if (errorMessage.includes('nonexisting field')) {
                 console.log(`[Facebook] Retrying insights for ${postId} without incompatible fields...`);
-                fields = 'likes.summary(true),reactions.summary(true),comments.summary(true),message,full_picture,permalink_url';
-                postResponse = await fetch(
-                    `https://graph.facebook.com/v24.0/${postId}?fields=${fields}&access_token=${accessToken}`
-                );
+
+                // Identify which field caused the error and remove it
+                let currentFields = fields.split(',');
+                let newFieldsArr = currentFields;
+
+                if (errorMessage.includes('(shares)')) newFieldsArr = newFieldsArr.filter(f => f !== 'shares');
+                if (errorMessage.includes('(engagement)')) newFieldsArr = newFieldsArr.filter(f => f !== 'engagement');
+                if (errorMessage.includes('(message)')) {
+                    newFieldsArr = newFieldsArr.filter(f => f !== 'message');
+                    // For Photos, 'name' is often the caption field
+                    if (!newFieldsArr.includes('name')) newFieldsArr.push('name');
+                }
+
+                const newFields = newFieldsArr.join(',');
+                if (newFields !== fields) {
+                    postResponse = await fetch(
+                        `https://graph.facebook.com/v24.0/${postId}?fields=${newFields}&access_token=${accessToken}`
+                    );
+                }
             }
         }
 
@@ -751,7 +770,7 @@ export async function getFacebookPostInsights(
             engagement: totalEngagements,
             engagementRate,
             isDeleted: false,
-            message: postData.message,
+            message: postData.message || postData.name,
             full_picture: postData.full_picture,
             permalink_url: postData.permalink_url
         };

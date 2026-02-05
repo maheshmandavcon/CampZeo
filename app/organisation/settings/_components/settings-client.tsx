@@ -63,6 +63,8 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
   const [showFacebookPostsDialog, setShowFacebookPostsDialog] = useState(false);
   const [facebookPosts, setFacebookPosts] = useState<any[]>([]);
   const [loadingFacebookPosts, setLoadingFacebookPosts] = useState(false);
+  const [adAccounts, setAdAccounts] = useState<any[]>([]);
+  const [isLoadingAdAccounts, setIsLoadingAdAccounts] = useState(false);
 
   const handleViewFacebookPosts = async () => {
     setShowFacebookPostsDialog(true);
@@ -256,6 +258,26 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
     };
     fetchSocialStatus();
   }, []);
+
+  useEffect(() => {
+    if (userData.facebookConnected) {
+      const fetchAdAccounts = async () => {
+        setIsLoadingAdAccounts(true);
+        try {
+          const res = await fetch("/api/socialmedia/meta-ads/accounts");
+          if (res.ok) {
+            const data = await res.json();
+            setAdAccounts(data.accounts || []);
+          }
+        } catch (error) {
+          console.error("Failed to fetch ad accounts", error);
+        } finally {
+          setIsLoadingAdAccounts(false);
+        }
+      };
+      fetchAdAccounts();
+    }
+  }, [userData.facebookConnected]);
 
   const platforms = [
     {
@@ -523,6 +545,64 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
               </div>
             </CardContent>
           </Card>
+
+          {userData.facebookConnected && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Facebook className="h-5 w-5 text-blue-600" />
+                  Meta Ad Accounts
+                </CardTitle>
+                <CardDescription>
+                  Monitor your ad account status and balance for boosting posts and running lead ads.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoadingAdAccounts ? (
+                  <div className="flex justify-center p-4">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : adAccounts.length > 0 ? (
+                  <div className="space-y-4">
+                    {adAccounts.map((account) => (
+                      <div key={account.id} className="flex items-center justify-between p-4 border rounded-lg bg-muted/20">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium">{account.name}</h4>
+                            <Badge
+                              variant={account.account_status === 1 ? 'default' : 'destructive'}
+                              className="text-[10px] h-4 px-1"
+                            >
+                              {account.account_status === 1 ? 'ACTIVE' : 'DISABLED'}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">ID: {account.id}</p>
+                        </div>
+                        <div className="text-right space-y-1">
+                          <p className="text-sm font-semibold">
+                            Balance: {(account.balance / 100).toFixed(2)} {account.currency}
+                          </p>
+                          <Button variant="outline" size="sm" asChild className="h-7 text-xs">
+                            <a
+                              href={`https://business.facebook.com/billing_settings?ad_account_id=${account.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              Manage Billing
+                            </a>
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-muted-foreground border-2 border-dashed rounded-lg">
+                    No accessible ad accounts found. Make sure your Meta account has an active ad account.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 

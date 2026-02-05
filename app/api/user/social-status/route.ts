@@ -114,18 +114,21 @@ async function getHandler() {
             }
         }
 
-        if (fbStatus) {
-            status.facebook = fbStatus;
-            // If it's a session expired error, override name for UI clarity
-            if (fbStatus.error === "Session Expired") {
-                status.facebook.name = "Session Expired (Re-connect)";
+            if (fbStatus) {
+                status.facebook = {
+                    ...fbStatus,
+                    pageId: dbUser.facebookPageId
+                };
+                // If it's a session expired error, override name for UI clarity
+                if (fbStatus.error === "Session Expired") {
+                    status.facebook.name = "Session Expired (Re-connect)";
+                }
+            } else {
+                status.facebook = { connected: true, name: "Connection Restricted" };
             }
         } else {
-            status.facebook = { connected: true, name: "Connection Restricted" };
+            status.facebook = { connected: false };
         }
-    } else {
-        status.facebook = { connected: false };
-    }
 
     // Instagram (via Facebook Graph API for Business Accounts)
     if (dbUser.instagramAccessToken && dbUser.instagramUserId) {

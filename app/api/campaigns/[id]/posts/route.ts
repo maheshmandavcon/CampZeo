@@ -121,29 +121,30 @@ async function createPostHandler(
         return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
-    const body = await request.json();
-    const {
-        subject,
-        message,
-        type,
-        scheduledPostTime,
-        senderEmail,
-        mediaUrls,
-        youtubeTags,
-        youtubePrivacy,
-        youtubeContentType,
-        youtubePlaylistTitle,
-        youtubePlaylistId,
-        pinterestBoardId,
-        pinterestLink,
-        isReel,
-        contentType,
-        thumbnailUrl,
-        facebookPageId,
-        facebookPageAccessToken,
-        instagramBusinessId,
-        linkedInUrn
-    } = body;
+        const body = await request.json();
+        const {
+            subject,
+            message,
+            type,
+            scheduledPostTime,
+            senderEmail,
+            mediaUrls,
+            youtubeTags,
+            youtubePrivacy,
+            youtubeContentType,
+            youtubePlaylistTitle,
+            youtubePlaylistId,
+            pinterestBoardId,
+            pinterestLink,
+            isReel,
+            contentType,
+            thumbnailUrl,
+            facebookPageId,
+            facebookPageAccessToken,
+            instagramBusinessId,
+            linkedInUrn,
+            metaBoost
+        } = body;
 
     // Validation
     if (!type) {
@@ -154,33 +155,34 @@ async function createPostHandler(
         return NextResponse.json({ error: 'Message, subject or media is required' }, { status: 400 });
     }
 
-    // Prepare metadata
-    let metadata: any = {};
-    if (type === 'YOUTUBE') {
-        metadata = {
-            tags: youtubeTags,
-            privacy: youtubePrivacy,
-            thumbnailUrl,
-            postType: youtubeContentType,
-            playlistTitle: youtubePlaylistTitle,
-            playlistId: youtubePlaylistId
-        };
-    } else if (type === 'PINTEREST') {
-        metadata = { boardId: pinterestBoardId, link: pinterestLink };
-    } else if (type === 'FACEBOOK' || type === 'INSTAGRAM') {
-        metadata = {
-            isReel: !!isReel,
-            thumbnailUrl,
-            postType: contentType,
-            facebookPageId,
-            facebookPageAccessToken,
-            instagramBusinessId
-        };
-    } else if (type === 'LINKEDIN') {
-        metadata = {
-            linkedInUrn
-        };
-    }
+        // Prepare metadata
+        let metadata: any = {};
+        if (type === 'YOUTUBE') {
+            metadata = {
+                tags: youtubeTags,
+                privacy: youtubePrivacy,
+                thumbnailUrl,
+                postType: youtubeContentType,
+                playlistTitle: youtubePlaylistTitle,
+                playlistId: youtubePlaylistId
+            };
+        } else if (type === 'PINTEREST') {
+            metadata = { boardId: pinterestBoardId, link: pinterestLink };
+        } else if (type === 'FACEBOOK' || type === 'INSTAGRAM') {
+            metadata = {
+                isReel: !!isReel,
+                thumbnailUrl,
+                postType: contentType,
+                facebookPageId,
+                facebookPageAccessToken,
+                instagramBusinessId,
+                metaBoost: metaBoost || undefined
+            };
+        } else if (type === 'LINKEDIN') {
+            metadata = {
+                linkedInUrn
+            };
+        }
 
     if (scheduledPostTime) {
         const scheduledDate = new Date(scheduledPostTime);

@@ -32,31 +32,9 @@ import {
     DialogFooter,
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-    ArrowLeft,
-    Loader2,
-    Plus,
-    Trash2,
-    Edit,
-    Calendar,
-    Send,
-    Mail,
-    MessageSquare,
-    Phone,
-    Copy,
-    Filter,
-    Facebook,
-    Instagram,
-    Linkedin,
-    Youtube,
-    Eye,
-    Share2,
-    Check,
-    Paperclip,
-    Globe,
-    Search,
-    Download
-} from 'lucide-react';
+import { MetaBoostSection } from './_components/MetaBoostSection';
+import { Rocket, Edit, Trash2, ExternalLink, Share2, Facebook, Instagram, Linkedin, Youtube, Pin, MoreVertical, Search, Filter, Calendar, CheckCircle2, AlertCircle, Clock, Sparkles, Send, ArrowLeft, Loader2, Plus, Mail, MessageSquare, Phone, Copy, Eye, Check, Paperclip, Globe, Download } from 'lucide-react';
+import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -71,6 +49,8 @@ interface Post {
     senderEmail: string | null;
     videoUrl: string | null;
     mediaUrls: string[];
+    metadata?: any;
+    liveLink?: string | null;
 }
 
 interface Campaign {
@@ -91,6 +71,8 @@ export default function CampaignPostsPage() {
     const [loading, setLoading] = useState(true);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [deletePostId, setDeletePostId] = useState<number | null>(null);
+    const [boostPost, setBoostPost] = useState<Post | null>(null);
+    const [facebookAppId, setFacebookAppId] = useState<string | null>(null);
 
     // Filter State
     const [activeTab, setActiveTab] = useState('all');
@@ -144,6 +126,41 @@ export default function CampaignPostsPage() {
 
         fetchOrgPlatforms();
     }, []);
+
+    const [lastUsedAdAccountId, setLastUsedAdAccountId] = useState<string>('');
+
+    // Fetch Meta Ads config
+    useEffect(() => {
+        const fetchConfig = async () => {
+            try {
+                const res = await fetch("/api/socialmedia/meta-ads/config");
+                if (res.ok) {
+                    const data = await res.json();
+                    setFacebookAppId(data.facebookAppId);
+                }
+            } catch (e) {
+                console.error("Failed to fetch Meta Ads config", e);
+            }
+        };
+        fetchConfig();
+
+        // Load last used ad account from local storage
+        const stored = localStorage.getItem('last_meta_ad_account_id');
+        if (stored) setLastUsedAdAccountId(stored);
+    }, []);
+
+    const handleDirectBoost = (post: any) => {
+        const adAccountId = post.metadata?.metaBoost?.adAccountId || lastUsedAdAccountId;
+        const pageId = post.metadata?.facebookPageId || campaign?.metadata?.facebookPageId; // Assuming campaign metadata might hold pageId
+        const postId = post.metadata?.facebookPostId || post.metadata?.platformPostId || post.liveLink;
+
+        if (adAccountId && pageId && postId) {
+            openNativeBoostPopup(adAccountId, pageId, postId);
+            toast.info("Opening Native Meta Boost Centre...");
+        } else {
+            setBoostPost(post); // Open dialog for selection
+        }
+    };
 
     // Fetch campaign and posts
     useEffect(() => {
@@ -651,6 +668,18 @@ export default function CampaignPostsPage() {
                                                     >
                                                         <Edit className="size-4" />
                                                     </Button>
+                                                    {post.isPostSent && (post.type === 'FACEBOOK' || post.type === 'INSTAGRAM') && (
+                                                        <Button
+                                                            className='cursor-pointer text-blue-600 border border-blue-600 hover:text-blue-700 hover:bg-blue-50'
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => handleDirectBoost(post)}
+                                                            title="Boost Post"
+                                                        >
+                                                            <Rocket className="size-4 mr-1" />
+                                                            <span className="hidden lg:inline">Boost</span>
+                                                        </Button>
+                                                    )}
                                                     <Button
                                                         className='cursor-pointer'
                                                         size="sm"
@@ -818,6 +847,48 @@ export default function CampaignPostsPage() {
                             )}
                         </div>
                     )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Meta Boost Dialog */}
+            <Dialog open={!!boostPost} onOpenChange={(open) => !open && setBoostPost(null)}>
+                <DialogContent className="max-w-xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Rocket className="w-5 h-5 text-primary" />
+                            Boost Existing Post
+                        </DialogTitle>
+                        <DialogDescription>
+                            Configure budget and targeting to reach more people with this post.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {boostPost && (
+                        <div className="space-y-4">
+                            <MetaBoostSection
+                                platform={boostPost.type}
+                                facebookAppId={facebookAppId}
+                                fbPostId={boostPost.metadata?.facebookPostId || boostPost.metadata?.platformPostId || boostPost.liveLink}
+                                fbPageId={boostPost.metadata?.facebookPageId || campaign?.metadata?.facebookPageId}
+                                options={{
+                                    enabled: true,
+                                    adAccountId: boostPost.metadata?.metaBoost?.adAccountId || '',
+                                    budget: boostPost.metadata?.metaBoost?.budget || 5,
+                                    duration: boostPost.metadata?.metaBoost?.duration || 7,
+                                    objective: boostPost.metadata?.metaBoost?.objective || 'OUTCOME_ENGAGEMENT'
+                                }}
+                                onChange={(newOptions) => {
+                                    console.log("Boost Options Updated:", newOptions);
+                                    if (newOptions.adAccountId) {
+                                        setLastUsedAdAccountId(newOptions.adAccountId);
+                                        localStorage.setItem('last_meta_ad_account_id', newOptions.adAccountId);
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setBoostPost(null)}>Close</Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
