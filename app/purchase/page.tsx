@@ -339,8 +339,11 @@ function PurchaseContent() {
     };
 
     // Handle Organisation Creation (After Payment or for Free Trial)
-    const createOrganisation = async (paymentData?: any) => {
+    const createOrganisation = async (verificationData?: any) => {
         try {
+            // If verificationData has a payment sub-object, use that (from RazorpayButton)
+            const paymentData = verificationData?.payment || verificationData;
+
             // We need to re-fetch plan details
             const selectedPlan = plans.find(p => p.id === selectedPlanId);
 
@@ -653,7 +656,7 @@ function PurchaseContent() {
                                     <RazorpayButton
                                         plan={selectedPlan.name}
                                         amount={selectedPlan.price}
-                                        organizationName={formData.organisationName}
+                                        organizationName={accountType === 'individual' ? formData.name : formData.organisationName}
                                         isSignup={true} // Important to redirect correctly or handle flow
                                         onSuccess={createOrganisation}
                                         className="w-full h-12 text-lg"
