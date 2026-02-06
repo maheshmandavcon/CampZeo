@@ -63,15 +63,29 @@ function PurchaseContent() {
 
     const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
 
-    // Auto-fill email if user is signed in
+    // Auto-fill email and Sync User or Plan from Clerk metadata
     useEffect(() => {
-        if (isSignedIn && user?.primaryEmailAddress?.emailAddress && !formData.email) {
-            setFormData(prev => ({
-                ...prev,
-                email: user.primaryEmailAddress!.emailAddress
-            }));
-        }
-    }, [isSignedIn, user, formData.email]);
+        const syncUser = async () => {
+            if (userLoaded && isSignedIn && user) {
+                // Pre-fill email
+                if (user.primaryEmailAddress?.emailAddress && !formData.email) {
+                    setFormData(prev => ({
+                        ...prev,
+                        email: user.primaryEmailAddress!.emailAddress
+                    }));
+                }
+
+                // Sync user to database
+                try {
+                    await fetch("/api/user/sync");
+                } catch (error) {
+                    console.error("Error syncing user:", error);
+                }
+            }
+        };
+
+        syncUser();
+    }, [userLoaded, isSignedIn, user, formData.email]);
 
     useEffect(() => {
         if (plans.length > 0 && !selectedPlanId) {
