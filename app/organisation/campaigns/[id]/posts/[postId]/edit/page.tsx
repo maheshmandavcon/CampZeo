@@ -19,9 +19,12 @@ import {
     DialogDescription,
     DialogHeader,
     DialogTitle,
+    DialogFooter, // Added
 } from '@/components/ui/dialog';
+import { Checkbox } from "@/components/ui/checkbox"; // Added
+import { ScrollArea } from "@/components/ui/scroll-area"; // Added
 
-import { ArrowLeft, Loader2, Save, Upload, X, Youtube, Eye, Video, Trash2, FileText, Sparkles, Mail, MessageSquare, Phone, Facebook, Instagram, Linkedin, Send, Plus, Wand2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Upload, X, Youtube, Eye, Video, Trash2, FileText, Sparkles, Mail, MessageSquare, Phone, Facebook, Instagram, Linkedin, Send, Plus, Wand2, Check, Search as SearchIcon } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import Image from 'next/image';
@@ -75,6 +78,14 @@ export default function EditPostPage() {
     const [loadingPinterestBoards, setLoadingPinterestBoards] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+
+    // Send Now Dialog State
+    const [showSendNowDialog, setShowSendNowDialog] = useState(false);
+    const [sendNowStep, setSendNowStep] = useState<'initial' | 'select_contacts'>('initial');
+    const [selectedSendContacts, setSelectedSendContacts] = useState<string[]>([]);
+    const [contactSearchQuery, setContactSearchQuery] = useState('');
+    const [isSending, setIsSending] = useState(false);
+    const [campaignContacts, setCampaignContacts] = useState<any[]>([]);
 
     // Preview state
     const [showPreview, setShowPreview] = useState(false);
@@ -231,6 +242,132 @@ export default function EditPostPage() {
 
         fetchPost();
     }, [campaignId, postId, router]);
+
+    // Fetch campaign contacts
+    useEffect(() => {
+        const fetchCampaignContacts = async () => {
+            try {
+                const response = await fetch(`/api/campaigns/${campaignId}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setCampaignContacts(data.campaign.contacts || []);
+                }
+            } catch (error) {
+                console.error('Error fetching contacts:', error);
+            }
+        };
+
+        fetchCampaignContacts();
+    }, [campaignId]);
+
+    // Handle filtered contacts for the dialog
+    const filteredContacts = campaignContacts.filter((contact: any) => {
+        const query = contactSearchQuery.toLowerCase();
+        return (
+            contact.contactName?.toLowerCase().includes(query) ||
+            contact.contactEmail?.toLowerCase().includes(query) ||
+            contact.contactMobile?.toLowerCase().includes(query)
+        );
+    });
+
+    const toggleSendContact = (contactId: string) => {
+        setSelectedSendContacts(prev =>
+            prev.includes(contactId)
+                ? prev.filter(id => id !== contactId)
+                : [...prev, contactId]
+        );
+    };
+
+    const toggleAllContacts = () => {
+        if (filteredContacts.length === 0) return;
+        const visibleIds = filteredContacts.map((c: any) => String(c.id));
+        const allVisibleSelected = visibleIds.every(id => selectedSendContacts.includes(id));
+
+        if (allVisibleSelected) {
+            setSelectedSendContacts(prev => prev.filter(id => !visibleIds.includes(id)));
+        } else {
+            setSelectedSendContacts(prev => Array.from(new Set([...prev, ...visibleIds])));
+        }
+    };
+
+    const executeUpdateAndSend = async (targetContactIds?: string[]) => {
+        try {
+            setSaving(true);
+            setIsSending(true);
+
+            // Prepare metadata
+            let metadata: any = {};
+            if (type === 'YOUTUBE') {
+                metadata = {
+                    tags: youtubeTags ? youtubeTags.split(',').map(t => t.trim()) : [],
+                    privacy: youtubePrivacy,
+                    postType: youtubeContentType,
+                    playlistTitle: youtubeContentType === 'PLAYLIST' ? youtubePlaylistTitle : undefined
+                };
+            } else if (type === 'PINTEREST') {
+                metadata = { boardId: pinterestBoardId, link: pinterestLink };
+            } else if (type === 'FACEBOOK' || type === 'INSTAGRAM') {
+                metadata = { isReel: !!isReel, postType: contentType };
+            } else if (type === 'LINKEDIN') {
+                metadata = { linkedInUrn: selectedLinkedInUrn };
+            }
+
+            // 1. Update Post (ensure no schedule)
+            const response = await fetch(`/api/campaigns/${campaignId}/posts/${postId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    subject: subject || null,
+                    message: message || null,
+                    type,
+                    senderEmail: type === 'EMAIL' ? senderEmail : null,
+                    scheduledPostTime: null, // Ensure no schedule
+                    mediaUrls: mediaUrls,
+                    videoUrl: mediaUrls.length > 0 ? mediaUrls[0] : null,
+                    metadata,
+                    linkedInUrn: type === 'LINKEDIN' ? selectedLinkedInUrn : undefined
+                }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to update post');
+            }
+
+            // 2. Send Post
+            const contactsToSend = targetContactIds || campaignContacts.map(c => c.id);
+
+            if (contactsToSend.length === 0) {
+                toast.error('No contacts available to send to.');
+                router.push(`/organisation/campaigns/${campaignId}/posts`);
+                return;
+            }
+
+            const sendResponse = await fetch(`/api/campaigns/${campaignId}/posts/${postId}/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contactIds: contactsToSend })
+            });
+
+            if (!sendResponse.ok) {
+                const errorData = await sendResponse.json().catch(() => ({}));
+                toast.warning(`Post updated but failed to send: ${errorData.error || 'Unknown error'}`);
+            } else {
+                const sendData = await sendResponse.json();
+                toast.success(`Post sent successfully! Sent: ${sendData.sent}, Failed: ${sendData.failed}`);
+            }
+
+            router.push(`/organisation/campaigns/${campaignId}/posts`);
+
+        } catch (error) {
+            console.error('Error updating/sending post:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to update post');
+        } finally {
+            setSaving(false);
+            setIsSending(false);
+            setShowSendNowDialog(false);
+        }
+    };
 
     // Fetch Pinterest boards
     useEffect(() => {
@@ -535,6 +672,13 @@ export default function EditPostPage() {
             metadata = { isReel: !!isReel, postType: contentType };
         } else if (type === 'LINKEDIN') {
             metadata = { linkedInUrn: selectedLinkedInUrn };
+        }
+
+        // INTERCEPT: If Email/SMS/WhatsApp and NO schedule, show "Send Now / Schedule" dialog
+        if (['EMAIL', 'SMS', 'WHATSAPP'].includes(type) && !scheduledPostTime) {
+            setSendNowStep('initial');
+            setShowSendNowDialog(true);
+            return;
         }
 
         try {
@@ -1297,6 +1441,144 @@ export default function EditPostPage() {
                     existingContent: message,
                 }}
             />
+
+            {/* Send Now / Schedule Dialog */}
+            <Dialog open={showSendNowDialog} onOpenChange={setShowSendNowDialog}>
+                <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {sendNowStep === 'initial' ? 'Unscheduled Post' : 'Select Contacts'}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {sendNowStep === 'initial'
+                                ? "You haven't scheduled this post. Would you like to send it immediately?"
+                                : "Select the contacts you want to send this post to."}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {sendNowStep === 'initial' ? (
+                        <div className="flex flex-col gap-3 py-4">
+                            <Button
+                                className='cursor-pointer w-full justify-start'
+                                variant="outline"
+                                onClick={() => {
+                                    setShowSendNowDialog(false);
+                                    // Focus the schedule input
+                                    document.getElementById('scheduledPostTime')?.focus();
+                                }}
+                            >
+                                <Sparkles className="mr-2 size-4" />
+                                Schedule for Later
+                            </Button>
+                            <Button
+                                className='cursor-pointer w-full justify-start'
+                                onClick={() => executeUpdateAndSend()} // Send to ALL
+                            >
+                                <Send className="mr-2 size-4" />
+                                Send Now to All Contacts ({campaignContacts.length})
+                            </Button>
+                            <Button
+                                className='cursor-pointer w-full justify-start'
+                                variant="secondary"
+                                onClick={() => {
+                                    setSendNowStep('select_contacts');
+                                    setSelectedSendContacts([]); // Reset selection
+                                }}
+                            >
+                                <Check className="mr-2 size-4" />
+                                Select Contacts to Send
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col gap-4 py-4 max-h-[60vh]">
+                            {/* Search and Filter */}
+                            <div className="space-y-2">
+                                <div className="relative">
+                                    <SearchIcon className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+                                    <Input
+                                        className="pl-9"
+                                        placeholder="Search contacts..."
+                                        value={contactSearchQuery}
+                                        onChange={(e) => setContactSearchQuery(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                                    <span>{filteredContacts.length} contacts found</span>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-auto p-0 text-xs text-primary"
+                                        onClick={toggleAllContacts}
+                                    >
+                                        {filteredContacts.length > 0 && filteredContacts.every(c => selectedSendContacts.includes(String(c.id)))
+                                            ? 'Deselect All'
+                                            : 'Select All Visible'}
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Contacts List */}
+                            <ScrollArea className="flex-1 border rounded-md h-[300px]">
+                                <div className="p-4 space-y-2">
+                                    {filteredContacts.length === 0 ? (
+                                        <p className="text-center text-sm text-muted-foreground py-8">
+                                            No contacts found.
+                                        </p>
+                                    ) : (
+                                        filteredContacts.map((contact: any) => (
+                                            <div key={contact.id} className="flex items-start space-x-2 space-y-0 p-2 hover:bg-muted/50 rounded-md transition-colors">
+                                                <Checkbox
+                                                    id={`contact-${contact.id}`}
+                                                    checked={selectedSendContacts.includes(String(contact.id))}
+                                                    onCheckedChange={() => toggleSendContact(String(contact.id))}
+                                                />
+                                                <div className="grid gap-1.5 leading-none">
+                                                    <label
+                                                        htmlFor={`contact-${contact.id}`}
+                                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                                    >
+                                                        {contact.contactName || 'Unnamed Contact'}
+                                                    </label>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {contact.contactEmail} • {contact.contactMobile}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </ScrollArea>
+
+                            <DialogFooter className="gap-2 sm:gap-0">
+                                <Button
+                                    variant="outline"
+                                    className='mx-2'
+                                    onClick={() => setSendNowStep('initial')}
+                                    disabled={isSending}
+                                >
+                                    Back
+                                </Button>
+                                <Button
+                                    onClick={() => executeUpdateAndSend(selectedSendContacts)}
+                                    disabled={selectedSendContacts.length === 0 || isSending}
+                                >
+                                    {isSending ? (
+                                        <>
+                                            <Loader2 className="mr-2  size-4 animate-spin" />
+                                            Sending...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Send className="mr-2  size-4" />
+                                            Send to {selectedSendContacts.length} Contacts
+                                        </>
+                                    )}
+                                </Button>
+                            </DialogFooter>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
