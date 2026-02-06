@@ -197,6 +197,13 @@ function PurchaseContent() {
             }
         }
 
+        // Full name validation (at least two words)
+        const nameParts = formData.name.trim().split(/\s+/);
+        if (nameParts.length < 2) {
+            toast.error("Please enter your full name.");
+            return;
+        }
+
         if (!isSignedIn && formData.password !== formData.confirmPassword) {
             toast.error("Passwords do not match.");
             return;

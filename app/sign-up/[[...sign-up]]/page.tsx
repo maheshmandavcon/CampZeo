@@ -166,6 +166,15 @@ export default function Page() {
       }
     }
 
+    // Full name validation (at least two words)
+    const nameParts = form.name.trim().split(/\s+/);
+    if (nameParts.length < 2) {
+      toast.error("Invalid Owner Name", {
+        description: "Please enter your full name.",
+      });
+      return;
+    }
+
     if (form.password !== form.confirmPassword) {
       toast.error("Password Mismatch", {
         description: "Passwords do not match.",

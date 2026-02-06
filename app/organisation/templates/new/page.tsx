@@ -1214,78 +1214,80 @@ export default function NewTemplatePage() {
                     )}
 
                     {/* Media Upload Section */}
-                    <div className="space-y-3">
-                        <label className="text-sm font-medium">Upload Media (Optional)</label>
+                    {formData.platform !== 'SMS' && (
                         <div className="space-y-3">
-                            {/* Upload Button */}
-                            <div className="flex items-center gap-3">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => document.getElementById('media-upload')?.click()}
-                                    disabled={isUploading}
-                                    className="gap-2"
-                                >
-                                    {isUploading ? (
-                                        <>
-                                            <div className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                                            Uploading... {uploadProgress > 0 ? `${uploadProgress.toFixed(0)}%` : ''}
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Upload className="size-4" />
-                                            Upload Images/Videos
-                                        </>
-                                    )}
-                                </Button>
-                                <input
-                                    id="media-upload"
-                                    type="file"
-                                    accept="image/*,video/*"
-                                    multiple
-                                    onChange={handleImageUpload}
-                                    className="hidden"
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    Images and videos can be changed when creating posts
-                                </p>
-                            </div>
-
-                            {/* Media Previews */}
-                            {formData.mediaUrls.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                    {formData.mediaUrls.map((url, index) => {
-                                        const isVideoUrl = isVideo(url);
-                                        return (
-                                            <div key={index} className="group relative size-20 overflow-hidden rounded-md border bg-muted">
-                                                {isVideoUrl ? (
-                                                    <video
-                                                        src={url}
-                                                        className="size-full object-cover"
-                                                        preload="metadata"
-                                                    />
-                                                ) : (
-                                                    <Image
-                                                        src={url}
-                                                        alt={`Upload ${index + 1}`}
-                                                        fill
-                                                        className="object-cover"
-                                                        unoptimized
-                                                    />
-                                                )}
-                                                <button
-                                                    onClick={() => removeImage(index)}
-                                                    className="absolute right-0.5 top-0.5 rounded-full bg-black/50 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
-                                                >
-                                                    <X className="size-3" />
-                                                </button>
-                                            </div>
-                                        );
-                                    })}
+                            <label className="text-sm font-medium">Upload Media (Optional)</label>
+                            <div className="space-y-3">
+                                {/* Upload Button */}
+                                <div className="flex items-center gap-3">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => document.getElementById('media-upload')?.click()}
+                                        disabled={isUploading}
+                                        className="gap-2"
+                                    >
+                                        {isUploading ? (
+                                            <>
+                                                <div className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                                Uploading... {uploadProgress > 0 ? `${uploadProgress.toFixed(0)}%` : ''}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Upload className="size-4" />
+                                                Upload Images/Videos
+                                            </>
+                                        )}
+                                    </Button>
+                                    <input
+                                        id="media-upload"
+                                        type="file"
+                                        accept="image/*,video/*"
+                                        multiple
+                                        onChange={handleImageUpload}
+                                        className="hidden"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Images and videos can be changed when creating posts
+                                    </p>
                                 </div>
-                            )}
+
+                                {/* Media Previews */}
+                                {formData.mediaUrls.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                        {formData.mediaUrls.map((url, index) => {
+                                            const isVideoUrl = isVideo(url);
+                                            return (
+                                                <div key={index} className="group relative size-20 overflow-hidden rounded-md border bg-muted">
+                                                    {isVideoUrl ? (
+                                                        <video
+                                                            src={url}
+                                                            className="size-full object-cover"
+                                                            preload="metadata"
+                                                        />
+                                                    ) : (
+                                                        <Image
+                                                            src={url}
+                                                            alt={`Upload ${index + 1}`}
+                                                            fill
+                                                            className="object-cover"
+                                                            unoptimized
+                                                        />
+                                                    )}
+                                                    <button
+                                                        onClick={() => removeImage(index)}
+                                                        className="absolute right-0.5 top-0.5 rounded-full bg-black/50 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+                                                    >
+                                                        <X className="size-3" />
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Subject/Title (conditional) */}
                     {showSubjectField && (

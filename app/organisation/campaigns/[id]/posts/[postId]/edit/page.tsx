@@ -1256,7 +1256,7 @@ export default function EditPostPage() {
                                                                         placeholder="e.g., Summer Inspiration"
                                                                     />
                                                                 </div>
-                                           0                     <div className="space-y-2">
+                                                                <div className="space-y-2">
                                                                     <Label htmlFor="boardDesc">Description (Optional)</Label>
                                                                     <Textarea
                                                                         id="boardDesc"

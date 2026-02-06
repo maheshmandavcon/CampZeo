@@ -31,6 +31,13 @@ export default function TemplatePreview({
     const hasMedia = mediaUrls && mediaUrls.length > 0;
     const firstMedia = hasMedia ? mediaUrls[0] : null;
 
+    const isVideo = (url: string | null) => {
+        if (!url) return false;
+        return url.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
+    };
+
+    const isFirstMediaVideo = isVideo(firstMedia);
+
     switch (platform) {
         case "FACEBOOK":
             return (
@@ -52,13 +59,23 @@ export default function TemplatePreview({
 
                         {hasMedia && (
                             <div className="relative aspect-video w-full overflow-hidden rounded bg-gray-100">
-                                <Image
-                                    src={firstMedia!}
-                                    alt="Preview"
-                                    fill
-                                    className="object-cover"
-                                    unoptimized
-                                />
+                                {isFirstMediaVideo ? (
+                                    <video
+                                        src={firstMedia!}
+                                        className="size-full object-cover"
+                                        muted
+                                        loop
+                                        playsInline
+                                    />
+                                ) : (
+                                    <Image
+                                        src={firstMedia!}
+                                        alt="Preview"
+                                        fill
+                                        className="object-cover"
+                                        unoptimized
+                                    />
+                                )}
                             </div>
                         )}
 
@@ -93,13 +110,23 @@ export default function TemplatePreview({
 
                     {hasMedia ? (
                         <div className="relative aspect-square w-full bg-black">
-                            <Image
-                                src={firstMedia!}
-                                alt="Preview"
-                                fill
-                                className="object-cover"
-                                unoptimized
-                            />
+                            {isFirstMediaVideo ? (
+                                <video
+                                    src={firstMedia!}
+                                    className="size-full object-cover"
+                                    muted
+                                    loop
+                                    playsInline
+                                />
+                            ) : (
+                                <Image
+                                    src={firstMedia!}
+                                    alt="Preview"
+                                    fill
+                                    className="object-cover"
+                                    unoptimized
+                                />
+                            )}
                         </div>
                     ) : (
                         <div className="flex aspect-square items-center justify-center bg-gray-50">
@@ -147,13 +174,23 @@ export default function TemplatePreview({
 
                         {hasMedia && (
                             <div className="relative aspect-video w-full overflow-hidden rounded bg-gray-100">
-                                <Image
-                                    src={firstMedia!}
-                                    alt="Preview"
-                                    fill
-                                    className="object-cover"
-                                    unoptimized
-                                />
+                                {isFirstMediaVideo ? (
+                                    <video
+                                        src={firstMedia!}
+                                        className="size-full object-cover"
+                                        muted
+                                        loop
+                                        playsInline
+                                    />
+                                ) : (
+                                    <Image
+                                        src={firstMedia!}
+                                        alt="Preview"
+                                        fill
+                                        className="object-cover"
+                                        unoptimized
+                                    />
+                                )}
                             </div>
                         )}
 
@@ -176,13 +213,23 @@ export default function TemplatePreview({
                 <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
                     {hasMedia ? (
                         <div className="relative aspect-video w-full bg-black">
-                            <Image
-                                src={firstMedia!}
-                                alt="Preview"
-                                fill
-                                className="object-cover"
-                                unoptimized
-                            />
+                            {isFirstMediaVideo ? (
+                                <video
+                                    src={firstMedia!}
+                                    className="size-full object-cover opacity-80"
+                                    muted
+                                    loop
+                                    playsInline
+                                />
+                            ) : (
+                                <Image
+                                    src={firstMedia!}
+                                    alt="Preview"
+                                    fill
+                                    className="object-cover"
+                                    unoptimized
+                                />
+                            )}
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <div className="rounded-full bg-red-600 p-3">
                                     <Play className="size-6 text-white fill-white" />
@@ -223,13 +270,23 @@ export default function TemplatePreview({
                         </p>
                         {hasMedia && (
                             <div className="mt-2 relative aspect-video w-full overflow-hidden rounded bg-gray-100">
-                                <Image
-                                    src={firstMedia!}
-                                    alt="Preview"
-                                    fill
-                                    className="object-cover"
-                                    unoptimized
-                                />
+                                {isFirstMediaVideo ? (
+                                    <video
+                                        src={firstMedia!}
+                                        className="size-full object-cover"
+                                        muted
+                                        loop
+                                        playsInline
+                                    />
+                                ) : (
+                                    <Image
+                                        src={firstMedia!}
+                                        alt="Preview"
+                                        fill
+                                        className="object-cover"
+                                        unoptimized
+                                    />
+                                )}
                             </div>
                         )}
                     </div>
@@ -247,13 +304,23 @@ export default function TemplatePreview({
                             </p>
                             {hasMedia && (
                                 <div className="mt-2 relative aspect-video w-full overflow-hidden rounded bg-gray-100">
-                                    <Image
-                                        src={firstMedia!}
-                                        alt="Preview"
-                                        fill
-                                        className="object-cover"
-                                        unoptimized
-                                    />
+                                    {isFirstMediaVideo ? (
+                                        <video
+                                            src={firstMedia!}
+                                            className="size-full object-cover"
+                                            muted
+                                            loop
+                                            playsInline
+                                        />
+                                    ) : (
+                                        <Image
+                                            src={firstMedia!}
+                                            alt="Preview"
+                                            fill
+                                            className="object-cover"
+                                            unoptimized
+                                        />
+                                    )}
                                 </div>
                             )}
                             <p className="text-xs text-gray-400 text-right mt-1">Just now</p>
@@ -267,13 +334,23 @@ export default function TemplatePreview({
                 <div className="rounded-lg border bg-white shadow-sm overflow-hidden mx-auto" style={{ maxWidth: "240px" }}>
                     <div className="relative w-full aspect-[3/4] bg-gray-100">
                         {hasMedia ? (
-                            <Image
-                                src={firstMedia!}
-                                alt="Pin Preview"
-                                fill
-                                className="object-cover"
-                                unoptimized
-                            />
+                            isFirstMediaVideo ? (
+                                <video
+                                    src={firstMedia!}
+                                    className="size-full object-cover"
+                                    muted
+                                    loop
+                                    playsInline
+                                />
+                            ) : (
+                                <Image
+                                    src={firstMedia!}
+                                    alt="Pin Preview"
+                                    fill
+                                    className="object-cover"
+                                    unoptimized
+                                />
+                            )
                         ) : (
                             <div className="flex h-full w-full flex-col items-center justify-center p-4 text-center">
                                 <ImageIcon className="mb-2 size-8 text-gray-300" />
