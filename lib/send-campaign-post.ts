@@ -551,6 +551,7 @@ export async function sendCampaignPost(
                         boardId: targetBoardId,
                         coverImageUrl: metadata?.thumbnailUrl || undefined,
                         isVideo: isVideoPin,
+                        destinationLink: metadata?.link || undefined,
                     }
                 );
 

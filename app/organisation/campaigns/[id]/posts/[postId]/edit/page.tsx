@@ -1256,7 +1256,7 @@ export default function EditPostPage() {
                                                                         placeholder="e.g., Summer Inspiration"
                                                                     />
                                                                 </div>
-                                                                <div className="space-y-2">
+                                           0                     <div className="space-y-2">
                                                                     <Label htmlFor="boardDesc">Description (Optional)</Label>
                                                                     <Textarea
                                                                         id="boardDesc"
@@ -1278,6 +1278,16 @@ export default function EditPostPage() {
                                                     </Dialog>
                                                 </>
                                             )}
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="pinterestLink">Destination Link (Optional)</Label>
+                                            <Input
+                                                id="pinterestLink"
+                                                placeholder="https://example.com"
+                                                value={pinterestLink}
+                                                onChange={(e) => setPinterestLink(e.target.value)}
+                                            />
                                         </div>
 
                                     </div>
