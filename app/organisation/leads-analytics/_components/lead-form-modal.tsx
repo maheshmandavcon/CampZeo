@@ -78,11 +78,11 @@ export function LeadFormModal({
 
             // Format questions for Meta API
             const formattedQuestions = [
-                ...questions.map(q => ({ type: q.type, key: q.type.toLowerCase() })),
+                ...questions.map(q => ({ type: q.type })),
                 ...customQuestions.map((q, i) => ({
                     type: 'CUSTOM',
                     label: q.label,
-                    key: `custom_${i}`
+                    key: `custom_question_${i}`
                 }))
             ];
 

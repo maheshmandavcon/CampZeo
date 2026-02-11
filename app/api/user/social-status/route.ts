@@ -114,21 +114,21 @@ async function getHandler() {
             }
         }
 
-            if (fbStatus) {
-                status.facebook = {
-                    ...fbStatus,
-                    pageId: dbUser.facebookPageId
-                };
-                // If it's a session expired error, override name for UI clarity
-                if (fbStatus.error === "Session Expired") {
-                    status.facebook.name = "Session Expired (Re-connect)";
-                }
-            } else {
-                status.facebook = { connected: true, name: "Connection Restricted" };
+        if (fbStatus) {
+            status.facebook = {
+                ...fbStatus,
+                pageId: dbUser.facebookPageId
+            };
+            // If it's a session expired error, override name for UI clarity
+            if (fbStatus.error === "Session Expired") {
+                status.facebook.name = "Session Expired (Re-connect)";
             }
         } else {
-            status.facebook = { connected: false };
+            status.facebook = { connected: true, name: "Connection Restricted" };
         }
+    } else {
+        status.facebook = { connected: false };
+    }
 
     // Instagram (via Facebook Graph API for Business Accounts)
     if (dbUser.instagramAccessToken && dbUser.instagramUserId) {
@@ -139,7 +139,7 @@ async function getHandler() {
                 // Start Recovery: Try to find the business account again
                 console.log("[Social Status] Attempting to heal Instagram 'no-business-account' state...");
                 const pagesRes = await fetchWithTimeout(
-                    `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,name}&access_token=${dbUser.instagramAccessToken}`
+                    `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,name}&access_token=${dbUser.instagramAccessToken}`
                 );
 
                 if (pagesRes.ok) {
@@ -181,7 +181,7 @@ async function getHandler() {
                 // Use Facebook Graph API with the Instagram Business Account ID
                 // Note: dbUser.instagramAccessToken is likely the Page Token here (best practice) or User Token
                 const res = await fetchWithTimeout(
-                    `https://graph.facebook.com/v18.0/${dbUser.instagramUserId}?fields=username,name&access_token=${dbUser.instagramAccessToken}`
+                    `https://graph.facebook.com/v21.0/${dbUser.instagramUserId}?fields=username,name&access_token=${dbUser.instagramAccessToken}`
                 );
                 if (res.ok) {
                     const data = await res.json();

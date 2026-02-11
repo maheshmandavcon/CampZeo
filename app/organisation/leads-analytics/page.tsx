@@ -18,9 +18,19 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Download, Loader2, Users, RefreshCw, AlertCircle } from 'lucide-react';
+import { Download, Loader2, Users, RefreshCw, AlertCircle, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { LeadFormModal } from './_components/lead-form-modal';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 export default function LeadsAnalyticsPage() {
     const [leads, setLeads] = useState<any[]>([]);
@@ -29,6 +39,32 @@ export default function LeadsAnalyticsPage() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [exporting, setExporting] = useState(false);
+
+    // Lead Form Creation State
+    const [facebookPages, setFacebookPages] = useState<any[]>([]);
+    const [loadingPages, setLoadingPages] = useState(false);
+    const [selectedPageId, setSelectedPageId] = useState<string>('');
+    const [selectedPageAccessToken, setSelectedPageAccessToken] = useState<string>('');
+    const [isLeadFormModalOpen, setIsLeadFormModalOpen] = useState(false);
+
+    const fetchFacebookPages = async () => {
+        try {
+            setLoadingPages(true);
+            const response = await fetch('/api/socialmedia/facebook/pages');
+            if (response.ok) {
+                const data = await response.json();
+                setFacebookPages(data.pages || []);
+                if (data.pages?.length === 1) {
+                    setSelectedPageId(data.pages[0].id);
+                    setSelectedPageAccessToken(data.pages[0].access_token);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching Facebook pages:', error);
+        } finally {
+            setLoadingPages(false);
+        }
+    };
 
     const fetchLeadsData = async (postId?: string, isInit = false) => {
         try {
@@ -77,6 +113,7 @@ export default function LeadsAnalyticsPage() {
 
     useEffect(() => {
         fetchLeadsData(undefined, true);
+        fetchFacebookPages();
     }, []);
 
     useEffect(() => {
@@ -122,21 +159,74 @@ export default function LeadsAnalyticsPage() {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px]">
                 <Loader2 className="size-8 animate-spin text-primary mb-4" />
-                <p className="text-muted-foreground">Loading Leads Analytics...</p>
+                <p className="text-muted-foreground">Loading Leads Management...</p>
             </div>
         );
     }
+
+    const selectedPage = facebookPages.find(p => p.id === selectedPageId);
 
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Leads Analytics</h1>
+                    <h1 className="text-3xl font-bold tracking-tight">Leads Management</h1>
                     <p className="text-muted-foreground mt-1">
                         Track and manage leads from your Facebook boosted posts.
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <Dialog>
+                        <DialogTrigger asChild>
+                            <Button className="cursor-pointer" variant="outline">
+                                <Plus className="size-4 mr-2" />
+                                Create Lead Form
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-md">
+                            <DialogHeader>
+                                <DialogTitle>Create Lead Form</DialogTitle>
+                                <DialogDescription>
+                                    Select a Facebook Page to create a new lead form for.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                    <Label>Facebook Page</Label>
+                                    <Select value={selectedPageId} onValueChange={(val) => {
+                                        setSelectedPageId(val);
+                                        const p = facebookPages.find(page => page.id === val);
+                                        if (p) setSelectedPageAccessToken(p.access_token);
+                                    }}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select a Page" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {loadingPages ? (
+                                                <div className="p-2 text-center"><Loader2 className="size-4 animate-spin inline mr-2" /> Loading...</div>
+                                            ) : facebookPages.length === 0 ? (
+                                                <div className="p-2 text-center text-sm text-muted-foreground">No pages found. Connect Facebook in Settings.</div>
+                                            ) : (
+                                                facebookPages.map((page) => (
+                                                    <SelectItem key={page.id} value={page.id}>
+                                                        {page.name}
+                                                    </SelectItem>
+                                                ))
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <Button
+                                    className="w-full"
+                                    disabled={!selectedPageId || !selectedPageAccessToken}
+                                    onClick={() => setIsLeadFormModalOpen(true)}
+                                >
+                                    Continue to Form Design
+                                </Button>
+                            </div>
+                        </DialogContent>
+                    </Dialog>
+
                     <Button
                         variant="outline"
                         onClick={() => fetchLeadsData(selectedPostId)}
@@ -278,6 +368,19 @@ export default function LeadsAnalyticsPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {selectedPageId && selectedPageAccessToken && (
+                <LeadFormModal
+                    isOpen={isLeadFormModalOpen}
+                    onClose={() => setIsLeadFormModalOpen(false)}
+                    pageId={selectedPageId}
+                    pageAccessToken={selectedPageAccessToken}
+                    onSuccess={(form: any) => {
+                        toast.success(`Form "${form.name}" created successfully!`);
+                        setIsLeadFormModalOpen(false);
+                    }}
+                />
+            )}
         </div>
     );
 }

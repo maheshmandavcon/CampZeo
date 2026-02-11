@@ -41,7 +41,6 @@ import {
 import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
 import { useUser } from '@clerk/nextjs';
 import { PostPreview } from './_components/post-preview';
-import { LeadFormModal } from './_components/lead-form-modal';
 import { WYSIWYGPreview } from '../_components/WYSIWYGPreview';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
@@ -148,8 +147,6 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [leadForms, setLeadForms] = useState<any[]>([]);
     const [loadingLeadForms, setLoadingLeadForms] = useState(false);
     const [selectedLeadFormId, setSelectedLeadFormId] = useState<string>('');
-    const [isLeadFormModalOpen, setIsLeadFormModalOpen] = useState(false);
-    const [editingLeadForm, setEditingLeadForm] = useState<any>(null);
 
     // AI Assistant state
     const [showAIAssistant, setShowAIAssistant] = useState(false);
@@ -589,7 +586,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     facebookPageAccessToken: selectedFacebookPageAccessToken, // NEW: Selected Facebook Page Access Token
                     instagramBusinessId: selectedInstagramBusinessId, // NEW: Linked Instagram ID
                     linkedInUrn: selectedLinkedInUrn, // NEW: Selected LinkedIn Author URN
-                    leadFormId: selectedLeadFormId && selectedLeadFormId !== 'none' ? selectedLeadFormId : null
+                    leadFormId: selectedLeadFormId && selectedLeadFormId !== 'none' ? selectedLeadFormId : null,
                     metaBoost: boostOptions.enabled ? boostOptions : undefined, // NEW: Meta Boost options
                 }),
             });
@@ -1323,19 +1320,6 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                     <FileText className="size-4 text-blue-600" />
                                                     Attach Lead Form (Optional)
                                                 </Label>
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="h-7 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-100/50"
-                                                    onClick={() => {
-                                                        setEditingLeadForm(null);
-                                                        setIsLeadFormModalOpen(true);
-                                                    }}
-                                                >
-                                                    <Plus className="size-3 mr-1" />
-                                                    New Form
-                                                </Button>
                                             </div>
 
                                             {loadingLeadForms ? (
@@ -1363,28 +1347,11 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                             </SelectContent>
                                                         </Select>
                                                     </div>
-                                                    {selectedLeadFormId && selectedLeadFormId !== 'none' && (
-                                                        <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            size="icon"
-                                                            className="shrink-0"
-                                                            title="Duplicate & Edit"
-                                                            onClick={() => {
-                                                                const form = leadForms.find(f => f.id === selectedLeadFormId);
-                                                                if (form) {
-                                                                    setEditingLeadForm(form);
-                                                                    setIsLeadFormModalOpen(true);
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Plus className="size-4" />
-                                                        </Button>
-                                                    )}
                                                 </div>
                                             )}
                                             <p className="text-[10px] text-muted-foreground">
                                                 Lead forms allow you to collect contact information directly from the post.
+                                                Manage your lead forms in <strong>Leads Management</strong>.
                                             </p>
                                         </div>
                                     )}
@@ -1869,17 +1836,6 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                         </DialogContent>
                                     </Dialog> */}
                     </div>
-                    <LeadFormModal
-                        isOpen={isLeadFormModalOpen}
-                        onClose={() => setIsLeadFormModalOpen(false)}
-                        pageId={selectedFacebookPageId}
-                        pageAccessToken={selectedFacebookPageAccessToken}
-                        initialData={editingLeadForm}
-                        onSuccess={(newForm) => {
-                            setLeadForms(prev => [newForm, ...prev]);
-                            setSelectedLeadFormId(newForm.id);
-                        }}
-                    />
                 </form>
 
                 {/* AI Content Assistant */}

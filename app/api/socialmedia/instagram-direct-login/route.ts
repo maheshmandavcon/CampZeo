@@ -40,17 +40,10 @@ async function postHandler(request: NextRequest) {
         );
     }
 
-    // Step 1: Get OAuth token for Instagram Graph API
-    // Note: This is a simplified implementation. In production, you might need to:
-    // 1. Use Instagram's official SDK
-    // 2. Implement proper error handling for rate limiting and security
-    // 3. Consider using Instagram's server-to-server authentication
-
     try {
-        // Attempt to authenticate using Instagram Graph API
-        // This endpoint validates credentials and returns an access token
+        // Step 1: Get OAuth token for Instagram Graph API
         const tokenResponse = await fetch(
-            'https://graph.instagram.com/v18.0/oauth/access_token',
+            'https://graph.instagram.com/v21.0/oauth/access_token',
             {
                 method: 'POST',
                 headers: {
@@ -81,7 +74,7 @@ async function postHandler(request: NextRequest) {
 
         // Step 2: Fetch user information
         const meResponse = await fetch(
-            `https://graph.instagram.com/v18.0/me?fields=id,username,name,account_type&access_token=${accessToken}`
+            `https://graph.instagram.com/v21.0/me?fields=id,username,name,account_type&access_token=${accessToken}`
         );
 
         const meData = await meResponse.json();
@@ -141,8 +134,6 @@ async function postHandler(request: NextRequest) {
             { status: 500 }
         );
     }
-
-
 }
 
 export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/instagram-direct-login", "postHandler");
