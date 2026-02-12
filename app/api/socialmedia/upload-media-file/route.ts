@@ -16,66 +16,66 @@ const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm', 'vide
 
 async function postHandler(request: NextRequest) {
 
-    const formData = await request.formData();
-    const file = formData.get("file") as File;
+        const formData = await request.formData();
+        const file = formData.get("file") as File;
 
-    if (!file) {
-        return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-    }
+        if (!file) {
+            return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+        }
 
-    // Validate file type
-    const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
-    const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
+        // Validate file type
+        const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+        const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
 
-    if (!isImage && !isVideo) {
+        if (!isImage && !isVideo) {
+            return NextResponse.json({
+                error: "Invalid file type. Allowed: JPG, PNG, GIF, WebP, MP4, MOV, WebM"
+            }, { status: 400 });
+        }
+
+        // Validate file size
+        const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+        if (file.size > maxSize) {
+            const maxSizeMB = maxSize / (1024 * 1024);
+            return NextResponse.json({
+                error: `File too large. Maximum size: ${maxSizeMB}MB`
+            }, { status: 400 });
+        }
+
+        // Generate unique filename
+        const fileExtension = file.name.split('.').pop();
+        const filename = `${crypto.randomUUID()}.${fileExtension}`;
+
+        // Always use Vercel Blob storage
+        if (!process.env.BLOB_READ_WRITE_TOKEN) {
+            return NextResponse.json({
+                error: 'Blob storage not configured. Please set BLOB_READ_WRITE_TOKEN environment variable.'
+            }, { status: 500 });
+        }
+
+        console.log('[Upload] Using Vercel Blob storage');
+
+        const blob = await put(filename, file, {
+            access: 'public',
+            addRandomSuffix: false,
+        });
+
+        const url = blob.url;
+        console.log('[Upload] File uploaded to Vercel Blob:', url);
+
         return NextResponse.json({
-            error: "Invalid file type. Allowed: JPG, PNG, GIF, WebP, MP4, MOV, WebM"
-        }, { status: 400 });
-    }
+            url,
+            filename,
+            size: file.size,
+            type: file.type,
+            isImage,
+            isVideo
+        });
 
-    // Validate file size
-    const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
-    if (file.size > maxSize) {
-        const maxSizeMB = maxSize / (1024 * 1024);
-        return NextResponse.json({
-            error: `File too large. Maximum size: ${maxSizeMB}MB`
-        }, { status: 400 });
-    }
-
-    // Generate unique filename
-    const fileExtension = file.name.split('.').pop();
-    const filename = `${crypto.randomUUID()}.${fileExtension}`;
-
-    // Always use Vercel Blob storage
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
-        return NextResponse.json({
-            error: 'Blob storage not configured. Please set BLOB_READ_WRITE_TOKEN environment variable.'
-        }, { status: 500 });
-    }
-
-    console.log('[Upload] Using Vercel Blob storage');
-
-    const blob = await put(filename, file, {
-        access: 'public',
-        addRandomSuffix: false,
-    });
-
-    const url = blob.url;
-    console.log('[Upload] File uploaded to Vercel Blob:', url);
-
-    return NextResponse.json({
-        url,
-        filename,
-        size: file.size,
-        type: file.type,
-        isImage,
-        isVideo
-    });
-
-
+    
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/upload-media-file", "postHandler");
+export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/upload-media-file");
 
 // Optional: Add GET endpoint to retrieve upload info
 async function getHandler() {
@@ -91,4 +91,4 @@ async function getHandler() {
 
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/upload-media-file", "getHandler");
+export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/upload-media-file");

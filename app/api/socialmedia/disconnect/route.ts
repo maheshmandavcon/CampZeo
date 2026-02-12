@@ -7,59 +7,59 @@ import { logError, logWarning, logInfo } from '@/lib/audit-logger';
 import { withErrorHandling } from '@/lib/api-handler';
 async function postHandler(request: NextRequest) {
 
-    const { userId: currentUserId } = await auth();
-    if (!currentUserId) {
-        await logWarning("Unauthorized access attempt to disconnect platform", { action: "disconnect-platform" });
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    let targetUserId = currentUserId;
-    const impersonatedOrgId = await getImpersonatedOrganisationId();
-
-    if (impersonatedOrgId) {
-        const orgUser = await prisma.user.findFirst({
-            where: { organisationId: impersonatedOrgId }
-        });
-        if (orgUser) {
-            targetUserId = orgUser.clerkId;
+        const { userId: currentUserId } = await auth();
+        if (!currentUserId) {
+            await logWarning("Unauthorized access attempt to disconnect platform", { action: "disconnect-platform" });
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
-    }
 
-    const body = await request.json();
-    const { platform } = body;
+        let targetUserId = currentUserId;
+        const impersonatedOrgId = await getImpersonatedOrganisationId();
 
-    if (!platform) {
-        return NextResponse.json({ error: "Platform is required" }, { status: 400 });
-    }
+        if (impersonatedOrgId) {
+            const orgUser = await prisma.user.findFirst({
+                where: { organisationId: impersonatedOrgId }
+            });
+            if (orgUser) {
+                targetUserId = orgUser.clerkId;
+            }
+        }
 
-    const updateData: any = {};
-    if (platform === "FACEBOOK") {
-        updateData.facebookAccessToken = null;
-        updateData.facebookPageAccessToken = null;
-        updateData.facebookPageId = null;
-        updateData.facebookUserId = null;
-    } else if (platform === "INSTAGRAM") {
-        updateData.instagramAccessToken = null;
-        updateData.instagramUserId = null;
-    } else if (platform === "LINKEDIN") {
-        updateData.linkedInAccessToken = null;
-        updateData.linkedInAuthUrn = null;
-    } else if (platform === "YOUTUBE") {
-        updateData.youtubeAccessToken = null;
-        updateData.youtubeAuthUrn = null;
-    } else if (platform === "PINTEREST") {
-        updateData.pinterestAccessToken = null;
-        updateData.pinterestAuthUrn = null;
-    }
+        const body = await request.json();
+        const { platform } = body;
 
-    await prisma.user.update({
-        where: { clerkId: targetUserId },
-        data: updateData
-    });
+        if (!platform) {
+            return NextResponse.json({ error: "Platform is required" }, { status: 400 });
+        }
 
-    await logInfo("Social media platform disconnected", { userId: targetUserId, platform });
-    return NextResponse.json({ success: true });
+        const updateData: any = {};
+        if (platform === "FACEBOOK") {
+            updateData.facebookAccessToken = null;
+            updateData.facebookPageAccessToken = null;
+            updateData.facebookPageId = null;
+            updateData.facebookUserId = null;
+        } else if (platform === "INSTAGRAM") {
+            updateData.instagramAccessToken = null;
+            updateData.instagramUserId = null;
+        } else if (platform === "LINKEDIN") {
+            updateData.linkedInAccessToken = null;
+            updateData.linkedInAuthUrn = null;
+        } else if (platform === "YOUTUBE") {
+            updateData.youtubeAccessToken = null;
+            updateData.youtubeAuthUrn = null;
+        } else if (platform === "PINTEREST") {
+            updateData.pinterestAccessToken = null;
+            updateData.pinterestAuthUrn = null;
+        }
 
+        await prisma.user.update({
+            where: { clerkId: targetUserId },
+            data: updateData
+        });
+
+        await logInfo("Social media platform disconnected", { userId: targetUserId, platform });
+        return NextResponse.json({ success: true });
+    
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/disconnect", "postHandler");
+export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/disconnect");

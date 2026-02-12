@@ -173,4 +173,4 @@ async function getPostsHandler(req: NextRequest) {
         lastSync: lastSyncRecord?.updatedAt || new Date()
     });
 }
-export const GET = withErrorHandling(getPostsHandler, 'GET /api/Analytics/posts', 'getPostsHandler');
+export const GET = withErrorHandling(getPostsHandler, 'GET /api/Analytics/posts');

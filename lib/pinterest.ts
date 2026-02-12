@@ -21,7 +21,6 @@ export async function postToPinterest(
         coverImageUrl?: string;
         coverImageKeyFrameTime?: number;
         isVideo?: boolean;
-        destinationLink?: string;
     }
 ) {
     const { accessToken } = credentials;
@@ -37,7 +36,6 @@ export async function postToPinterest(
             title,
             description,
             board_id: metadata?.boardId || undefined,
-            link: metadata?.destinationLink || undefined,
         };
 
         const mediaList = Array.isArray(media) ? media : [media];

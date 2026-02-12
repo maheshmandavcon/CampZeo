@@ -74,4 +74,4 @@ async function postHandler(request: NextRequest) {
 
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/ai/sync-analytics", "postHandler");
+export const POST = withErrorHandling(postHandler, "POST /api/ai/sync-analytics");

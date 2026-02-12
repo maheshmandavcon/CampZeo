@@ -34,7 +34,7 @@ export async function postToFacebook(
     credentials: FacebookCredentials,
     message: string,
     mediaUrls?: string | string[] | null,
-    options?: { isReel?: boolean }
+    options?: { isReel?: boolean; scheduledPublishTime?: number }
 ) {
     const { accessToken, pageId } = credentials;
 
@@ -63,7 +63,8 @@ export async function postToFacebook(
                     message,
                     access_token: accessToken,
                     privacy: { value: 'EVERYONE' }, // Ensure post is public
-                    published: true
+                    published: options?.scheduledPublishTime ? false : true,
+                    scheduled_publish_time: options?.scheduledPublishTime
                 }),
             });
 
@@ -129,7 +130,8 @@ export async function postToFacebook(
                                 file_url: publicUrl,
                                 access_token: accessToken,
                                 privacy: { value: 'EVERYONE' },
-                                published: true
+                                published: options?.scheduledPublishTime ? false : true,
+                                scheduled_publish_time: options?.scheduledPublishTime
                             }),
                         });
 
@@ -156,7 +158,8 @@ export async function postToFacebook(
                                 url: publicUrl,
                                 access_token: accessToken,
                                 privacy: { value: 'EVERYONE' },
-                                published: true
+                                published: options?.scheduledPublishTime ? false : true,
+                                scheduled_publish_time: options?.scheduledPublishTime
                             }),
                         });
 
@@ -226,7 +229,8 @@ export async function postToFacebook(
                     attached_media: mediaIds.map(id => ({ media_fbid: id })),
                     access_token: accessToken,
                     privacy: { value: 'EVERYONE' },
-                    published: true
+                    published: options?.scheduledPublishTime ? false : true,
+                    scheduled_publish_time: options?.scheduledPublishTime
                 }),
             });
 
@@ -609,13 +613,28 @@ export async function getFacebookPostInsights(
             const error = await postResponse.json();
             const errorMessage = error.error?.message || "";
 
-            // If the error is specifically about the 'shares' or 'engagement' field (common on Photo nodes), retry without them
-            if (errorMessage.includes('nonexisting field') && (errorMessage.includes('shares') || errorMessage.includes('engagement'))) {
+            // If the error is specifically about non-existing fields (common on Photo/Video nodes), retry without them
+            if (errorMessage.includes('nonexisting field')) {
                 console.log(`[Facebook] Retrying insights for ${postId} without incompatible fields...`);
-                fields = 'likes.summary(true),reactions.summary(true),comments.summary(true),message,full_picture,permalink_url';
-                postResponse = await fetch(
-                    `https://graph.facebook.com/v24.0/${postId}?fields=${fields}&access_token=${accessToken}`
-                );
+
+                // Identify which field caused the error and remove it
+                let currentFields = fields.split(',');
+                let newFieldsArr = currentFields;
+
+                if (errorMessage.includes('(shares)')) newFieldsArr = newFieldsArr.filter(f => f !== 'shares');
+                if (errorMessage.includes('(engagement)')) newFieldsArr = newFieldsArr.filter(f => f !== 'engagement');
+                if (errorMessage.includes('(message)')) {
+                    newFieldsArr = newFieldsArr.filter(f => f !== 'message');
+                    // For Photos, 'name' is often the caption field
+                    if (!newFieldsArr.includes('name')) newFieldsArr.push('name');
+                }
+
+                const newFields = newFieldsArr.join(',');
+                if (newFields !== fields) {
+                    postResponse = await fetch(
+                        `https://graph.facebook.com/v24.0/${postId}?fields=${newFields}&access_token=${accessToken}`
+                    );
+                }
             }
         }
 
@@ -751,7 +770,7 @@ export async function getFacebookPostInsights(
             engagement: totalEngagements,
             engagementRate,
             isDeleted: false,
-            message: postData.message,
+            message: postData.message || postData.name,
             full_picture: postData.full_picture,
             permalink_url: postData.permalink_url
         };
@@ -998,5 +1017,120 @@ export async function getFacebookAccountInsights(
     } catch (error) {
         console.error('[Facebook] Error fetching account insights:', error);
         return { reach: 0, impressions: 0, engagement: 0, followerCount: 0, pageViews: 0, pageLikes: 0, engagedUsers: 0 };
+    }
+}
+
+/**
+ * Lead Generation Functions
+ */
+
+// Fetch lead gen forms for a page
+export async function getFacebookLeadForms(pageId: string, pageAccessToken: string) {
+    try {
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/${pageId}/leadgen_forms?fields=id,name,status&access_token=${pageAccessToken}`
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(`Failed to fetch lead forms: ${JSON.stringify(error)}`);
+        }
+
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('[Facebook] Error fetching lead forms:', error);
+        throw error;
+    }
+}
+
+// Fetch leads for a specific form
+export async function getFacebookLeads(formId: string, pageAccessToken: string) {
+    try {
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/${formId}/leads?fields=id,created_time,field_data&access_token=${pageAccessToken}`
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(`Failed to fetch leads: ${JSON.stringify(error)}`);
+        }
+
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('[Facebook] Error fetching leads:', error);
+        throw error;
+    }
+}
+
+// Fetch details for a specific lead
+export async function getFacebookLeadDetails(leadId: string, pageAccessToken: string) {
+    try {
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/${leadId}?fields=id,created_time,ad_id,form_id,field_data&access_token=${pageAccessToken}`
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(`Failed to fetch lead details: ${JSON.stringify(error)}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('[Facebook] Error fetching lead details:', error);
+        throw error;
+    }
+}
+
+// Subscribe a page to the application's webhooks
+export async function subscribePageToApp(pageId: string, pageAccessToken: string) {
+    try {
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/${pageId}/subscribed_apps`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    subscribed_fields: ['leadgen'],
+                    access_token: pageAccessToken
+                })
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(`Failed to subscribe page: ${JSON.stringify(error)}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('[Facebook] Error subscribing page:', error);
+        throw error;
+    }
+}
+
+
+/**
+ * Ads Management Functions
+ */
+
+// Fetch all Ad Accounts reachable by the user
+export async function getFacebookAdAccounts(userAccessToken: string) {
+    try {
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/me/adaccounts?fields=id,name,account_status,amount_spent,balance,currency&access_token=${userAccessToken}`
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(`Failed to fetch ad accounts: ${JSON.stringify(error)}`);
+        }
+
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('[Facebook] Error fetching ad accounts:', error);
+        throw error;
     }
 }

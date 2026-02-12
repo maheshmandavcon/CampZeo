@@ -71,7 +71,7 @@ async function getCampaignHandler(
     return NextResponse.json({ campaign });
 }
 
-export const GET = withErrorHandling(getCampaignHandler, "GET /api/campaigns/[id]", "getCampaignHandler");
+export const GET = withErrorHandling(getCampaignHandler, "GET /api/campaigns/[id]");
 
 // PUT - Update a campaign
 async function updateCampaignHandler(
@@ -160,7 +160,7 @@ async function updateCampaignHandler(
     return NextResponse.json({ campaign });
 }
 
-export const PUT = withErrorHandling(updateCampaignHandler, "PUT /api/campaigns/[id]", "updateCampaignHandler");
+export const PUT = withErrorHandling(updateCampaignHandler, "PUT /api/campaigns/[id]");
 
 // DELETE - Soft delete a campaign
 async function deleteCampaignHandler(
@@ -219,4 +219,4 @@ async function deleteCampaignHandler(
     return NextResponse.json({ message: 'Campaign deleted successfully' });
 }
 
-export const DELETE = withErrorHandling(deleteCampaignHandler, "DELETE /api/campaigns/[id]", "deleteCampaignHandler");
+export const DELETE = withErrorHandling(deleteCampaignHandler, "DELETE /api/campaigns/[id]");

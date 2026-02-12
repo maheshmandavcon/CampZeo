@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { SettingsClient } from "./_components/settings-client";
 import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
+import { getFacebookAppId } from "@/lib/meta-ads";
 
 export default async function SettingsPage() {
   const user = await currentUser();
@@ -74,6 +75,7 @@ export default async function SettingsPage() {
   };
 
   const assignedPlatforms = organisation?.organisationPlatforms.map((p: any) => p.platform) || [];
+  const facebookAppId = await getFacebookAppId();
 
   return (
     <div className="p-6">
@@ -82,6 +84,7 @@ export default async function SettingsPage() {
           userData={userData}
           assignedPlatforms={assignedPlatforms}
           isImpersonating={isImpersonating}
+          facebookAppId={facebookAppId}
         />
       </div>
     </div>

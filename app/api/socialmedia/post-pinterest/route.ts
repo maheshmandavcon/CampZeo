@@ -7,73 +7,73 @@ import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
 import { withErrorHandling } from '@/lib/api-handler';
 async function postHandler(req: NextRequest) {
 
-    const { userId } = await auth();
-    if (!userId) {
-        return NextResponse.json({ isSuccess: false, message: 'Unauthorized' }, { status: 401 });
-    }
+        const { userId } = await auth();
+        if (!userId) {
+            return NextResponse.json({ isSuccess: false, message: 'Unauthorized' }, { status: 401 });
+        }
 
-    let targetUserId = userId;
-    const impersonatedOrgId = await getImpersonatedOrganisationId();
+        let targetUserId = userId;
+        const impersonatedOrgId = await getImpersonatedOrganisationId();
 
-    if (impersonatedOrgId) {
-        const orgUser = await prisma.user.findFirst({
-            where: { organisationId: impersonatedOrgId }
+        if (impersonatedOrgId) {
+            const orgUser = await prisma.user.findFirst({
+                where: { organisationId: impersonatedOrgId }
+            });
+            if (orgUser) {
+                targetUserId = orgUser.clerkId;
+            }
+        }
+
+        const dbUser = await prisma.user.findUnique({
+            where: { clerkId: targetUserId },
         });
-        if (orgUser) {
-            targetUserId = orgUser.clerkId;
+
+        if (!dbUser) {
+            return NextResponse.json({ isSuccess: false, message: 'User not found' }, { status: 404 });
         }
-    }
 
-    const dbUser = await prisma.user.findUnique({
-        where: { clerkId: targetUserId },
-    });
-
-    if (!dbUser) {
-        return NextResponse.json({ isSuccess: false, message: 'User not found' }, { status: 404 });
-    }
-
-    if (!dbUser.pinterestAccessToken) {
-        return NextResponse.json({ isSuccess: false, message: 'Pinterest account not connected. Please connect your account in Settings.' }, { status: 400 });
-    }
-
-    const body = await req.json();
-    const { title, description, mediaUrl, boardId, newBoardName } = body;
-
-    let targetBoardId = boardId;
-
-    // Validation
-    if (!title || !description || !mediaUrl) {
-        return NextResponse.json({ isSuccess: false, message: 'Title, description, and media are required' }, { status: 400 });
-    }
-
-    if (!boardId && !newBoardName) {
-        return NextResponse.json({ isSuccess: false, message: 'Please select a board or provide a name for a new board' }, { status: 400 });
-    }
-
-    // Create new board if requested
-    if (newBoardName) {
-        try {
-            // Default privacy to PUBLIC as requested implicitly by standard posting flow
-            const newBoard = await createPinterestBoard(dbUser.pinterestAccessToken, newBoardName, undefined, 'PUBLIC');
-            targetBoardId = newBoard.id;
-        } catch (error) {
-            console.error("Failed to create new board:", error);
-            return NextResponse.json({ isSuccess: false, message: 'Failed to create new board. Please try selecting an existing one.' }, { status: 500 });
+        if (!dbUser.pinterestAccessToken) {
+            return NextResponse.json({ isSuccess: false, message: 'Pinterest account not connected. Please connect your account in Settings.' }, { status: 400 });
         }
-    }
 
-    // Post to Pinterest
-    const result = await postToPinterest(
-        { accessToken: dbUser.pinterestAccessToken },
-        title,
-        description,
-        mediaUrl,
-        { boardId: targetBoardId }
-    );
+        const body = await req.json();
+        const { title, description, mediaUrl, boardId, newBoardName } = body;
 
-    return NextResponse.json({ isSuccess: true, data: result });
+        let targetBoardId = boardId;
 
+        // Validation
+        if (!title || !description || !mediaUrl) {
+            return NextResponse.json({ isSuccess: false, message: 'Title, description, and media are required' }, { status: 400 });
+        }
 
+        if (!boardId && !newBoardName) {
+            return NextResponse.json({ isSuccess: false, message: 'Please select a board or provide a name for a new board' }, { status: 400 });
+        }
+
+        // Create new board if requested
+        if (newBoardName) {
+            try {
+                // Default privacy to PUBLIC as requested implicitly by standard posting flow
+                const newBoard = await createPinterestBoard(dbUser.pinterestAccessToken, newBoardName, undefined, 'PUBLIC');
+                targetBoardId = newBoard.id;
+            } catch (error) {
+                console.error("Failed to create new board:", error);
+                return NextResponse.json({ isSuccess: false, message: 'Failed to create new board. Please try selecting an existing one.' }, { status: 500 });
+            }
+        }
+
+        // Post to Pinterest
+        const result = await postToPinterest(
+            { accessToken: dbUser.pinterestAccessToken },
+            title,
+            description,
+            mediaUrl,
+            { boardId: targetBoardId }
+        );
+
+        return NextResponse.json({ isSuccess: true, data: result });
+
+    
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/post-pinterest", "postHandler");
+export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/post-pinterest");

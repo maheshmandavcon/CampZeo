@@ -122,4 +122,4 @@ async function getHandler(
     });
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/campaigns/:id/posts/export", "getHandler");
+export const GET = withErrorHandling(getHandler, "GET /api/campaigns/:id/posts/export");

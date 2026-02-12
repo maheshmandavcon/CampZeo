@@ -198,15 +198,6 @@ export default function OnboardingPage() {
       }
     }
 
-    // Full name validation (at least two words)
-    const nameParts = form.name.trim().split(/\s+/);
-    if (nameParts.length < 2) {
-      toast.error("Invalid Owner Name", {
-        description: "Please enter your full name.",
-      });
-      return;
-    }
-
 
 
     const submissionForm = {

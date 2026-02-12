@@ -86,4 +86,4 @@ async function createUpdateUserHandler(req: Request) {
     });
 }
 
-export const POST = withErrorHandling(createUpdateUserHandler, "POST /api/admin/users", "createUpdateUserHandler");
+export const POST = withErrorHandling(createUpdateUserHandler, "POST /api/admin/users");

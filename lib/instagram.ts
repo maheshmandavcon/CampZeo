@@ -11,7 +11,7 @@ export async function postToInstagram(
     credentials: InstagramCredentials,
     caption: string,
     media: string | string[],
-    options?: { isReel?: boolean; shareToFeed?: boolean; isVideo?: boolean }
+    options?: { isReel?: boolean; shareToFeed?: boolean; isVideo?: boolean; scheduledPublishTime?: number }
 ) {
     const { accessToken, userId } = credentials;
 
@@ -60,7 +60,10 @@ export async function postToInstagram(
 
             // 2. Create Carousel Container
             console.log(`[Instagram] Creating carousel container with items: ${itemIds.join(', ')}`);
-            const containerUrl = `https://graph.facebook.com/v24.0/${userId}/media?media_type=CAROUSEL&caption=${encodeURIComponent(caption)}&children=${itemIds.join(',')}&access_token=${accessToken}`;
+            let containerUrl = `https://graph.facebook.com/v24.0/${userId}/media?media_type=CAROUSEL&caption=${encodeURIComponent(caption)}&children=${itemIds.join(',')}&access_token=${accessToken}`;
+            if (options?.scheduledPublishTime) {
+                containerUrl += `&scheduled_publish_time=${options.scheduledPublishTime}`;
+            }
 
             const containerRes = await fetch(containerUrl, { method: 'POST' });
 
@@ -99,6 +102,10 @@ export async function postToInstagram(
                 }
             } else {
                 containerUrl += `&image_url=${encodeURIComponent(mediaUrl)}`;
+            }
+
+            if (options?.scheduledPublishTime) {
+                containerUrl += `&scheduled_publish_time=${options.scheduledPublishTime}`;
             }
 
             console.log(`[Instagram] Creating single media container (${mediaType})`);

@@ -104,4 +104,4 @@ async function getFunnelHandler(request: NextRequest) {
     return NextResponse.json({ funnel: funnelData });
 }
 
-export const GET = withErrorHandling(getFunnelHandler, 'GET /api/Analytics/funnel', 'getFunnelHandler');
+export const GET = withErrorHandling(getFunnelHandler, 'GET /api/Analytics/funnel');

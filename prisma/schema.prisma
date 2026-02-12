@@ -73,7 +73,9 @@ model Organisation {
   socialMetricHistory   SocialMetricHistory[]
   subscriptions         Subscription[]
   users                 User[]
+  leads                 Lead[]
 }
+
 
 model AudienceInsight {
   id             Int          @id @default(autoincrement())
@@ -243,6 +245,22 @@ model Enquiry {
   password         String?
 }
 
+model Lead {
+  id             Int          @id @default(autoincrement())
+  metaLeadId     String       @unique
+  formId         String?
+  organisationId Int
+  data           Json         // Raw lead data from Meta
+  status         String       @default("NEW") // NEW, CONTACTED, CONVERTED, NO_RESPONSE
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+
+  @@index([organisationId])
+  @@index([metaLeadId])
+}
+
+
 model Notification {
   id             Int           @id @default(autoincrement())
   message        String
@@ -312,6 +330,16 @@ model PostTransaction {
   accessToken       String
   isScheduled       Boolean   @default(false)
   scheduledTime     DateTime?
+  // Meta Ads boost tracking (for Facebook/Instagram)
+  metaPostId        String?
+  metaCampaignId    String?
+  metaAdSetId       String?
+  metaAdId          String?
+  boostBudgetDaily  Int?
+  boostDurationDays Int?
+  boostTargeting    Json?
+  boostFailed       Boolean?  @default(false)
+  boostFailureReason String?
   published         Boolean   @default(false)
   publishedAt       DateTime?
   insightsFetched   Boolean   @default(false)
@@ -426,6 +454,16 @@ model SocialMetricHistory {
   @@index([metricName, recordedAt])
 }
 
+model SystemNotificationLog {
+  id        Int      @id @default(autoincrement())
+  subject   String
+  recipient String
+  status    String
+  error     String?
+  createdAt DateTime @default(now())
+  metadata  Json?
+}
+
 enum PostStatus {
   DRAFT
   SCHEDULED
@@ -459,14 +497,4 @@ enum PlatformType {
 enum MessageChannel {
   SMS
   WHATSAPP
-}
-
-model SystemNotificationLog {
-  id          Int      @id @default(autoincrement())
-  subject     String
-  recipient   String
-  status      String   // SUCCESS, FAILED
-  error       String?
-  createdAt   DateTime @default(now())
-  metadata    Json?
 }

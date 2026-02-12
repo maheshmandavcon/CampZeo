@@ -42,4 +42,4 @@ async function postHandler(req: Request) {
 
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/webhooks/twilio", "postHandler");
+export const POST = withErrorHandling(postHandler, "POST /api/webhooks/twilio");

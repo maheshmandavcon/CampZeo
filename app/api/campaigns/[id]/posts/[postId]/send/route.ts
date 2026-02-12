@@ -94,4 +94,4 @@ async function sendPostHandler(
     });
 }
 
-export const POST = withErrorHandling(sendPostHandler as any, "POST /api/campaigns/[id]/posts/[postId]/send", "sendPostHandler");
+export const POST = withErrorHandling(sendPostHandler as any, "POST /api/campaigns/[id]/posts/[postId]/send");

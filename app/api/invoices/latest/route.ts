@@ -5,38 +5,38 @@ import { prisma } from "@/lib/prisma";
 import { withErrorHandling } from '@/lib/api-handler';
 async function getHandler() {
 
-    const user = await currentUser();
+        const user = await currentUser();
 
-    if (!user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const dbUser = await prisma.user.findUnique({
-        where: { clerkId: user.id },
-        include: { organisation: true },
-    });
-
-    if (!dbUser || !dbUser.organisationId) {
-        return NextResponse.json({ error: "User not found or no organisation" }, { status: 404 });
-    }
-
-    const latestInvoice = await prisma.invoice.findFirst({
-        where: {
-            subscription: {
-                organisationId: dbUser.organisationId
-            }
-        },
-        orderBy: {
-            createdAt: 'desc'
+        if (!user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
-    });
 
-    if (!latestInvoice) {
-        return NextResponse.json({ error: "No invoices found" }, { status: 404 });
-    }
+        const dbUser = await prisma.user.findUnique({
+            where: { clerkId: user.id },
+            include: { organisation: true },
+        });
 
-    return NextResponse.json({ invoice: latestInvoice });
+        if (!dbUser || !dbUser.organisationId) {
+            return NextResponse.json({ error: "User not found or no organisation" }, { status: 404 });
+        }
 
+        const latestInvoice = await prisma.invoice.findFirst({
+            where: {
+                subscription: {
+                    organisationId: dbUser.organisationId
+                }
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
+        });
+
+        if (!latestInvoice) {
+            return NextResponse.json({ error: "No invoices found" }, { status: 404 });
+        }
+
+        return NextResponse.json({ invoice: latestInvoice });
+    
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/invoices/latest", "getHandler");
+export const GET = withErrorHandling(getHandler, "GET /api/invoices/latest");

@@ -14,10 +14,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-    DialogFooter, // Added DialogFooter
 } from '@/components/ui/dialog';
-import { Checkbox } from "@/components/ui/checkbox"; // Added Checkbox
-import { ScrollArea } from "@/components/ui/scroll-area"; // Added ScrollArea
 import {
     ArrowLeft,
     Loader2,
@@ -36,18 +33,19 @@ import {
     FileText,
     Image as ImageIcon,
     Video,
-    Plus,
     Wand2,
     Sparkles,
-    Search as SearchIcon, // Renamed to avoid potential conflict if Search is imported
-    Check, // Added Check
+    Rocket,
+    Plus
 } from 'lucide-react';
+import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
 import { useUser } from '@clerk/nextjs';
 import { PostPreview } from './_components/post-preview';
 import { WYSIWYGPreview } from '../_components/WYSIWYGPreview';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import Image from 'next/image';
+import { MetaBoostSection, MetaBoostOptions } from '../_components/MetaBoostSection';
 import {
     Select,
     SelectContent,
@@ -64,6 +62,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const router = useRouter();
     const resolvedParams = React.use(params);
     const campaignId = resolvedParams.id;
+    // const balance :any  ;
 
     // Form state
     const [subject, setSubject] = useState('');
@@ -82,6 +81,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [pinterestLink, setPinterestLink] = useState('');
     const [senderEmail, setSenderEmail] = useState('');
     const [scheduledPostTime, setScheduledPostTime] = useState('');
+    const [savingBoost, setSavingBoost] = useState(false);
     const [saving, setSaving] = useState(false);
     const [organisationPlatforms, setOrganisationPlatforms] = useState<string[]>([]);
     const [loadingPlatforms, setLoadingPlatforms] = useState(true);
@@ -127,7 +127,16 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [loadingPinterestBoards, setLoadingPinterestBoards] = useState(false);
     const [youtubePlaylists, setYoutubePlaylists] = useState<{ id: string; title: string }[]>([]);
     const [loadingYoutubePlaylists, setLoadingYoutubePlaylists] = useState(false);
-    const [youtubePlaylistId, setYoutubePlaylistId] = useState<string>('');
+
+    const [selectedYoutubePlaylistId, setSelectedYoutubePlaylistId] = useState<string>('');
+    const [boostOptions, setBoostOptions] = useState<MetaBoostOptions>({
+        enabled: false,
+        adAccountId: '',
+        budget: 5,
+        duration: 7,
+        objective: 'OUTCOME_ENGAGEMENT',
+        balance: ''
+    });
     const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
 
     // New Board State
@@ -142,12 +151,10 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [showAIAssistant, setShowAIAssistant] = useState(false);
     const [aiAssistantTab, setAiAssistantTab] = useState<'text' | 'image'>('text');
 
-    // Send Now Dialog State
-    const [showSendNowDialog, setShowSendNowDialog] = useState(false);
-    const [sendNowStep, setSendNowStep] = useState<'initial' | 'select_contacts'>('initial');
-    const [selectedSendContacts, setSelectedSendContacts] = useState<string[]>([]);
-    const [contactSearchQuery, setContactSearchQuery] = useState('');
-    const [isSending, setIsSending] = useState(false);
+
+    // Meta ad account balance/payment status
+    const [balanceLow, setBalanceLow] = useState(false);
+    const [metaHasPaymentMethod, setMetaHasPaymentMethod] = useState<boolean | null>(null);
 
     // Helper for inserting variables
     const insertVariable = (variable: string) => {
@@ -160,7 +167,6 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         const before = text.substring(0, start);
         const after = text.substring(end);
         const newText = before + `{{${variable}}}` + after;
-
         setMessage(newText);
 
         // Reset cursor position
@@ -170,6 +176,44 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         }, 0);
     };
 
+    const fetchAccounts = async () => {
+        try {
+            const res = await fetch('/api/socialmedia/meta-ads/accounts');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.accounts?.length > 0) {
+                    const firstAccount = data.accounts[0];
+                    const balance: any = firstAccount.balance;
+                    // Legacy low-balance flag used to disable quick-boost when no funds
+                    if (balance === "0") {
+                        setBalanceLow(true);
+                    } else {
+                        setBalanceLow(false);
+                    }
+
+                    // Also hydrate hasPaymentMethod via the dedicated balance endpoint
+                    try {
+                        const balanceRes = await fetch(
+                            `/api/meta/adaccount/balance?adAccountId=${encodeURIComponent(firstAccount.id)}`
+                        );
+                        if (balanceRes.ok) {
+                            const balJson = await balanceRes.json();
+                            setMetaHasPaymentMethod(!!balJson.has_payment_method);
+                        } else {
+                            setMetaHasPaymentMethod(null);
+                        }
+                    } catch (err) {
+                        console.error('Error fetching Meta ad account balance:', err);
+                        setMetaHasPaymentMethod(null);
+                    }
+                }
+            } else {
+                toast.error("Failed to fetch ad accounts balance. Please ensure Facebook is connected with Ads permissions.");
+            }
+        } catch (error) {
+            console.error("Error fetching ad accounts:", error);
+        }
+    };
     // Fetch organisation platforms
     useEffect(() => {
         const fetchOrgPlatforms = async () => {
@@ -263,6 +307,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     setLoadingFacebookPages(true);
                     const response = await fetch('/api/socialmedia/facebook/pages');
                     if (response.ok) {
+                        fetchAccounts();
                         const data = await response.json();
                         setFacebookPages(data.pages || []);
 
@@ -271,6 +316,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                             setSelectedFacebookPageId(data.pages[0].id);
                             setSelectedFacebookPageAccessToken(data.pages[0].access_token);
                         }
+                    } else {
+                        console.error('Failed to fetch Facebook pages');
                     }
                 } catch (error) {
                     console.error('Error fetching Facebook pages:', error);
@@ -461,120 +508,6 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         }
     };
 
-    // Handle filtered contacts for the dialog
-    const filteredContacts = campaignContacts.filter((contact: any) => {
-        const query = contactSearchQuery.toLowerCase();
-        return (
-            contact.contactName?.toLowerCase().includes(query) ||
-            contact.contactEmail?.toLowerCase().includes(query) ||
-            contact.contactMobile?.toLowerCase().includes(query)
-        );
-    });
-
-    const toggleSendContact = (contactId: string) => {
-        setSelectedSendContacts(prev =>
-            prev.includes(contactId)
-                ? prev.filter(id => id !== contactId)
-                : [...prev, contactId]
-        );
-    };
-
-    const toggleAllContacts = () => {
-        if (filteredContacts.length === 0) return;
-        const visibleIds = filteredContacts.map((c: any) => String(c.id));
-        const allVisibleSelected = visibleIds.every(id => selectedSendContacts.includes(id));
-
-        if (allVisibleSelected) {
-            setSelectedSendContacts(prev => prev.filter(id => !visibleIds.includes(id)));
-        } else {
-            setSelectedSendContacts(prev => Array.from(new Set([...prev, ...visibleIds])));
-        }
-    };
-
-    const executeCreateAndSend = async (targetContactIds?: string[]) => {
-        try {
-            setSaving(true);
-            setIsSending(true);
-
-            // 1. Create Post
-            const response = await fetch(`/api/campaigns/${campaignId}/posts`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    subject: subject || null,
-                    message: message || null,
-                    type: selectedPlatform,
-                    senderEmail: selectedPlatform === 'EMAIL' ? senderEmail : null,
-                    scheduledPostTime: null, // Ensure no schedule
-                    mediaUrls: mediaUrls,
-                    // Social fields (mostly unused for Email/SMS but good to keep)
-                    youtubeTags: youtubeTags ? youtubeTags.split(',').map(t => t.trim()) : [],
-                    youtubePrivacy,
-                    youtubeContentType,
-                    youtubePlaylistTitle,
-                    youtubePlaylistId,
-                    pinterestBoardId,
-                    pinterestLink,
-                    isReel,
-                    contentType,
-                    thumbnailUrl,
-                    facebookPageId: selectedFacebookPageId,
-                    facebookPageAccessToken: selectedFacebookPageAccessToken,
-                    instagramBusinessId: selectedInstagramBusinessId,
-                    linkedInUrn: selectedLinkedInUrn
-                }),
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to create post');
-            }
-
-            const data = await response.json();
-            const postId = data.post.id;
-
-            // 2. Send Post
-            // If targetContactIds is provided, use it. Otherwise send to ALL campaign contacts.
-            // API expects contactIds. logic:
-            // "Send to all" -> Pass all IDs? Or maybe the API handles "all" if we pass special flag or all IDs.
-            // Based on posts/page.tsx, it passes `contactIds`. I will pass all IDs for "Send to All".
-
-            const contactsToSend = targetContactIds || campaignContacts.map(c => c.id);
-
-            if (contactsToSend.length === 0) {
-                toast.error('No contacts available to send to.');
-                // But post was created. redirect.
-                router.push(`/organisation/campaigns/${campaignId}/posts`);
-                return;
-            }
-
-            const sendResponse = await fetch(`/api/campaigns/${campaignId}/posts/${postId}/send`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contactIds: contactsToSend })
-            });
-
-            if (!sendResponse.ok) {
-                const errorData = await sendResponse.json().catch(() => ({}));
-                // Post created but send failed.
-                toast.warning(`Post created but failed to send: ${errorData.error || 'Unknown error'}`);
-            } else {
-                const sendData = await sendResponse.json();
-                toast.success(`Post sent successfully! Sent: ${sendData.sent}, Failed: ${sendData.failed}`);
-            }
-
-            router.push(`/organisation/campaigns/${campaignId}/posts`);
-
-        } catch (error) {
-            console.error('Error creating/sending post:', error);
-            toast.error(error instanceof Error ? error.message : 'Failed to create post');
-        } finally {
-            setSaving(false);
-            setIsSending(false);
-            setShowSendNowDialog(false);
-        }
-    };
-
     // Handle form submit
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -609,7 +542,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         }
 
         // Social Media validation
-        const isSocialPlatform = selectedPlatform && !['EMAIL', 'SMS', 'WHATSAPP'].includes(selectedPlatform); // Added WHATSAPP to check
+        const isSocialPlatform = selectedPlatform && !['EMAIL', 'SMS'].includes(selectedPlatform);
         if (isSocialPlatform) {
             if (!subject && selectedPlatform !== 'SMS') {
                 toast.error('Please enter a title');
@@ -645,14 +578,6 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             }
         }
 
-        // INTERCEPTION LOGIC
-        // If it's Email/SMS/WhatsApp AND no schedule is set, prompt user.
-        if (['EMAIL', 'SMS', 'WHATSAPP'].includes(selectedPlatform) && !scheduledPostTime) {
-            setShowSendNowDialog(true);
-            setSendNowStep('initial');
-            return;
-        }
-
         try {
             setSaving(true);
 
@@ -670,7 +595,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     youtubePrivacy,
                     youtubeContentType, // NEW: YouTube content type (VIDEO, SHORT, PLAYLIST)
                     youtubePlaylistTitle, // NEW: Playlist title if creating playlist
-                    youtubePlaylistId, // NEW: Existing Playlist ID
+                    youtubePlaylistId: selectedYoutubePlaylistId, // NEW: Existing Playlist ID
                     pinterestBoardId,
                     pinterestLink,
                     isReel, // Send isReel flag
@@ -679,7 +604,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     facebookPageId: selectedFacebookPageId, // NEW: Selected Facebook Page
                     facebookPageAccessToken: selectedFacebookPageAccessToken, // NEW: Selected Facebook Page Access Token
                     instagramBusinessId: selectedInstagramBusinessId, // NEW: Linked Instagram ID
-                    linkedInUrn: selectedLinkedInUrn // NEW: Selected LinkedIn Author URN
+                    linkedInUrn: selectedLinkedInUrn, // NEW: Selected LinkedIn Author URN
+                    metaBoost: boostOptions.enabled ? boostOptions : undefined, // NEW: Meta Boost options
                 }),
             });
 
@@ -695,6 +621,73 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             toast.error(error instanceof Error ? error.message : 'Failed to create post');
         } finally {
             setSaving(false);
+        }
+    };
+
+    // Handle Quick Boost
+    const handleQuickBoost = async () => {
+        if (!selectedPlatform || !['FACEBOOK', 'INSTAGRAM'].includes(selectedPlatform)) {
+            toast.error("Quick Boost is only available for Facebook and Instagram.");
+            return;
+        }
+
+        if (!message && !subject) {
+            toast.error('Please enter a message or title');
+            return;
+        }
+
+        if (!selectedFacebookPageId) {
+            toast.error('Please select a Facebook Page');
+            return;
+        }
+
+        try {
+            setSavingBoost(true);
+
+            const response = await fetch(`/api/campaigns/${campaignId}/posts/quick-boost`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    subject: subject || null,
+                    message: message || null,
+                    type: selectedPlatform,
+                    mediaUrls: mediaUrls,
+                    isReel,
+                    contentType,
+                    thumbnailUrl,
+                    facebookPageId: selectedFacebookPageId,
+                    facebookPageAccessToken: selectedFacebookPageAccessToken,
+                    instagramBusinessId: selectedInstagramBusinessId,
+                    metaBoost: boostOptions.enabled ? boostOptions : undefined,
+                }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to prepare boost');
+            }
+
+            const data = await response.json();
+            const post = data.post;
+
+            // Use utility to open popup
+            const adAccountId = post.metadata?.metaBoost?.adAccountId || localStorage.getItem('last_meta_ad_account_id') || '';
+            const pageId = post.metadata?.facebookPageId || selectedFacebookPageId;
+            const postId = post.metadata?.facebookPostId || post.metadata?.platformPostId || post.liveLink;
+
+            if (pageId && postId) {
+                openNativeBoostPopup(adAccountId, pageId, postId);
+                toast.success('Post scheduled and Boost Centre opened!');
+                router.push(`/organisation/campaigns/${campaignId}/posts`);
+            } else {
+                toast.error("Post created but failed to retrieve IDs for boosting. You can boost it from the posts list.");
+                router.push(`/organisation/campaigns/${campaignId}/posts`);
+            }
+        } catch (error) {
+            console.error('Error in Quick Boost:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to prepare boost');
+        } finally {
+            setSavingBoost(false);
         }
     };
 
@@ -782,6 +775,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             // Map Facebook/Instagram Content Type
             if (meta.postType && (selectedPlatform === 'FACEBOOK' || selectedPlatform === 'INSTAGRAM')) {
                 setContentType(meta.postType); // POST or REEL
+
                 setIsReel(meta.postType === 'REEL');
             }
 
@@ -1442,21 +1436,19 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                             <>
                                                                 <div className="border rounded-md">
                                                                     <Select
-                                                                        value={isCreatingPlaylist ? 'create_new' : (youtubePlaylistId || 'select')}
+                                                                        value={isCreatingPlaylist ? 'create_new' : (selectedYoutubePlaylistId || 'select')}
                                                                         onValueChange={(val) => {
                                                                             if (val === 'create_new') {
                                                                                 setIsCreatingPlaylist(true);
-                                                                                setYoutubePlaylistId('');
+                                                                                setSelectedYoutubePlaylistId('');
                                                                                 return;
                                                                             }
-                                                                            // Explicitly handle "select" to clear value, though it shouldn't be selectable if disabled
                                                                             if (val === 'select') {
-                                                                                setYoutubePlaylistId('');
+                                                                                setSelectedYoutubePlaylistId('');
                                                                                 return;
                                                                             }
-
                                                                             setIsCreatingPlaylist(false);
-                                                                            setYoutubePlaylistId(val);
+                                                                            setSelectedYoutubePlaylistId(val);
                                                                         }}
                                                                     >
                                                                         <SelectTrigger id="youtubePlaylist">
@@ -1476,7 +1468,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                                 </SelectItem>
                                                                             ))}
                                                                         </SelectContent>
-                                                                    </Select></div>
+                                                                    </Select>
+                                                                </div>
                                                             </>
                                                         )}
 
@@ -1695,6 +1688,15 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                         </div>
                                     )}
 
+                                    {/* Meta Boost Section */}
+                                    <MetaBoostSection
+                                        platform={selectedPlatform || ''}
+                                        options={boostOptions}
+                                        onChange={setBoostOptions}
+                                        fbPageId={selectedFacebookPageId}
+                                        facebookAppId={process.env.NEXT_PUBLIC_FACEBOOK_APP_ID}
+                                    />
+
                                     {/* Schedule Field */}
                                     {selectedPlatform && (
                                         <div className="space-y-2">
@@ -1744,9 +1746,25 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                         >
                             Cancel
                         </Button>
+                        {['FACEBOOK', 'INSTAGRAM'].includes(selectedPlatform || '') && (
+                            <Button
+                                className='cursor-pointer text-blue-600 border-blue-200 hover:bg-blue-50'
+                                type="button"
+                                variant="outline"
+                                onClick={handleQuickBoost}
+                                disabled={saving || savingBoost || !selectedPlatform || uploadingMedia || !['FACEBOOK', 'INSTAGRAM'].includes(selectedPlatform || '') || balanceLow === true}
+                            >
+                                {savingBoost ? (
+                                    <Loader2 className="size-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Rocket className="size-4 mr-2" />
+                                )}
+                                Boost Now
+                            </Button>
+                        )}
                         <Button
                             className='cursor-pointer'
-                            type="submit" disabled={saving || !selectedPlatform || uploadingMedia}>
+                            type="submit" disabled={saving || savingBoost || !selectedPlatform || uploadingMedia}>
                             {saving ? (
                                 <>
                                     <Loader2 className="size-4 mr-2 animate-spin" />
@@ -1818,145 +1836,6 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                         existingContent: message,
                     }}
                 />
-
-                {/* Send/Schedule Popup */}
-                <Dialog open={showSendNowDialog} onOpenChange={setShowSendNowDialog}>
-                    <DialogContent className="sm:max-w-md">
-                        <DialogHeader>
-                            <DialogTitle>
-                                {sendNowStep === 'initial' ? 'Unscheduled Post' : 'Select Contacts'}
-                            </DialogTitle>
-                            <DialogDescription>
-                                {sendNowStep === 'initial'
-                                    ? "You haven't scheduled this post. Would you like to send it immediately?"
-                                    : "Select the contacts you want to send this post to."}
-                            </DialogDescription>
-                        </DialogHeader>
-
-                        {sendNowStep === 'initial' ? (
-                            <div className="flex flex-col gap-3 py-4">
-                                <Button
-                                    className='cursor-pointer w-full justify-start'
-                                    variant="outline"
-                                    onClick={() => {
-                                        setShowSendNowDialog(false);
-                                        // Focus the schedule input
-                                        document.getElementById('scheduledPostTime')?.focus();
-                                    }}
-                                >
-                                    <Sparkles className="mr-2 size-4" /> {/* Just using an icon for visual */}
-                                    Schedule for Later
-                                </Button>
-                                <Button
-                                    className='cursor-pointer w-full justify-start'
-                                    onClick={() => executeCreateAndSend()} // Send to ALL
-                                >
-                                    <Send className="mr-2 size-4" />
-                                    Send Now to All Contacts ({campaignContacts.length})
-                                </Button>
-                                <Button
-                                    className='cursor-pointer w-full justify-start'
-                                    variant="secondary"
-                                    onClick={() => {
-                                        setSendNowStep('select_contacts');
-                                        setSelectedSendContacts([]); // Reset selection
-                                    }}
-                                >
-                                    <Check className="mr-2 size-4" />
-                                    Select Contacts to Send
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="flex flex-col gap-4 py-4 max-h-[60vh]">
-                                {/* Search and Filter */}
-                                <div className="space-y-2">
-                                    <div className="relative">
-                                        <SearchIcon className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                                        <Input
-                                            className="pl-9"
-                                            placeholder="Search contacts..."
-                                            value={contactSearchQuery}
-                                            onChange={(e) => setContactSearchQuery(e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="flex items-center justify-between text-sm text-muted-foreground">
-                                        <span>{filteredContacts.length} contacts found</span>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-auto p-0 text-xs text-primary"
-                                            onClick={toggleAllContacts}
-                                        >
-                                            {filteredContacts.length > 0 && filteredContacts.every(c => selectedSendContacts.includes(String(c.id)))
-                                                ? 'Deselect All'
-                                                : 'Select All Visible'}
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                {/* Contacts List */}
-                                <ScrollArea className="flex-1 border rounded-md h-[300px]">
-                                    <div className="p-4 space-y-2">
-                                        {filteredContacts.length === 0 ? (
-                                            <p className="text-center text-sm text-muted-foreground py-8">
-                                                No contacts found.
-                                            </p>
-                                        ) : (
-                                            filteredContacts.map((contact: any) => (
-                                                <div key={contact.id} className="flex items-start space-x-2 space-y-0 p-2 hover:bg-muted/50 rounded-md transition-colors">
-                                                    <Checkbox
-                                                        id={`contact-${contact.id}`}
-                                                        checked={selectedSendContacts.includes(String(contact.id))}
-                                                        onCheckedChange={() => toggleSendContact(String(contact.id))}
-                                                    />
-                                                    <div className="grid gap-1.5 leading-none">
-                                                        <label
-                                                            htmlFor={`contact-${contact.id}`}
-                                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                                                        >
-                                                            {contact.contactName || 'Unnamed Contact'}
-                                                        </label>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            {contact.contactEmail} • {contact.contactMobile}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
-                                </ScrollArea>
-
-                                <DialogFooter className="gap-2 sm:gap-0">
-                                    <Button
-                                        variant="outline"
-                                        className='mx-2'
-                                        onClick={() => setSendNowStep('initial')}
-                                        disabled={isSending}
-                                    >
-                                        Back
-                                    </Button>
-                                    <Button
-                                        onClick={() => executeCreateAndSend(selectedSendContacts)}
-                                        disabled={selectedSendContacts.length === 0 || isSending}
-                                    >
-                                        {isSending ? (
-                                            <>
-                                                <Loader2 className="mr-2  size-4 animate-spin" />
-                                                Sending...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Send className="mr-2  size-4" />
-                                                Send to {selectedSendContacts.length} Contacts
-                                            </>
-                                        )}
-                                    </Button>
-                                </DialogFooter>
-                            </div>
-                        )}
-                    </DialogContent>
-                </Dialog>
-
             </div>
         </div >
     );

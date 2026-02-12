@@ -37,4 +37,4 @@ async function getHandler(request: NextRequest) {
 
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/n8n/organizations", "getHandler");
+export const GET = withErrorHandling(getHandler, "GET /api/n8n/organizations");
