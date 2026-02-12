@@ -18,7 +18,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Download, Loader2, Users, RefreshCw, AlertCircle, Plus } from 'lucide-react';
+import { Download, Loader2, Users, RefreshCw, AlertCircle, Plus, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { LeadFormModal } from './_components/lead-form-modal';
@@ -35,9 +35,11 @@ import { Label } from '@/components/ui/label';
 export default function LeadsAnalyticsPage() {
     const [leads, setLeads] = useState<any[]>([]);
     const [boostedPosts, setBoostedPosts] = useState<any[]>([]);
+    const [leadForms, setLeadForms] = useState<any[]>([]);
     const [selectedPostId, setSelectedPostId] = useState<string>('');
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [loadingLeadForms, setLoadingLeadForms] = useState(false);
     const [exporting, setExporting] = useState(false);
 
     // Lead Form Creation State
@@ -46,6 +48,10 @@ export default function LeadsAnalyticsPage() {
     const [selectedPageId, setSelectedPageId] = useState<string>('');
     const [selectedPageAccessToken, setSelectedPageAccessToken] = useState<string>('');
     const [isLeadFormModalOpen, setIsLeadFormModalOpen] = useState(false);
+
+    // Form Details State
+    const [selectedFormForDetails, setSelectedFormForDetails] = useState<any>(null);
+    const [isFormDetailsOpen, setIsFormDetailsOpen] = useState(false);
 
     const fetchFacebookPages = async () => {
         try {
@@ -63,6 +69,22 @@ export default function LeadsAnalyticsPage() {
             console.error('Error fetching Facebook pages:', error);
         } finally {
             setLoadingPages(false);
+        }
+    };
+
+    const fetchLeadForms = async (pageId: string, pageAccessToken: string) => {
+        try {
+            setLoadingLeadForms(true);
+            const response = await fetch(`/api/socialmedia/facebook/lead-forms?pageId=${pageId}&pageAccessToken=${pageAccessToken}`);
+            if (response.ok) {
+                const data = await response.json();
+                setLeadForms(data.forms || []);
+            }
+        } catch (error) {
+            console.error('Error fetching lead forms:', error);
+            toast.error('Failed to fetch lead forms');
+        } finally {
+            setLoadingLeadForms(false);
         }
     };
 
@@ -117,27 +139,35 @@ export default function LeadsAnalyticsPage() {
     }, []);
 
     useEffect(() => {
+        if (selectedPageId && selectedPageAccessToken) {
+            fetchLeadForms(selectedPageId, selectedPageAccessToken);
+        }
+    }, [selectedPageId, selectedPageAccessToken]);
+
+    useEffect(() => {
         if (selectedPostId && !loading) {
             fetchLeadsData(selectedPostId);
         }
     }, [selectedPostId]);
 
     const handleExport = async (format: 'csv' | 'xlsx') => {
-        if (!selectedPostId) {
-            toast.error('Please select a boosted post first');
+        const exportId = selectedPostId || (leads.length > 0 ? leads[0].form_id : null);
+
+        if (!exportId) {
+            toast.error('No lead data available to export');
             return;
         }
 
         try {
             setExporting(true);
-            const response = await fetch(`/api/analytics/leads/export?boosted_post_id=${selectedPostId}&format=${format}`);
+            const response = await fetch(`/api/analytics/leads/export?boosted_post_id=${exportId}&format=${format}`);
             if (!response.ok) throw new Error('Export failed');
 
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `leads_export_${selectedPostId}.${format === 'xlsx' ? 'xlsx' : 'csv'}`;
+            a.download = `leads_export_${exportId}.${format === 'xlsx' ? 'xlsx' : 'csv'}`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
@@ -240,7 +270,7 @@ export default function LeadsAnalyticsPage() {
                         <Button
                             variant="default"
                             onClick={() => handleExport('csv')}
-                            disabled={exporting || !selectedPostId}
+                            disabled={exporting || leads.length === 0}
                             className="cursor-pointer"
                         >
                             <Download className="size-4 mr-2" />
@@ -249,7 +279,7 @@ export default function LeadsAnalyticsPage() {
                         <Button
                             variant="default"
                             onClick={() => handleExport('xlsx')}
-                            disabled={exporting || !selectedPostId}
+                            disabled={exporting || leads.length === 0}
                             className="cursor-pointer"
                         >
                             <Download className="size-4 mr-2" />
@@ -258,6 +288,139 @@ export default function LeadsAnalyticsPage() {
                     </div>
                 </div>
             </div>
+
+            <Card>
+                <CardHeader>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                            <CardTitle>Facebook Lead Forms</CardTitle>
+                            <CardDescription>Available lead forms for the selected Facebook Page.</CardDescription>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {loadingLeadForms && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {leadForms.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center bg-muted/20 rounded-lg border border-dashed">
+                            <p className="text-sm text-muted-foreground">No lead forms found for this page.</p>
+                        </div>
+                    ) : (
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Form Name</TableHead>
+                                        <TableHead>Form ID</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Created Date</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {leadForms.map((form) => (
+                                        <TableRow key={form.id}>
+                                            <TableCell className="font-medium">{form.name}</TableCell>
+                                            <TableCell className="text-xs font-mono">{form.id}</TableCell>
+                                            <TableCell>
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold ${form.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground'
+                                                    }`}>
+                                                    {form.status}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="text-sm text-muted-foreground">
+                                                {format(new Date(), 'MMM d, yyyy')}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        setSelectedFormForDetails(form);
+                                                        setIsFormDetailsOpen(true);
+                                                    }}
+                                                >
+                                                    <Eye className="size-4 mr-2" />
+                                                    View Details
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Dialog open={isFormDetailsOpen} onOpenChange={setIsFormDetailsOpen}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Lead Form Details</DialogTitle>
+                        <DialogDescription>
+                            Review the structure and questions of this lead form.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {selectedFormForDetails && (
+                        <div className="space-y-6 py-4">
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <Label className="text-muted-foreground">Form Name</Label>
+                                    <p className="font-medium">{selectedFormForDetails.name}</p>
+                                </div>
+                                <div>
+                                    <Label className="text-muted-foreground">Form ID</Label>
+                                    <p className="font-mono">{selectedFormForDetails.id}</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <Label className="text-base font-semibold italic text-blue-600">Form Questions</Label>
+                                <div className="space-y-2">
+                                    {selectedFormForDetails.questions?.map((q: any, idx: number) => (
+                                        <div key={idx} className="p-3 bg-muted/30 rounded-lg border border-muted/50">
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div className="space-y-1">
+                                                    <p className="text-sm font-medium">{q.label}</p>
+                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-tight ">{q.type.replace('_', ' ')}</p>
+                                                </div>
+                                                {q.options && (
+                                                    <div className="flex flex-wrap gap-1 justify-end">
+                                                        {q.options.map((opt: any, oIdx: number) => (
+                                                            <span key={oIdx} className="px-1.5 py-0.5 bg-background border rounded text-[10px]">
+                                                                {opt.label || opt}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(!selectedFormForDetails.questions || selectedFormForDetails.questions.length === 0) && (
+                                        <p className="text-sm text-muted-foreground italic">No specific questions found for this form.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 text-sm border-t pt-4">
+                                {selectedFormForDetails.privacy_policy_url && (
+                                    <div>
+                                        <Label className="text-muted-foreground">Privacy Policy URL</Label>
+                                        <p className="truncate text-blue-600">{selectedFormForDetails.privacy_policy_url}</p>
+                                    </div>
+                                )}
+                                {selectedFormForDetails.follow_up_action_url && (
+                                    <div>
+                                        <Label className="text-muted-foreground">Follow-up Action URL</Label>
+                                        <p className="truncate text-blue-600">{selectedFormForDetails.follow_up_action_url}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
 
             <Card>
                 <CardHeader>
@@ -378,6 +541,9 @@ export default function LeadsAnalyticsPage() {
                     onSuccess={(form: any) => {
                         toast.success(`Form "${form.name}" created successfully!`);
                         setIsLeadFormModalOpen(false);
+                        if (selectedPageId && selectedPageAccessToken) {
+                            fetchLeadForms(selectedPageId, selectedPageAccessToken);
+                        }
                     }}
                 />
             )}

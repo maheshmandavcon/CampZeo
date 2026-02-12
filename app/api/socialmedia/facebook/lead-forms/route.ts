@@ -29,7 +29,23 @@ async function postHandler(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { pageId, pageAccessToken, name, privacy_policy_url, questions, follow_up_action_url } = body;
+    const {
+        pageId,
+        pageAccessToken,
+        name,
+        privacy_policy_url,
+        privacy_policy_link_text,
+        questions,
+        follow_up_action_url,
+        greeting,
+        intro_description,
+        description_format,
+        contact_description,
+        custom_notices,
+        thank_you_headline,
+        thank_you_description,
+        flexible_form_delivery
+    } = body;
 
     if (!pageId || !pageAccessToken || !name || !privacy_policy_url || !questions) {
         return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -38,8 +54,17 @@ async function postHandler(request: NextRequest) {
     const result = await createFacebookLeadForm(pageId, pageAccessToken, {
         name,
         privacy_policy_url,
+        privacy_policy_link_text,
         questions,
-        follow_up_action_url
+        follow_up_action_url,
+        greeting,
+        intro_description,
+        description_format,
+        contact_description,
+        custom_notices,
+        thank_you_headline,
+        thank_you_description,
+        flexible_form_delivery
     });
 
     return NextResponse.json({ success: true, result });

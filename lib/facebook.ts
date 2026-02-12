@@ -1065,24 +1065,88 @@ export async function createFacebookLeadForm(
     formData: {
         name: string;
         privacy_policy_url: string;
+        privacy_policy_link_text?: string;
         questions: any[];
         follow_up_action_url?: string;
+        greeting?: string;
+        intro_description?: string;
+        description_format?: 'paragraph' | 'list';
+        contact_description?: string;
+        custom_notices?: Array<{ title: string; text: string }>;
+        thank_you_headline?: string;
+        thank_you_description?: string;
+        flexible_form_delivery?: boolean;
     }
 ) {
     try {
         console.log(`[Facebook] Creating lead form "${formData.name}" for Page ${pageId}`);
 
-        // Structured payload for Meta API
-        const payload = {
+        // Pre-validation for Meta API constraints
+        if (formData.questions && Array.isArray(formData.questions)) {
+            const labels = new Set<string>();
+            for (const q of formData.questions) {
+                // For custom questions, we check the label. 
+                // For standard questions, they usually have a default label if not provided.
+                // Meta API error was: "Cannot have two questions sharing the same label"
+                const label = (q.label || q.type || '').toString().trim().toLowerCase();
+                if (!label) continue;
+
+                if (labels.has(label)) {
+                    throw new Error(`Duplicate question label detected: "${q.label || q.type}". All question labels must be unique.`);
+                }
+                labels.add(label);
+            }
+        }
+
+        // Structured payload for Meta API - only include supported fields
+        const payload: any = {
             name: formData.name,
-            questions: formData.questions,
+            questions: formData.questions?.map((q: any) => {
+                // Ensure options is only present if it has values
+                const { id, ...rest } = q;
+                return rest;
+            }),
             privacy_policy: {
                 url: formData.privacy_policy_url,
-                link_text: 'Privacy Policy'
+                link_text: formData.privacy_policy_link_text || 'Privacy Policy'
             },
-            follow_up_action_url: formData.follow_up_action_url,
             access_token: accessToken,
         };
+
+        // Add optional fields that Meta API supports
+        if (formData.follow_up_action_url) {
+            payload.follow_up_action_url = formData.follow_up_action_url;
+        }
+
+        // Context card (intro description) - Meta supports this but only saves as paragraph
+        if (formData.intro_description) {
+            payload.context_card = {
+                title: formData.greeting || 'Welcome', // Required by Meta API
+                content: formData.intro_description,
+                style: 'PARAGRAPH_STYLE' // Required by Meta API
+            };
+        }
+
+        // Thank you page - Fully supported
+        if (formData.thank_you_headline || formData.thank_you_description) {
+            payload.thank_you_page = {
+                title: formData.thank_you_headline,
+                body: formData.thank_you_description,
+                button_type: 'VIEW_WEBSITE', // Required by Meta API
+                button_text: 'Continue', // Required by Meta API
+                website_url: formData.privacy_policy_url // Required when button_type is VIEW_WEBSITE
+            };
+        }
+
+        // Note: The following fields are NOT supported by Meta's Lead Ads API and are not included:
+        // - form_type (MORE_VOLUME, HIGHER_INTENT, RICH_CREATIVE)
+        // - require_phone_verification
+        // - contact_description
+        // - custom_notices (legal_content)
+        // - greeting (as standalone field)
+        // - description_format (list vs paragraph - always saved as paragraph)
+
+        console.log('[Facebook] Debugging Lead Form Payload:', JSON.stringify(payload, null, 2));
 
         const response = await fetch(
             `https://graph.facebook.com/v21.0/${pageId}/leadgen_forms`,
@@ -1098,8 +1162,22 @@ export async function createFacebookLeadForm(
         if (!response.ok) {
             const error = await response.json();
             console.error('[Facebook] Lead form creation failed:', JSON.stringify(error, null, 2));
+
+            // Log which fields might not be supported
+            const errorMessage = error.error?.message || '';
+            const unsupportedFields: string[] = [];
+
+            if (errorMessage.includes('greeting')) unsupportedFields.push('greeting');
+            if (errorMessage.includes('legal_content')) unsupportedFields.push('custom notices');
+
+            if (unsupportedFields.length > 0) {
+                console.warn(`[Facebook] The following fields are not supported by Meta's API: ${unsupportedFields.join(', ')}`);
+                throw new Error(`Meta API does not support: ${unsupportedFields.join(', ')}. ${error.error?.message || response.statusText}`);
+            }
+
             throw new Error(error.error?.message || `Meta API error: ${response.statusText}`);
         }
+
 
         const data = await response.json();
         return data;
