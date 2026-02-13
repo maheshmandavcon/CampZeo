@@ -1056,35 +1056,106 @@ export async function getFacebookLeadForms(
     }
 }
 
-/**
- * Create a lead form for a Facebook Page
- */
+
+
+
+export async function getFacebookLeadFormDetails(
+    formId: string,
+    accessToken: string
+): Promise<any> {
+    try {
+        // Fetch only the fields that are actually supported by Facebook API for individual forms
+        // Note: Many fields like custom_disclaimer, context_card, thank_you_page are not available when fetching individual forms
+        const fields = 'id,name,status,privacy_policy_url,questions,created_time';
+        const response = await fetch(
+            `https://graph.facebook.com/v21.0/${formId}?fields=${fields}&access_token=${accessToken}`
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(`Failed to fetch lead form details: ${JSON.stringify(error)}`);
+        }
+
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('[Facebook] Error fetching lead form details:', error);
+        throw error;
+    }
+}
+
+
+export interface FormData {
+    name: string;
+    privacy_policy_url: string;
+    privacy_policy_link_text?: string;
+    questions?: Array<{
+        type: string;
+        key?: string;
+        label?: string;
+        options?: string[];
+    }>;
+    questions_description?: string; // New field
+    greeting?: string;
+    intro_description?: string;
+    context_card_style?: 'PARAGRAPH_STYLE' | 'LIST_STYLE';
+    context_card_content?: string[];
+    thank_you_headline?: string;
+    thank_you_description?: string;
+    follow_up_action_url?: string;
+    custom_disclaimer?: {
+        title: string;
+        body: {
+            text: string;
+            url_entities?: Array<{
+                offset: number;
+                length: number;
+                url: string;
+            }>;
+        };
+        checkboxes: Array<{
+            key: string;
+            text: string;
+            is_required: boolean;
+            is_checked_by_default: boolean;
+        }>;
+    };
+}
+
 export async function createFacebookLeadForm(
     pageId: string,
     accessToken: string,
-    formData: {
-        name: string;
-        privacy_policy_url: string;
-        privacy_policy_link_text?: string;
-        questions: any[];
-        follow_up_action_url?: string;
-        greeting?: string;
-        intro_description?: string;
-        description_format?: 'paragraph' | 'list';
-        contact_description?: string;
-        custom_notices?: Array<{ title: string; text: string }>;
-        thank_you_headline?: string;
-        thank_you_description?: string;
-        flexible_form_delivery?: boolean;
-    }
+    formData: FormData
 ) {
     try {
-        console.log(`[Facebook] Creating lead form "${formData.name}" for Page ${pageId}`);
+        // Validation
+        if (!pageId || !accessToken) {
+            throw new Error('Missing page ID or access token');
+        }
+        if (!formData.name) {
+            throw new Error('Form name is required');
+        }
+        if (!formData.privacy_policy_url) {
+            throw new Error('Privacy policy URL is required');
+        }
 
-        // Pre-validation for Meta API constraints
-        if (formData.questions && Array.isArray(formData.questions)) {
-            const labels = new Set<string>();
+        // Validate questions
+        const validQuestionTypes = [
+            'FULL_NAME', 'EMAIL', 'PHONE', 'CITY', 'STATE', 'COUNTRY', 'ZIP',
+            'job_title', 'work_email', 'work_phone_number', 'company_name',
+            'CUSTOM'
+        ];
+
+        const labels = new Set<string>();
+
+        if (formData.questions) {
             for (const q of formData.questions) {
+                if (!validQuestionTypes.includes(q.type) && q.type !== 'CUSTOM') {
+                    // It might be a valid standard field that we haven't explicitly listed here, 
+                    // but standard fields usually don't cause issues unless malformed.
+                    // We'll trust the input type is valid or standard field name.
+                }
+
                 // For custom questions, we check the label. 
                 // For standard questions, they usually have a default label if not provided.
                 // Meta API error was: "Cannot have two questions sharing the same label"
@@ -1106,6 +1177,7 @@ export async function createFacebookLeadForm(
                 const { id, ...rest } = q;
                 return rest;
             }),
+            question_page_custom_headline: formData.questions_description, // Map to API field
             privacy_policy: {
                 url: formData.privacy_policy_url,
                 link_text: formData.privacy_policy_link_text || 'Privacy Policy'
@@ -1118,13 +1190,30 @@ export async function createFacebookLeadForm(
             payload.follow_up_action_url = formData.follow_up_action_url;
         }
 
-        // Context card (intro description) - Meta supports this but only saves as paragraph
-        if (formData.intro_description) {
-            payload.context_card = {
-                title: formData.greeting || 'Welcome', // Required by Meta API
-                content: formData.intro_description,
-                style: 'PARAGRAPH_STYLE' // Required by Meta API
-            };
+        // Context card (intro description)
+        // Meta supports PARAGRAPH_STYLE (string content) and LIST_STYLE (array of strings content)
+        if (formData.greeting) {
+            const style = formData.context_card_style || 'PARAGRAPH_STYLE';
+
+            // Validate content based on style
+            let content: string | string[] | undefined;
+
+            if (style === 'LIST_STYLE') {
+                if (Array.isArray(formData.context_card_content) && formData.context_card_content.length > 0) {
+                    content = formData.context_card_content;
+                }
+            } else {
+                // PARAGRAPH_STYLE
+                content = formData.intro_description;
+            }
+
+            if (content) {
+                payload.context_card = {
+                    title: formData.greeting, // Required by Meta API
+                    content: content,
+                    style: style // Required by Meta API
+                };
+            }
         }
 
         // Thank you page - Fully supported
@@ -1135,6 +1224,22 @@ export async function createFacebookLeadForm(
                 button_type: 'VIEW_WEBSITE', // Required by Meta API
                 button_text: 'Continue', // Required by Meta API
                 website_url: formData.privacy_policy_url // Required when button_type is VIEW_WEBSITE
+            };
+        }
+
+        // Custom Disclaimer - Fully supported
+        if (formData.custom_disclaimer) {
+            payload.custom_disclaimer = {
+                title: formData.custom_disclaimer.title || 'Terms and Conditions',
+                body: {
+                    text: formData.custom_disclaimer.body
+                },
+                checkboxes: formData.custom_disclaimer.checkboxes?.map((cb: any) => ({
+                    key: cb.key || `checkbox_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                    text: cb.text,
+                    is_required: cb.is_required !== false, // Default to true
+                    is_checked_by_default: cb.is_checked_by_default || false
+                }))
             };
         }
 
@@ -1163,8 +1268,13 @@ export async function createFacebookLeadForm(
             const error = await response.json();
             console.error('[Facebook] Lead form creation failed:', JSON.stringify(error, null, 2));
 
+            // Prioritize user-friendly error messages from Facebook
+            const userFriendlyMessage = error.error?.error_user_msg;
+            const userTitle = error.error?.error_user_title;
+            const genericMessage = error.error?.message;
+
             // Log which fields might not be supported
-            const errorMessage = error.error?.message || '';
+            const errorMessage = genericMessage || '';
             const unsupportedFields: string[] = [];
 
             if (errorMessage.includes('greeting')) unsupportedFields.push('greeting');
@@ -1172,10 +1282,20 @@ export async function createFacebookLeadForm(
 
             if (unsupportedFields.length > 0) {
                 console.warn(`[Facebook] The following fields are not supported by Meta's API: ${unsupportedFields.join(', ')}`);
-                throw new Error(`Meta API does not support: ${unsupportedFields.join(', ')}. ${error.error?.message || response.statusText}`);
+                throw new Error(`Meta API does not support: ${unsupportedFields.join(', ')}. ${genericMessage || response.statusText}`);
             }
 
-            throw new Error(error.error?.message || `Meta API error: ${response.statusText}`);
+            // Use the most user-friendly error message available
+            let finalErrorMessage = genericMessage || `Meta API error: ${response.statusText}`;
+
+            if (userFriendlyMessage) {
+                // If we have a user-friendly message, use it (optionally with title)
+                finalErrorMessage = userTitle
+                    ? `${userTitle}: ${userFriendlyMessage}`
+                    : userFriendlyMessage;
+            }
+
+            throw new Error(finalErrorMessage);
         }
 
 

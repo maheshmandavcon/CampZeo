@@ -18,7 +18,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Download, Loader2, Users, RefreshCw, AlertCircle, Plus, Eye } from 'lucide-react';
+import { Download, Loader2, Users, RefreshCw, AlertCircle, Plus, Eye, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { LeadFormModal } from './_components/lead-form-modal';
@@ -31,6 +31,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 
 export default function LeadsAnalyticsPage() {
     const [leads, setLeads] = useState<any[]>([]);
@@ -52,6 +53,15 @@ export default function LeadsAnalyticsPage() {
     // Form Details State
     const [selectedFormForDetails, setSelectedFormForDetails] = useState<any>(null);
     const [isFormDetailsOpen, setIsFormDetailsOpen] = useState(false);
+
+    // Pagination and Filtering for Lead Forms
+    const [leadFormsPage, setLeadFormsPage] = useState(1);
+    const [leadFormsFilter, setLeadFormsFilter] = useState('');
+    const [leadFormsStatusFilter, setLeadFormsStatusFilter] = useState<string>('all');
+    const leadFormsPerPage = 5;
+
+    // Form duplication state
+    const [formToDuplicate, setFormToDuplicate] = useState<any>(null);
 
     const fetchFacebookPages = async () => {
         try {
@@ -300,57 +310,166 @@ export default function LeadsAnalyticsPage() {
                             {loadingLeadForms && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
                         </div>
                     </div>
+                    {/* Filter Controls */}
+                    <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                        <Input
+                            placeholder="Search by form name..."
+                            value={leadFormsFilter}
+                            onChange={(e) => {
+                                setLeadFormsFilter(e.target.value);
+                                setLeadFormsPage(1); // Reset to first page on filter change
+                            }}
+                            className="max-w-xs"
+                        />
+                        <Select value={leadFormsStatusFilter} onValueChange={(val) => {
+                            setLeadFormsStatusFilter(val);
+                            setLeadFormsPage(1); // Reset to first page on filter change
+                        }}>
+                            <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Filter by status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Status</SelectItem>
+                                <SelectItem value="ACTIVE">Active</SelectItem>
+                                <SelectItem value="ARCHIVED">Archived</SelectItem>
+                                <SelectItem value="DRAFT">Draft</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </CardHeader>
                 <CardContent>
-                    {leadForms.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-8 text-center bg-muted/20 rounded-lg border border-dashed">
-                            <p className="text-sm text-muted-foreground">No lead forms found for this page.</p>
-                        </div>
-                    ) : (
-                        <div className="rounded-md border">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Form Name</TableHead>
-                                        <TableHead>Form ID</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Created Date</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {leadForms.map((form) => (
-                                        <TableRow key={form.id}>
-                                            <TableCell className="font-medium">{form.name}</TableCell>
-                                            <TableCell className="text-xs font-mono">{form.id}</TableCell>
-                                            <TableCell>
-                                                <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold ${form.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground'
-                                                    }`}>
-                                                    {form.status}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell className="text-sm text-muted-foreground">
-                                                {format(new Date(), 'MMM d, yyyy')}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => {
-                                                        setSelectedFormForDetails(form);
-                                                        setIsFormDetailsOpen(true);
-                                                    }}
-                                                >
-                                                    <Eye className="size-4 mr-2" />
-                                                    View Details
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
+                    {(() => {
+                        // Apply filters
+                        const filteredForms = leadForms.filter(form => {
+                            const matchesName = form.name.toLowerCase().includes(leadFormsFilter.toLowerCase());
+                            const matchesStatus = leadFormsStatusFilter === 'all' || form.status === leadFormsStatusFilter;
+                            return matchesName && matchesStatus;
+                        });
+
+                        // Apply pagination
+                        const totalPages = Math.ceil(filteredForms.length / leadFormsPerPage);
+                        const startIndex = (leadFormsPage - 1) * leadFormsPerPage;
+                        const paginatedForms = filteredForms.slice(startIndex, startIndex + leadFormsPerPage);
+
+                        if (filteredForms.length === 0) {
+                            return (
+                                <div className="flex flex-col items-center justify-center py-8 text-center bg-muted/20 rounded-lg border border-dashed">
+                                    <p className="text-sm text-muted-foreground">
+                                        {leadForms.length === 0 ? 'No lead forms found for this page.' : 'No forms match your filters.'}
+                                    </p>
+                                </div>
+                            );
+                        }
+
+                        return (
+                            <>
+                                <div className="rounded-md border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Form Name</TableHead>
+                                                <TableHead>Form ID</TableHead>
+                                                <TableHead>Status</TableHead>
+                                                <TableHead>Created Date</TableHead>
+                                                <TableHead className="text-right">Actions</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {paginatedForms.map((form) => (
+                                                <TableRow key={form.id}>
+                                                    <TableCell className="font-medium">{form.name}</TableCell>
+                                                    <TableCell className="text-xs font-mono">{form.id}</TableCell>
+                                                    <TableCell>
+                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold ${form.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground'
+                                                            }`}>
+                                                            {form.status}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="text-sm text-muted-foreground">
+                                                        {format(new Date(), 'MMM d, yyyy')}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => {
+                                                                    setSelectedFormForDetails(form);
+                                                                    setIsFormDetailsOpen(true);
+                                                                }}
+                                                            >
+                                                                <Eye className="size-4 mr-2" />
+                                                                View Details
+                                                            </Button>
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={async () => {
+                                                                    try {
+                                                                        // Fetch full form details
+                                                                        const response = await fetch(
+                                                                            `/api/socialmedia/facebook/lead-forms?pageId=${selectedPageId}&pageAccessToken=${selectedPageAccessToken}&formId=${form.id}`
+                                                                        );
+
+                                                                        if (!response.ok) {
+                                                                            throw new Error('Failed to fetch form details');
+                                                                        }
+
+                                                                        const data = await response.json();
+
+                                                                        // Open modal with form data for duplication
+                                                                        setIsLeadFormModalOpen(true);
+                                                                        // We'll pass the form data via a new state
+                                                                        setFormToDuplicate(data.form);
+                                                                    } catch (error) {
+                                                                        console.error('Error fetching form details:', error);
+                                                                        toast.error('Failed to load form details');
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <Copy className="size-4 mr-2" />
+                                                                Duplicate
+                                                            </Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+
+                                {/* Pagination Controls */}
+                                {totalPages > 1 && (
+                                    <div className="flex items-center justify-between mt-4">
+                                        <p className="text-sm text-muted-foreground">
+                                            Showing {startIndex + 1} to {Math.min(startIndex + leadFormsPerPage, filteredForms.length)} of {filteredForms.length} forms
+                                        </p>
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setLeadFormsPage(prev => Math.max(1, prev - 1))}
+                                                disabled={leadFormsPage === 1}
+                                            >
+                                                Previous
+                                            </Button>
+                                            <span className="text-sm">
+                                                Page {leadFormsPage} of {totalPages}
+                                            </span>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setLeadFormsPage(prev => Math.min(totalPages, prev + 1))}
+                                                disabled={leadFormsPage === totalPages}
+                                            >
+                                                Next
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        );
+                    })()}
                 </CardContent>
             </Card>
 
@@ -535,12 +654,16 @@ export default function LeadsAnalyticsPage() {
             {selectedPageId && selectedPageAccessToken && (
                 <LeadFormModal
                     isOpen={isLeadFormModalOpen}
-                    onClose={() => setIsLeadFormModalOpen(false)}
+                    onClose={() => {
+                        setIsLeadFormModalOpen(false);
+                        setFormToDuplicate(null);
+                    }}
                     pageId={selectedPageId}
                     pageAccessToken={selectedPageAccessToken}
+                    initialData={formToDuplicate}
                     onSuccess={(form: any) => {
-                        toast.success(`Form "${form.name}" created successfully!`);
                         setIsLeadFormModalOpen(false);
+                        setFormToDuplicate(null);
                         if (selectedPageId && selectedPageAccessToken) {
                             fetchLeadForms(selectedPageId, selectedPageAccessToken);
                         }

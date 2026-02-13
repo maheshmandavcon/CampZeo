@@ -14,7 +14,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
     Select,
     SelectContent,
@@ -22,7 +21,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Plus, X, Info } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
+import { Loader2, Plus, X, Info, AlignLeft, List } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface LeadFormModalProps {
@@ -78,14 +80,23 @@ export function LeadFormModal({
     // Intro Tab
     const [greetingHeadline, setGreetingHeadline] = useState('');
     const [introDescription, setIntroDescription] = useState('');
+    const [introStyle, setIntroStyle] = useState<'PARAGRAPH' | 'LIST'>('PARAGRAPH');
+    const [introListItems, setIntroListItems] = useState<string[]>(['']);
 
     // Questions Tab
     const [selectedContactFields, setSelectedContactFields] = useState<string[]>(['FULL_NAME', 'EMAIL']);
     const [customQuestions, setCustomQuestions] = useState<CustomQuestion[]>([]);
+    const [questionsDescription, setQuestionsDescription] = useState('');
 
     // Privacy Policy Tab
     const [privacyPolicyUrl, setPrivacyPolicyUrl] = useState('');
     const [privacyPolicyLinkText, setPrivacyPolicyLinkText] = useState('Privacy Policy');
+    const [addCustomDisclaimer, setAddCustomDisclaimer] = useState(false);
+    const [disclaimerTitle, setDisclaimerTitle] = useState('Terms and Conditions');
+    const [disclaimerBody, setDisclaimerBody] = useState('');
+    const [consentCheckboxes, setConsentCheckboxes] = useState<Array<{ title: string; text: string; is_required: boolean }>>([
+        { title: 'Terms of Service', text: 'I agree to the terms and conditions.', is_required: true }
+    ]);
 
     // Ending Tab
     const [thankYouHeadline, setThankYouHeadline] = useState('Thank you!');
@@ -93,8 +104,41 @@ export function LeadFormModal({
 
     useEffect(() => {
         if (initialData) {
+            // Map form name with (Copy) suffix
             setFormName(`${initialData.name} (Copy)`);
-            setPrivacyPolicyUrl(initialData.privacy_policy_url || '');
+
+            // Map privacy policy
+            if (initialData.privacy_policy_url) {
+                setPrivacyPolicyUrl(initialData.privacy_policy_url);
+                setPrivacyPolicyLinkText('Privacy Policy');
+            }
+
+            // Map questions to contact fields and custom questions
+            if (initialData.questions && Array.isArray(initialData.questions)) {
+                const contactFieldTypes = ['FULL_NAME', 'EMAIL', 'PHONE', 'CITY', 'STATE', 'COUNTRY', 'ZIP'];
+                const contactFields: string[] = [];
+                const customQs: CustomQuestion[] = [];
+
+                initialData.questions.forEach((q: any) => {
+                    if (contactFieldTypes.includes(q.type)) {
+                        contactFields.push(q.type);
+                    } else if (q.type === 'CUSTOM') {
+                        customQs.push({
+                            type: q.conditional_questions_group_id ? 'MULTIPLE_CHOICE' : 'SHORT_ANSWER',
+                            label: q.label || '',
+                            options: q.options || []
+                        });
+                    }
+                });
+
+                setSelectedContactFields(contactFields.length > 0 ? contactFields : ['FULL_NAME', 'EMAIL']);
+                setCustomQuestions(customQs);
+            }
+
+            // Note: Facebook API doesn't provide context_card, thank_you_page, custom_disclaimer,
+            // or question_page_custom_headline when fetching individual forms.
+            // These fields are only available when creating forms, not when reading them.
+            // Users will need to re-enter these fields when duplicating.
         } else {
             resetForm();
         }
@@ -105,10 +149,17 @@ export function LeadFormModal({
         setFormName('');
         setGreetingHeadline('');
         setIntroDescription('');
+        setIntroStyle('PARAGRAPH');
+        setIntroListItems(['']);
         setSelectedContactFields(['FULL_NAME', 'EMAIL']);
         setCustomQuestions([]);
+        setQuestionsDescription('');
         setPrivacyPolicyUrl('');
         setPrivacyPolicyLinkText('Privacy Policy');
+        setAddCustomDisclaimer(false);
+        setDisclaimerTitle('Terms and Conditions');
+        setDisclaimerBody('');
+        setConsentCheckboxes([{ title: 'Terms of Service', text: 'I agree to the terms and conditions.', is_required: true }]);
         setThankYouHeadline('Thank you!');
         setThankYouDescription('We\'ll be in touch soon.');
     };
@@ -168,8 +219,9 @@ export function LeadFormModal({
         setCustomQuestions(updated);
     };
 
-    const validateCurrentTab = (): boolean => {
-        switch (activeTab) {
+    const validateCurrentTab = (tabToValidate?: string): boolean => {
+        const tab = tabToValidate || activeTab;
+        switch (tab) {
             case 'form-type':
                 if (!formName.trim()) {
                     toast.error('Please enter a form name');
@@ -177,6 +229,16 @@ export function LeadFormModal({
                 }
                 return true;
             case 'intro':
+                if (greetingHeadline.trim()) { // If headline is provided, description/list must also be valid
+                    if (introStyle === 'PARAGRAPH' && !introDescription.trim()) {
+                        toast.error('Intro description is required if greeting headline is provided');
+                        return false;
+                    }
+                    if (introStyle === 'LIST' && introListItems.filter(i => i.trim()).length === 0) {
+                        toast.error('At least one intro list item is required if greeting headline is provided');
+                        return false;
+                    }
+                }
                 return true;
             case 'questions':
                 if (selectedContactFields.length === 0) {
@@ -201,6 +263,24 @@ export function LeadFormModal({
                     toast.error('Privacy policy URL is required');
                     return false;
                 }
+                if (addCustomDisclaimer) {
+                    if (!disclaimerTitle.trim()) {
+                        toast.error('Disclaimer title is required');
+                        return false;
+                    }
+                    if (!disclaimerBody.trim()) {
+                        toast.error('Disclaimer body text is required');
+                        return false;
+                    }
+                    if (consentCheckboxes.length === 0) {
+                        toast.error('At least one consent checkbox is required');
+                        return false;
+                    }
+                    if (consentCheckboxes.some(c => !c.text.trim())) {
+                        toast.error('All consent checkboxes must have text');
+                        return false;
+                    }
+                }
                 return true;
             case 'ending':
                 return true;
@@ -212,8 +292,8 @@ export function LeadFormModal({
     const handleSave = async () => {
         const tabs = ['form-type', 'intro', 'questions', 'privacy', 'ending'];
         for (const tab of tabs) {
-            setActiveTab(tab);
-            if (!validateCurrentTab()) {
+            if (!validateCurrentTab(tab)) {
+                setActiveTab(tab);
                 return;
             }
         }
@@ -274,13 +354,36 @@ export function LeadFormModal({
                 privacy_policy_url: privacyPolicyUrl.trim(),
                 privacy_policy_link_text: privacyPolicyLinkText.trim(),
                 questions,
+                questions_description: questionsDescription.trim(),
             };
-            debugger
-            // Only add greeting and intro if both are provided (context_card requires title)
-            if (greetingHeadline.trim() && introDescription.trim()) {
-                payload.greeting = greetingHeadline.trim();
-                payload.intro_description = introDescription.trim();
+
+            if (addCustomDisclaimer) {
+                payload.custom_disclaimer = {
+                    title: disclaimerTitle.trim(),
+                    body: disclaimerBody.trim(),
+                    checkboxes: consentCheckboxes.map(c => ({
+                        text: c.title.trim() ? `${c.title.trim()}: ${c.text.trim()}` : c.text.trim(),
+                        is_required: c.is_required
+                    }))
+                };
             }
+
+            // Only add greeting and intro if both are provided (context_card requires title)
+            if (greetingHeadline.trim()) {
+                payload.greeting = greetingHeadline.trim();
+
+                if (introStyle === 'PARAGRAPH' && introDescription.trim()) {
+                    payload.intro_description = introDescription.trim();
+                    payload.context_card_style = 'PARAGRAPH_STYLE';
+                } else if (introStyle === 'LIST') {
+                    const validItems = introListItems.filter(i => i.trim());
+                    if (validItems.length > 0) {
+                        payload.context_card_style = 'LIST_STYLE';
+                        payload.context_card_content = validItems;
+                    }
+                }
+            }
+
             if (thankYouHeadline.trim()) {
                 payload.thank_you_headline = thankYouHeadline.trim();
             }
@@ -300,7 +403,7 @@ export function LeadFormModal({
             }
 
             const data = await response.json();
-            toast.success('Lead form created successfully');
+            toast.success(`Form "${formName}" created successfully!`);
             onSuccess(data.result);
             onClose();
             resetForm();
@@ -324,7 +427,7 @@ export function LeadFormModal({
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <TabsList className="grid w-full grid-cols-5">
-                        <TabsTrigger value="form-type">Type</TabsTrigger>
+                        <TabsTrigger value="form-type">Form Details</TabsTrigger>
                         <TabsTrigger value="intro">Intro</TabsTrigger>
                         <TabsTrigger value="questions">Questions</TabsTrigger>
                         <TabsTrigger value="privacy">Privacy</TabsTrigger>
@@ -368,23 +471,118 @@ export function LeadFormModal({
                             <p className="text-xs text-muted-foreground">{greetingHeadline.length}/100 characters</p>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="introDesc">Description</Label>
-                            <Textarea
-                                id="introDesc"
-                                value={introDescription}
-                                onChange={(e) => setIntroDescription(e.target.value)}
-                                placeholder="Describe what this form is for and why people should fill it out"
-                                rows={5}
-                                maxLength={500}
-                            />
-                            <p className="text-xs text-muted-foreground">{introDescription.length}/500 characters</p>
+
+
+                        <div className="space-y-3 pt-2">
+                            <Label>Description Format</Label>
+                            <RadioGroup
+                                value={introStyle}
+                                onValueChange={(v) => setIntroStyle(v as 'PARAGRAPH' | 'LIST')}
+                                className="flex space-x-4"
+                            >
+                                <div className="flex items-center space-x-2 border p-3 rounded-md cursor-pointer hover:bg-accent/50 w-full has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent/50">
+                                    <RadioGroupItem value="PARAGRAPH" id="style-paragraph" />
+                                    <Label htmlFor="style-paragraph" className="cursor-pointer flex items-center gap-2">
+                                        <AlignLeft className="size-4" />
+                                        Paragraph
+                                    </Label>
+                                </div>
+                                <div className="flex items-center space-x-2 border p-3 rounded-md cursor-pointer hover:bg-accent/50 w-full has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent/50">
+                                    <RadioGroupItem value="LIST" id="style-list" />
+                                    <Label htmlFor="style-list" className="cursor-pointer flex items-center gap-2">
+                                        <List className="size-4" />
+                                        List
+                                    </Label>
+                                </div>
+                            </RadioGroup>
                         </div>
+
+                        {introStyle === 'PARAGRAPH' ? (
+                            <div className="space-y-2">
+                                <Label htmlFor="introDesc">Description</Label>
+                                <Textarea
+                                    id="introDesc"
+                                    value={introDescription}
+                                    onChange={(e) => setIntroDescription(e.target.value)}
+                                    placeholder="Describe what this form is for and why people should fill it out"
+                                    rows={5}
+                                    maxLength={500}
+                                />
+                                <p className="text-xs text-muted-foreground">{introDescription.length}/500 characters</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <Label>List Items</Label>
+                                <div className="space-y-2">
+                                    {introListItems.map((item, index) => (
+                                        <div key={index} className="flex gap-2 items-center">
+                                            <div className="size-1.5 rounded-full bg-primary shrink-0" />
+                                            <Input
+                                                value={item}
+                                                onChange={(e) => {
+                                                    const newItems = [...introListItems];
+                                                    newItems[index] = e.target.value;
+                                                    setIntroListItems(newItems);
+                                                }}
+                                                placeholder={`List item ${index + 1}`}
+                                                className="flex-1"
+                                                maxLength={80}
+                                            />
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                                                onClick={() => {
+                                                    if (introListItems.length > 1) {
+                                                        const newItems = introListItems.filter((_, i) => i !== index);
+                                                        setIntroListItems(newItems);
+                                                    }
+                                                }}
+                                                disabled={introListItems.length <= 1}
+                                            >
+                                                <X className="size-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {introListItems.length < 5 && (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIntroListItems([...introListItems, ''])}
+                                        className="mt-2"
+                                    >
+                                        <Plus className="size-4 mr-2" />
+                                        Add Item
+                                    </Button>
+                                )}
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Add up to 5 bullet points (max 80 characters each) to highlight key benefits.
+                                </p>
+                            </div>
+                        )}
                     </TabsContent>
 
                     {/* Questions Tab */}
                     <TabsContent value="questions" className="space-y-4 mt-4">
                         <div className="space-y-3">
+                            <div className="space-y-2">
+                                <Label htmlFor="questionsDescription">Description (Optional)</Label>
+                                <Textarea
+                                    id="questionsDescription"
+                                    value={questionsDescription}
+                                    onChange={(e) => setQuestionsDescription(e.target.value)}
+                                    placeholder="Let people know how the information they give you will be used or shared."
+                                    rows={2}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    This text will appear above the contact fields.
+                                </p>
+                            </div>
+
                             <Label>Contact Information *</Label>
 
                             <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-md">
@@ -541,6 +739,120 @@ export function LeadFormModal({
                                 placeholder="Privacy Policy"
                             />
                         </div>
+
+                        <div className="border-t pt-4 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label className="text-base">Custom Disclaimer</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Add custom terms and consent checkboxes.
+                                    </p>
+                                </div>
+                                <Switch
+                                    checked={addCustomDisclaimer}
+                                    onCheckedChange={setAddCustomDisclaimer}
+                                    className="data-[state=unchecked]:bg-slate-200 dark:data-[state=unchecked]:bg-slate-700 border border-slate-300 dark:border-slate-600 shadow-sm"
+                                />
+                            </div>
+
+                            {addCustomDisclaimer && (
+                                <div className="space-y-4 pt-2 border rounded-md p-4 bg-muted/20">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="disclaimerTitle">Disclaimer Title *</Label>
+                                        <Input
+                                            id="disclaimerTitle"
+                                            value={disclaimerTitle}
+                                            onChange={(e) => setDisclaimerTitle(e.target.value)}
+                                            placeholder="Terms and Conditions"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="disclaimerBody">Disclaimer Text *</Label>
+                                        <Textarea
+                                            id="disclaimerBody"
+                                            value={disclaimerBody}
+                                            onChange={(e) => setDisclaimerBody(e.target.value)}
+                                            placeholder="Enter your legal disclaimer text here..."
+                                            rows={4}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <Label>Consent Checkboxes</Label>
+                                        <div className="space-y-3">
+                                            {consentCheckboxes.map((checkbox, index) => (
+                                                <div key={index} className="flex flex-col gap-2 p-3 bg-card border rounded-md">
+                                                    <div className="flex gap-2 items-start">
+                                                        <div className="pt-2">
+                                                            <Checkbox
+                                                                checked={checkbox.is_required}
+                                                                onCheckedChange={(checked) => {
+                                                                    const updated = [...consentCheckboxes];
+                                                                    updated[index].is_required = checked === true;
+                                                                    setConsentCheckboxes(updated);
+                                                                }}
+                                                            />
+                                                        </div>
+                                                        <div className="flex-1 space-y-2">
+                                                            <Input
+                                                                value={checkbox.title}
+                                                                onChange={(e) => {
+                                                                    const updated = [...consentCheckboxes];
+                                                                    updated[index].title = e.target.value;
+                                                                    setConsentCheckboxes(updated);
+                                                                }}
+                                                                placeholder="Consent Title (e.g., Marketing)"
+                                                                className="h-9 text-sm font-medium"
+                                                            />
+                                                            <Textarea
+                                                                value={checkbox.text}
+                                                                onChange={(e) => {
+                                                                    const updated = [...consentCheckboxes];
+                                                                    updated[index].text = e.target.value;
+                                                                    setConsentCheckboxes(updated);
+                                                                }}
+                                                                placeholder="Consent Text (e.g., I agree to receive marketing emails...)"
+                                                                rows={2}
+                                                                className="text-sm"
+                                                            />
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    {checkbox.is_required ? 'Required' : 'Optional'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                                            onClick={() => {
+                                                                const updated = consentCheckboxes.filter((_, i) => i !== index);
+                                                                setConsentCheckboxes(updated);
+                                                            }}
+                                                        >
+                                                            <X className="size-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setConsentCheckboxes([...consentCheckboxes, { title: '', text: '', is_required: false }])}
+                                            className="mt-2"
+                                        >
+                                            <Plus className="size-4 mr-2" />
+                                            Add Consent
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </TabsContent>
 
                     {/* Ending Tab */}
@@ -582,13 +894,47 @@ export function LeadFormModal({
                 </Tabs>
 
                 <DialogFooter className="gap-2">
-                    <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-                    <Button onClick={handleSave} disabled={saving}>
-                        {saving && <Loader2 className="size-4 mr-2 animate-spin" />}
-                        {initialData ? 'Duplicate & Create' : 'Create Form'}
-                    </Button>
+                    {activeTab === 'ending' ? (
+                        // Last tab: Show Cancel and Create Form buttons
+                        <>
+                            <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+                            <Button onClick={handleSave} disabled={saving}>
+                                {saving && <Loader2 className="size-4 mr-2 animate-spin" />}
+                                {initialData ? 'Duplicate & Create' : 'Create Form'}
+                            </Button>
+                        </>
+                    ) : (
+                        // First 4 tabs: Show Previous and Next buttons
+                        <>
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    const tabs = ['form-type', 'intro', 'questions', 'privacy', 'ending'];
+                                    const currentIndex = tabs.indexOf(activeTab);
+                                    if (currentIndex > 0) {
+                                        setActiveTab(tabs[currentIndex - 1]);
+                                    }
+                                }}
+                                disabled={activeTab === 'form-type'}
+                            >
+                                Previous
+                            </Button>
+                            <Button
+                                onClick={() => {
+                                    if (!validateCurrentTab()) return;
+                                    const tabs = ['form-type', 'intro', 'questions', 'privacy', 'ending'];
+                                    const currentIndex = tabs.indexOf(activeTab);
+                                    if (currentIndex < tabs.length - 1) {
+                                        setActiveTab(tabs[currentIndex + 1]);
+                                    }
+                                }}
+                            >
+                                Next
+                            </Button>
+                        </>
+                    )}
                 </DialogFooter>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     );
 }
