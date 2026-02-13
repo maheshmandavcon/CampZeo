@@ -14,7 +14,7 @@ export default async function SettingsPage() {
 
   const dbUser = await prisma.user.findUnique({
     where: { clerkId: user.id },
-    select: { organisationId: true, role: true, firstName: true, lastName: true, mobile: true, email: true, facebookAccessToken: true, instagramAccessToken: true, linkedInAccessToken: true, linkedInAuthUrn: true, youtubeAccessToken: true, pinterestAccessToken: true }
+    select: { organisationId: true, role: true, firstName: true, lastName: true, mobile: true, email: true, facebookAccessToken: true, facebookPageId: true, facebookPageAccessToken: true, instagramAccessToken: true, linkedInAccessToken: true, linkedInAuthUrn: true, youtubeAccessToken: true, pinterestAccessToken: true }
   });
 
   if (!dbUser) {
@@ -64,6 +64,8 @@ export default async function SettingsPage() {
     mobile: dbUser.mobile,
     email: dbUser.email,
     facebookConnected: !!connectionSource.facebookAccessToken,
+    facebookPageId: connectionSource.facebookPageId,
+    facebookPageAccessToken: connectionSource.facebookPageAccessToken,
     instagramConnected: !!connectionSource.instagramAccessToken,
     linkedInConnected: !!connectionSource.linkedInAccessToken,
     linkedInAuthUrn: connectionSource.linkedInAuthUrn,

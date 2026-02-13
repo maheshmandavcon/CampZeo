@@ -58,29 +58,17 @@ async function getHandler(request: NextRequest) {
         let authUrl = "";
         const state = `${platform}_${targetUserId}`; // Simple state to pass platform and user. In production, sign this.
 
-        switch (platform) {
-            case "FACEBOOK":
-            case "INSTAGRAM": // Instagram Graph API uses Facebook Login
-                // Permissions needed:
-                // - pages_show_list: To see user's Facebook Pages
-                // - pages_read_engagement: To read page insights
-                // - pages_read_user_content: To read page feed/posts
-                // - read_insights: For detailed metrics (reach, impressions)
-                // - pages_manage_posts: To post content to pages
-                // - pages_manage_ads: To boost posts
-                // - ads_management: To manage ad accounts and campaigns
-                // - ads_read: To check ad account status/billing
-                // - leads_retrieval: To fetch leads from lead forms
-                // - instagram_basic: Basic Instagram account info
-                // - instagram_content_publish: To publish to Instagram
-                // - instagram_manage_insights: For Instagram analytics
-                // - business_management: For Instagram Business Account access
-                authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=pages_show_list,pages_read_engagement,pages_read_user_content,read_insights,pages_manage_posts,pages_manage_ads,ads_management,ads_read,leads_retrieval,instagram_basic,instagram_content_publish,instagram_manage_insights,business_management`;
-                break;
-            case "INSTAGRAM_DIRECT":
-                // Direct Instagram app authentication (not via Facebook)
-                authUrl = `https://api.instagram.com/oauth/authorize?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user_profile,user_media&response_type=code&state=${state}`;
-                break;
+    switch (platform) {
+        case "FACEBOOK":
+        case "INSTAGRAM": // Instagram Graph API uses Facebook Login
+            // Permissions needed:
+            // ...
+            authUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=pages_show_list,pages_read_engagement,pages_read_user_content,read_insights,pages_manage_posts,pages_manage_ads,ads_management,ads_read,leads_retrieval,instagram_basic,instagram_content_publish,instagram_manage_insights,business_management,instagram_manage_messages,pages_messaging,public_profile`;
+            break;
+        case "INSTAGRAM_DIRECT":
+            // Direct Instagram app authentication (not via Facebook)
+            authUrl = `https://api.instagram.com/oauth/authorize?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user_profile,user_media&response_type=code&state=${state}`;
+            break;
 
             case "LINKEDIN":
                 authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=w_member_social,r_basicprofile,w_organization_social,r_organization_social,rw_organization_admin`;

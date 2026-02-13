@@ -151,6 +151,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [creatingBoard, setCreatingBoard] = useState(false);
     const [socialStatus, setSocialStatus] = useState<any>(null); // New state for social status
     const [selectedLinkedInUrn, setSelectedLinkedInUrn] = useState<string>(''); // For LinkedIn organization selection
+    const [leadForms, setLeadForms] = useState<any[]>([]);
+    const [loadingLeadForms, setLoadingLeadForms] = useState(false);
+    const [selectedLeadFormId, setSelectedLeadFormId] = useState<string>('');
 
     // AI Assistant state
     const [showAIAssistant, setShowAIAssistant] = useState(false);
@@ -339,6 +342,31 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             fetchPages();
         }
     }, [selectedPlatform]);
+
+    // Fetch Lead Forms when Facebook Page changes
+    useEffect(() => {
+        if ((selectedPlatform === 'FACEBOOK' || selectedPlatform === 'INSTAGRAM') && selectedFacebookPageId && selectedFacebookPageAccessToken) {
+            const fetchLeadForms = async () => {
+                try {
+                    setLoadingLeadForms(true);
+                    const response = await fetch(`/api/socialmedia/facebook/lead-forms?pageId=${selectedFacebookPageId}&pageAccessToken=${selectedFacebookPageAccessToken}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        setLeadForms(data.forms || []);
+                    }
+                } catch (error) {
+                    console.error('Error fetching lead forms:', error);
+                    toast.error('Failed to fetch lead forms');
+                } finally {
+                    setLoadingLeadForms(false);
+                }
+            };
+            fetchLeadForms();
+        } else {
+            setLeadForms([]);
+            setSelectedLeadFormId('');
+        }
+    }, [selectedFacebookPageId, selectedFacebookPageAccessToken, selectedPlatform]);
 
     // Get preview content with variables replaced
     const getPreviewContent = () => {
@@ -729,6 +757,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     facebookPageAccessToken: selectedFacebookPageAccessToken, // NEW: Selected Facebook Page Access Token
                     instagramBusinessId: selectedInstagramBusinessId, // NEW: Linked Instagram ID
                     linkedInUrn: selectedLinkedInUrn, // NEW: Selected LinkedIn Author URN
+                    leadFormId: selectedLeadFormId && selectedLeadFormId !== 'none' ? selectedLeadFormId : null,
                     metaBoost: boostOptions.enabled ? boostOptions : undefined, // NEW: Meta Boost options
                 }),
             });
@@ -1456,6 +1485,50 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                         </div>
                                     )}
 
+                                    {/* Lead Form Selection */}
+                                    {(selectedPlatform === 'FACEBOOK' || selectedPlatform === 'INSTAGRAM') && selectedFacebookPageId && (
+                                        <div className="space-y-3 rounded-lg border bg-blue-50/30 p-4 border-blue-100">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-sm font-medium flex items-center gap-2">
+                                                    <FileText className="size-4 text-blue-600" />
+                                                    Attach Lead Form (Optional)
+                                                </Label>
+                                            </div>
+
+                                            {loadingLeadForms ? (
+                                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                    <Loader2 className="size-3 animate-spin" />
+                                                    Loading forms...
+                                                </div>
+                                            ) : (
+                                                <div className="flex gap-2">
+                                                    <div className="flex-1">
+                                                        <Select
+                                                            value={selectedLeadFormId}
+                                                            onValueChange={setSelectedLeadFormId}
+                                                        >
+                                                            <SelectTrigger className="bg-white">
+                                                                <SelectValue placeholder="Select a lead form" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="none">No lead form</SelectItem>
+                                                                {leadForms.map((form) => (
+                                                                    <SelectItem key={form.id} value={form.id}>
+                                                                        {form.name} ({form.status})
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <p className="text-[10px] text-muted-foreground">
+                                                Lead forms allow you to collect contact information directly from the post.
+                                                Manage your lead forms in <strong>Leads Management</strong>.
+                                            </p>
+                                        </div>
+                                    )}
+
                                     {/* Facebook & Instagram Content Type Selection */}
                                     {(selectedPlatform === 'FACEBOOK' || selectedPlatform === 'INSTAGRAM') && (
                                         <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
@@ -1887,6 +1960,20 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                             </Button>
                         )}
                         <Button
+                            className='cursor-pointer text-blue-600 border-blue-200 hover:bg-blue-50'
+                            type="button"
+                            variant="outline"
+                            onClick={handleQuickBoost}
+                            disabled={saving || savingBoost || !selectedPlatform || uploadingMedia || !['FACEBOOK', 'INSTAGRAM'].includes(selectedPlatform)}
+                        >
+                            {savingBoost ? (
+                                <Loader2 className="size-4 mr-2 animate-spin" />
+                            ) : (
+                                <Rocket className="size-4 mr-2" />
+                            )}
+                            Boost Now
+                        </Button>
+                        <Button
                             className='cursor-pointer'
                             type="submit" disabled={saving || savingBoost || !selectedPlatform || uploadingMedia}>
                             {saving ? (
@@ -2100,6 +2187,3 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         </div >
     );
 }
-
-
-

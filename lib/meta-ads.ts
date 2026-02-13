@@ -33,7 +33,7 @@ export interface MetaLeadForm {
  * Fetches available ad accounts for the authenticated user
  */
 export async function getAdAccounts(accessToken: string): Promise<MetaAdAccount[]> {
-    const response = await fetch(`https://graph.facebook.com/${FB_API_VERSION}/me/adaccounts?fields=name,account_id,account_status,currency,balance,amount_spent&access_token=${accessToken}`);
+    const response = await fetch(`https://graph.facebook.com/${FB_API_VERSION}/me/adaccounts?fields=name,account_id,account_status,currency,balance&access_token=${accessToken}`);
 
     if (!response.ok) {
         const error = await response.json();
@@ -127,6 +127,7 @@ export async function createBoostedAd(options: {
     if (!campaign.id) throw new Error(`Campaign creation failed: ${JSON.stringify(campaign)}`);
 
     // 2. Create Ad Set
+    // Using a broad relative targeting for simplicity in MVP
     const adSetRes = await fetch(`https://graph.facebook.com/${FB_API_VERSION}/${options.adAccountId}/adsets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

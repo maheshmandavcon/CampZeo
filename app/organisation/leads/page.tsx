@@ -23,9 +23,19 @@ import {
     Phone,
     User,
     Calendar,
-    ExternalLink
+    ExternalLink,
+    FileText,
+    Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 interface Lead {
     id: number;
@@ -39,11 +49,26 @@ interface Lead {
     };
 }
 
+interface LeadForm {
+    id: string;
+    name: string;
+    status: string;
+    created_time: string;
+}
+
 export default function LeadsPage() {
     const [leads, setLeads] = useState<Lead[]>([]);
+    const [leadForms, setLeadForms] = useState<LeadForm[]>([]);
+    const [facebookPages, setFacebookPages] = useState<any[]>([]);
+    const [selectedPageId, setSelectedPageId] = useState<string>('');
+    const [selectedPageAccessToken, setSelectedPageAccessToken] = useState<string>('');
+
     const [loading, setLoading] = useState(true);
+    const [loadingForms, setLoadingForms] = useState(false);
+    const [loadingPages, setLoadingPages] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [refreshing, setRefreshing] = useState(false);
+    const [activeTab, setActiveTab] = useState('leads');
 
     const fetchLeads = async () => {
         try {
@@ -51,18 +76,59 @@ export default function LeadsPage() {
             const response = await fetch('/api/leads');
             if (!response.ok) throw new Error('Failed to fetch leads');
             const data = await response.json();
-            setLeads(data.leads);
+            setLeads(data.leads || []);
         } catch (error) {
             console.error('Error fetching leads:', error);
-            toast.error('Failed to load leads');
+            // toast.error('Failed to load leads');
         } finally {
             setLoading(false);
         }
     };
 
+    const fetchFacebookPages = async () => {
+        try {
+            setLoadingPages(true);
+            const response = await fetch('/api/socialmedia/facebook/pages');
+            if (response.ok) {
+                const data = await response.json();
+                setFacebookPages(data.pages || []);
+                if (data.pages?.length > 0 && !selectedPageId) {
+                    setSelectedPageId(data.pages[0].id);
+                    setSelectedPageAccessToken(data.pages[0].access_token);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching Facebook pages:', error);
+        } finally {
+            setLoadingPages(false);
+        }
+    };
+
+    const fetchLeadForms = async (pageId: string, accessToken: string) => {
+        try {
+            setLoadingForms(true);
+            const response = await fetch(`/api/socialmedia/facebook/lead-forms?pageId=${pageId}&pageAccessToken=${accessToken}`);
+            if (!response.ok) throw new Error('Failed to fetch lead forms');
+            const data = await response.json();
+            setLeadForms(data.forms || []);
+        } catch (error) {
+            console.error('Error fetching lead forms:', error);
+            toast.error('Failed to load lead forms');
+        } finally {
+            setLoadingForms(false);
+        }
+    };
+
     useEffect(() => {
         fetchLeads();
+        fetchFacebookPages();
     }, []);
+
+    useEffect(() => {
+        if (selectedPageId && selectedPageAccessToken && activeTab === 'forms') {
+            fetchLeadForms(selectedPageId, selectedPageAccessToken);
+        }
+    }, [selectedPageId, selectedPageAccessToken, activeTab]);
 
     const handleSyncLeads = async () => {
         try {
@@ -94,7 +160,7 @@ export default function LeadsPage() {
                 lead.metaLeadId,
                 lead.campaign?.name || 'N/A',
                 lead.status,
-                JSON.stringify(lead.data).replace(/,/g, ';') // Avoid CSV break
+                JSON.stringify(lead.data).replace(/,/g, ';')
             ].join(','))
         ];
 
@@ -118,6 +184,11 @@ export default function LeadsPage() {
             lead.status.toLowerCase().includes(query);
     });
 
+    const filteredForms = leadForms.filter(form =>
+        form.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        form.status.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     const formatLeadData = (data: any) => {
         // Facebook lead data usually comes in a specific format
         // We try to find common fields
@@ -129,7 +200,7 @@ export default function LeadsPage() {
     };
 
     if (loading && leads.length === 0) {
-        return (
+    return (
             <div className="flex items-center justify-center min-h-[400px]">
                 <Loader2 className="size-8 animate-spin text-muted-foreground" />
             </div>
@@ -142,128 +213,264 @@ export default function LeadsPage() {
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Lead Management</h1>
                     <p className="text-muted-foreground">
-                        View and manage leads captured from Meta Lead Ads.
+                        View and manage leads and forms captured from Meta Lead Ads.
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        onClick={handleSyncLeads}
-                        disabled={refreshing}
-                        className="gap-2 cursor-pointer"
-                    >
-                        <RefreshCcw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
-                        Sync Leads
-                    </Button>
-                    <Button
-                        onClick={handleExport}
-                        className="gap-2 cursor-pointer"
-                    >
-                        <Download className="size-4" />
-                        Export CSV
-                    </Button>
+                    {activeTab === 'leads' ? (
+                        <>
+                            <Button
+                                variant="outline"
+                                onClick={handleSyncLeads}
+                                disabled={refreshing}
+                                className="gap-2 cursor-pointer"
+                            >
+                                <RefreshCcw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
+                                Sync Leads
+                            </Button>
+                            <Button
+                                onClick={handleExport}
+                                className="gap-2 cursor-pointer"
+                            >
+                                <Download className="size-4" />
+                                Export CSV
+                            </Button>
+                        </>
+                    ) : (
+                        <Button
+                            variant="outline"
+                            onClick={() => selectedPageId && selectedPageAccessToken && fetchLeadForms(selectedPageId, selectedPageAccessToken)}
+                            disabled={loadingForms || !selectedPageId}
+                            className="gap-2 cursor-pointer"
+                        >
+                            <RefreshCcw className={`size-4 ${loadingForms ? 'animate-spin' : ''}`} />
+                            Refresh Forms
+                        </Button>
+                    )}
                 </div>
             </div>
 
-            <Card>
-                <CardHeader className="pb-3 text-center sm:text-left">
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <CardTitle>Leads Overview</CardTitle>
+            <Tabs defaultValue="leads" className="w-full" onValueChange={setActiveTab}>
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4">
+                    <TabsList>
+                        <TabsTrigger value="leads" className="gap-2">
+                            <User className="size-4" />
+                            Leads
+                        </TabsTrigger>
+                        <TabsTrigger value="forms" className="gap-2">
+                            <FileText className="size-4" />
+                            Lead Forms
+                        </TabsTrigger>
+                    </TabsList>
+
+                    <div className="flex items-center gap-4 w-full sm:w-auto">
+                        {activeTab === 'forms' && facebookPages.length > 0 && (
+                            <div className="w-full sm:w-64">
+                                <Select value={selectedPageId} onValueChange={(val) => {
+                                    setSelectedPageId(val);
+                                    const p = facebookPages.find(page => page.id === val);
+                                    if (p) setSelectedPageAccessToken(p.access_token);
+                                }}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Facebook Page" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {facebookPages.map((page) => (
+                                            <SelectItem key={page.id} value={page.id}>
+                                                {page.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
                         <div className="relative w-full sm:w-64">
                             <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search leads..."
+                                placeholder={activeTab === 'leads' ? "Search leads..." : "Search forms..."}
                                 className="pl-9"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
                         </div>
                     </div>
-                </CardHeader>
-                <CardContent>
-                    <div className="rounded-md border overflow-x-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Lead Info</TableHead>
-                                    <TableHead>Campaign</TableHead>
-                                    <TableHead>Date Captured</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredLeads.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center">
-                                            No leads found.
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    filteredLeads.map((lead) => {
-                                        const { email, name, phone } = formatLeadData(lead.data);
-                                        return (
-                                            <TableRow key={lead.id}>
-                                                <TableCell>
-                                                    <div className="flex flex-col gap-1">
-                                                        <div className="flex items-center gap-2 font-medium">
-                                                            <User className="size-3 text-muted-foreground" />
-                                                            {name}
-                                                        </div>
-                                                        {email && (
-                                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                                <Mail className="size-3" />
-                                                                {email}
-                                                            </div>
-                                                        )}
-                                                        {phone && (
-                                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                                <Phone className="size-3" />
-                                                                {phone}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline" className="font-normal">
-                                                        {lead.campaign?.name || 'Lead Ad'}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2 text-sm">
-                                                        <Calendar className="size-3 text-muted-foreground" />
-                                                        {new Date(lead.createdAt).toLocaleDateString()}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        variant={lead.status === 'NEW' ? 'default' : 'secondary'}
-                                                        className="font-medium"
-                                                    >
-                                                        {lead.status}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <Button variant="ghost" size="sm" className="cursor-pointer" asChild>
-                                                        <a
-                                                            href={`https://business.facebook.com/latest/leads_center`}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                        >
-                                                            <ExternalLink className="size-4 mr-2" />
-                                                            View in Meta
-                                                        </a>
-                                                    </Button>
+                </div>
+
+                <TabsContent value="leads" className="space-y-4">
+                    <Card>
+                        <CardHeader className="pb-3 text-center sm:text-left">
+                            <CardTitle>Leads Overview</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="rounded-md border overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Lead Info</TableHead>
+                                            <TableHead>Campaign</TableHead>
+                                            <TableHead>Date Captured</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {loading ? (
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="h-24 text-center">
+                                                    <Loader2 className="size-6 animate-spin mx-auto text-muted-foreground" />
                                                 </TableCell>
                                             </TableRow>
-                                        );
-                                    })
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </CardContent>
-            </Card>
+                                        ) : filteredLeads.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="h-24 text-center">
+                                                    No leads found.
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            filteredLeads.map((lead) => {
+                                                const { email, name, phone } = formatLeadData(lead.data);
+                                                return (
+                                                    <TableRow key={lead.id}>
+                                                        <TableCell>
+                                                            <div className="flex flex-col gap-1">
+                                                                <div className="flex items-center gap-2 font-medium">
+                                                                    <User className="size-3 text-muted-foreground" />
+                                                                    {name}
+                                                                </div>
+                                                                {email && (
+                                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                                        <Mail className="size-3" />
+                                                                        {email}
+                                                                    </div>
+                                                                )}
+                                                                {phone && (
+                                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                                        <Phone className="size-3" />
+                                                                        {phone}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge variant="outline" className="font-normal">
+                                                                {lead.campaign?.name || 'Lead Ad'}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-2 text-sm">
+                                                                <Calendar className="size-3 text-muted-foreground" />
+                                                                {new Date(lead.createdAt).toLocaleDateString()}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge
+                                                                variant={lead.status === 'NEW' ? 'default' : 'secondary'}
+                                                                className="font-medium"
+                                                            >
+                                                                {lead.status}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <Button variant="ghost" size="sm" className="cursor-pointer" asChild>
+                                                                <a
+                                                                    href={`https://business.facebook.com/latest/leads_center`}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                >
+                                                                    <ExternalLink className="size-4 mr-2" />
+                                                                    View in Meta
+                                                                </a>
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="forms" className="space-y-4">
+                    <Card>
+                        <CardHeader className="pb-3 text-center sm:text-left">
+                            <CardTitle>Lead Forms</CardTitle>
+                            <CardDescription>
+                                Active and inactive lead generation forms for your selected Facebook Page.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="rounded-md border overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Form Name</TableHead>
+                                            <TableHead>Form ID</TableHead>
+                                            <TableHead>Created Date</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {loadingForms ? (
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="h-24 text-center">
+                                                    <Loader2 className="size-6 animate-spin mx-auto text-muted-foreground" />
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : filteredForms.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="h-24 text-center">
+                                                    {selectedPageId ? "No lead forms found for this page." : "Please select a Facebook Page."}
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            filteredForms.map((form) => (
+                                                <TableRow key={form.id}>
+                                                    <TableCell className="font-medium">
+                                                        <div className="flex items-center gap-2">
+                                                            <FileText className="size-4 text-primary" />
+                                                            {form.name}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-sm font-mono text-muted-foreground">
+                                                        {form.id}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm">
+                                                        {form.created_time ? new Date(form.created_time).toLocaleDateString() : 'N/A'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge
+                                                            variant={form.status === 'ACTIVE' ? 'default' : 'outline'}
+                                                            className="font-medium"
+                                                        >
+                                                            {form.status}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button variant="ghost" size="sm" className="cursor-pointer" asChild>
+                                                            <a
+                                                                href={`https://business.facebook.com/latest/instant_forms/forms/${form.id}`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                            >
+                                                                <ExternalLink className="size-4 mr-2" />
+                                                                View Form
+                                                            </a>
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }

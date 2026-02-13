@@ -12,6 +12,7 @@ export function parseMetaPostId(fbPostId: string): string {
 
     // 1. Handle Facebook PAGEID_POSTID format (e.g., 12345_67890)
     if (fbPostId.includes('_')) {
+        // PAGEID_POSTID format
         targetId = fbPostId.split('_')[1];
     } 
     // 2. Handle standard Facebook /posts/ URLs

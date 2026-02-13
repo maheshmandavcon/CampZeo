@@ -110,6 +110,7 @@ model Campaign {
   posts          CampaignPost[]
   notifications  Notification[]
   contacts       Contact[]      @relation("CampaignToContact")
+  leads          Lead[]
 }
 
 model CampaignPost {
@@ -454,14 +455,18 @@ model SocialMetricHistory {
   @@index([metricName, recordedAt])
 }
 
-model SystemNotificationLog {
-  id        Int      @id @default(autoincrement())
-  subject   String
-  recipient String
-  status    String
-  error     String?
-  createdAt DateTime @default(now())
-  metadata  Json?
+model Lead {
+  id              Int          @id @default(autoincrement())
+  organisationId  Int
+  campaignId      Int?
+  metaLeadId      String       @unique
+  formId          String?
+  data            Json         // Stores lead fields (email, name, phone, etc.)
+  status          String       @default("NEW")
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  organisation    Organisation @relation(fields: [organisationId], references: [id])
+  campaign        Campaign?    @relation(fields: [campaignId], references: [id])
 }
 
 enum PostStatus {

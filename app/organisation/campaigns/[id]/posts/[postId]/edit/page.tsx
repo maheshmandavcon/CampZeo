@@ -566,6 +566,10 @@ export default function EditPostPage() {
             metadata.metaBoost = boostOptions;
         }
 
+        if (boostOptions.enabled) {
+            metadata.metaBoost = boostOptions;
+        }
+
         try {
             setSaving(true);
 

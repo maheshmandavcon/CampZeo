@@ -39,6 +39,8 @@ interface SettingsClientProps {
     mobile: string | null;
     email: string;
     facebookConnected: boolean;
+    facebookPageId: string | null;
+    facebookPageAccessToken: string | null;
     instagramConnected: boolean;
     linkedInConnected: boolean;
     linkedInAuthUrn: string | null;
@@ -65,6 +67,9 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
   const [loadingFacebookPosts, setLoadingFacebookPosts] = useState(false);
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
   const [isLoadingAdAccounts, setIsLoadingAdAccounts] = useState(false);
+  const [showFacebookPageDialog, setShowFacebookPageDialog] = useState(false);
+  const [facebookPages, setFacebookPages] = useState<any[]>([]);
+  const [loadingFacebookPages, setLoadingFacebookPages] = useState(false);
 
   const handleViewFacebookPosts = async () => {
     setShowFacebookPostsDialog(true);
@@ -236,6 +241,44 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
     } catch (error) {
       console.error(error);
       toast.error("Failed to update page");
+    }
+  };
+
+  const handleConfigureFacebookPages = async () => {
+    setShowFacebookPageDialog(true);
+    setLoadingFacebookPages(true);
+    try {
+      const res = await fetch("/api/socialmedia/facebook/pages");
+      if (res.ok) {
+        const data = await res.json();
+        setFacebookPages(data.pages || []);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to fetch Facebook pages");
+    } finally {
+      setLoadingFacebookPages(false);
+    }
+  };
+
+  const handleSelectFacebookPage = async (pageId: string, pageAccessToken: string) => {
+    try {
+      const res = await fetch("/api/socialmedia/facebook/save-page", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageId, pageAccessToken })
+      });
+
+      if (res.ok) {
+        toast.success("Facebook page linked");
+        setShowFacebookPageDialog(false);
+        window.location.reload();
+      } else {
+        toast.error("Failed to link page");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to link page");
     }
   };
 
@@ -501,6 +544,27 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                                   </div>
                                 </div>
                               )} */}
+                              {platform.id === 'FACEBOOK' && platform.connected && (
+                                <div className="mt-2 pt-1 border-t border-muted/50">
+                                  {userData.facebookPageId ? (
+                                    <p className="text-xs text-green-600 font-medium">
+                                      Linked Page: {socialStatus?.facebook?.name || userData.facebookPageId}
+                                    </p>
+                                  ) : (
+                                    <p className="text-xs text-red-500 font-medium flex items-center gap-1">
+                                      <XCircle className="h-3 w-3" /> No Facebook Page linked.
+                                    </p>
+                                  )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2 h-7 text-xs"
+                                    onClick={handleConfigureFacebookPages}
+                                  >
+                                    {userData.facebookPageId ? 'Change Linked Page' : 'Link Facebook Page'}
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -760,6 +824,50 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
           <div className="bg-muted p-3 rounded-lg">
             <p className="text-xs text-muted-foreground">
               <strong>Note:</strong> To post content and use Reels, you need an Instagram Business or Creator account connected via Facebook.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Facebook Page Selection Dialog */}
+      <Dialog open={showFacebookPageDialog} onOpenChange={setShowFacebookPageDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Link Facebook Page</DialogTitle>
+            <DialogDescription>
+              Select the Facebook Page you want to use for Unified Messaging and analytics.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-[300px] overflow-y-auto py-4">
+            {loadingFacebookPages ? (
+              <div className="flex justify-center p-4">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            ) : facebookPages.length > 0 ? (
+              facebookPages.map((page) => (
+                <div
+                  key={page.id}
+                  className={`flex items-center justify-between p-3 border rounded-lg hover:bg-muted cursor-pointer ${userData.facebookPageId === page.id ? 'bg-muted border-primary' : ''}`}
+                  onClick={() => handleSelectFacebookPage(page.id, page.access_token)}
+                >
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">{page.name}</p>
+                    <p className="text-xs text-muted-foreground">{page.category}</p>
+                  </div>
+                  {userData.facebookPageId === page.id && (
+                    <CheckCircle2 className="h-4 w-4 text-green-600 ml-2" />
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-sm text-muted-foreground">No pages found. Make sure you have admin access to at least one Facebook Page.</p>
+              </div>
+            )}
+          </div>
+          <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
+            <p className="text-[10px] text-amber-800 leading-tight">
+              <strong>Important:</strong> Linking a page is required to fetch conversations and messages for the unified inbox.
             </p>
           </div>
         </DialogContent>

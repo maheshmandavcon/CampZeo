@@ -316,6 +316,25 @@ export async function sendCampaignPost(
                     }
                 });
 
+                // Handle Meta Boosting
+                if (metadata?.metaBoost?.enabled) {
+                    try {
+                        console.log(`[Facebook] Triggering boost for post ${platformResponse.id}`);
+                        await createBoostedAd({
+                            adAccountId: metadata.metaBoost.adAccountId,
+                            accessToken: dbUser.facebookAccessToken || fbToken, // Ad accounts need User Token
+                            postId: platformResponse.id,
+                            name: post.subject || post.message?.substring(0, 20) || "Boosted Post",
+                            budget: metadata.metaBoost.budget,
+                            days: metadata.metaBoost.duration,
+                            objective: metadata.metaBoost.objective
+                        });
+                        console.log(`[Facebook] Boost created successfully for post ${platformResponse.id}`);
+                    } catch (boostError) {
+                        console.error(`[Facebook] Meta Boosting failed:`, boostError);
+                    }
+                }
+
                 await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };
             }
@@ -485,6 +504,25 @@ export async function sendCampaignPost(
                         publishedAt: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
                     }
                 });
+
+                // Handle Meta Boosting
+                if (metadata?.metaBoost?.enabled) {
+                    try {
+                        console.log(`[Instagram] Triggering boost for post ${platformResponse.id}`);
+                        await createBoostedAd({
+                            adAccountId: metadata.metaBoost.adAccountId,
+                            accessToken: dbUser.facebookAccessToken || igToken!, // Ad accounts need User Token
+                            postId: platformResponse.id,
+                            name: post.subject || post.message?.substring(0, 20) || "Boosted Post",
+                            budget: metadata.metaBoost.budget,
+                            days: metadata.metaBoost.duration,
+                            objective: metadata.metaBoost.objective
+                        });
+                        console.log(`[Instagram] Boost created successfully for post ${platformResponse.id}`);
+                    } catch (boostError) {
+                        console.error(`[Instagram] Meta Boosting failed:`, boostError);
+                    }
+                }
 
                 await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };

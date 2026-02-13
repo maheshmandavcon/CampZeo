@@ -160,10 +160,10 @@ async function getHandler(request: NextRequest) {
             updateData.instagramTokenExpiresIn = expiresIn;
             updateData.instagramTokenCreatedAt = new Date();
 
-            try {
-                // Fetch user's pages to find the connected Instagram Business Account
-                const pagesRes = await fetch(`https://graph.facebook.com/v18.0/me/accounts?fields=instagram_business_account,name,access_token&access_token=${accessToken}`);
-                const pagesData = await pagesRes.json();
+        try {
+            // Fetch user's pages to find the connected Instagram Business Account
+            const pagesRes = await fetch(`https://graph.facebook.com/v21.0/me/accounts?fields=instagram_business_account,name,access_token&access_token=${accessToken}`);
+            const pagesData = await pagesRes.json();
 
                 let instagramBusinessId: string | null = null;
 

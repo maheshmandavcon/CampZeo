@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
-import { 
-    getFacebookPages, 
-    getLeadForms, 
-    getLeadsForForm, 
-    subscribeAppToPage,
-    syncLeadToDatabase 
-} from "@/lib/meta-ads";
+import { getFacebookPages, getFacebookLeadForms, getFacebookLeads } from "@/lib/facebook";
 import { logError, logInfo } from "@/lib/audit-logger";
 
 export async function POST(request: NextRequest) {
@@ -39,37 +33,40 @@ export async function POST(request: NextRequest) {
             const pageId = page.id;
 
             try {
-                // 2. Subscribe to real-time leads (Webhook)
-                try {
-                    await subscribeAppToPage(pageId, pageAccessToken);
-                    // Store the page ID and token in the user record
-                    await prisma.user.update({
-                        where: { clerkId: userId },
-                        data: {
-                            facebookPageId: pageId,
-                            facebookPageAccessToken: pageAccessToken
-                        }
-                    });
-                } catch (subError) {
-                    console.warn(`[Sync] Non-blocking subscription error for page ${pageId}:`, subError);
-                }
-
-                // 3. Get forms for this page
-                const forms = await getLeadForms(pageId, pageAccessToken);
+                // 2. Get forms for this page
+                const forms = await getFacebookLeadForms(pageId, pageAccessToken);
 
                 for (const form of forms) {
                     try {
-                        // 4. Get leads for this form
-                        const leads = await getLeadsForForm(form.id, pageAccessToken);
+                        // 3. Get leads for this form
+                        const leads = await getFacebookLeads(form.id, pageAccessToken);
 
                         for (const leadData of leads) {
-                            try {
-                                // 5. Sync lead to database using unified logic
-                                await syncLeadToDatabase(orgId, leadData.id, pageAccessToken, form.id);
-                                leadsSynced++;
-                            } catch (leadError) {
-                                console.error(`Error syncing lead ${leadData.id}:`, leadError);
+                            // Normalize lead data fields (Meta returns field_data as an array)
+                            const normalizedData: any = {};
+                            if (leadData.field_data) {
+                                leadData.field_data.forEach((field: any) => {
+                                    normalizedData[field.name] = field.values[0];
+                                });
                             }
+
+                            // 4. Upsert lead
+                            await prisma.lead.upsert({
+                                where: { metaLeadId: leadData.id },
+                                update: {
+                                    data: normalizedData,
+                                    updatedAt: new Date()
+                                },
+                                create: {
+                                    organisationId: orgId,
+                                    metaLeadId: leadData.id,
+                                    formId: form.id,
+                                    data: normalizedData,
+                                    status: "NEW",
+                                    createdAt: new Date(leadData.created_time)
+                                }
+                            });
+                            leadsSynced++;
                         }
                     } catch (formError) {
                         console.error(`Error fetching leads for form ${form.id}:`, formError);
@@ -87,5 +84,3 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }
-
-
