@@ -34,13 +34,37 @@ async function postHandler(req: Request) {
     }
 
     // Get user from database
-    const dbUser = await prisma.user.findUnique({
+    let dbUser = await prisma.user.findUnique({
         where: { clerkId: user.id },
         include: { organisation: true },
     });
 
     if (!dbUser) {
-        return NextResponse.json({ error: "User not found" }, { status: 404 });
+        // As a fallback, try to sync user if not found
+        console.log(`User ${user.id} not found in DB, attempting sync...`);
+        try {
+            await prisma.user.create({
+                data: {
+                    clerkId: user.id,
+                    email: user.emailAddresses[0].emailAddress,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    role: "ORGANISATION_USER",
+                },
+            });
+
+            dbUser = await prisma.user.findUnique({
+                where: { clerkId: user.id },
+                include: { organisation: true },
+            });
+        } catch (syncError) {
+            console.error("Failed to sync user in create-order:", syncError);
+            return NextResponse.json({ error: "User profile not synced. Please refresh and try again." }, { status: 404 });
+        }
+    }
+
+    if (!dbUser) {
+        return NextResponse.json({ error: "User not found and sync failed" }, { status: 404 });
     }
 
     // Handle signup flow (no organisation yet) vs upgrade flow (organisation exists)

@@ -181,20 +181,40 @@ async function postHandler(req: Request) {
     });
     // Handle Payment if not free trial
     if (plan !== "FREE_TRIAL" && paymentData) {
-        // Create Payment
-        await prisma.payment.create({
-            data: {
-                organisationId: organisation.id,
-                razorpayOrderId: paymentData.razorpay_order_id,
-                razorpayPaymentId: paymentData.razorpay_payment_id,
-                razorpaySignature: paymentData.razorpay_signature,
-                amount: selectedPlan.price,
-                currency: "INR",
-                status: "success",
-                plan: selectedPlan.name,
-                receipt: `receipt_${Date.now()}`,
-            }
+        // Handle nested payment data if passed incorrectly from frontend
+        const actualPaymentData = paymentData.payment || paymentData;
+
+        console.log("Creating payment record with data:", {
+            orderId: actualPaymentData.razorpay_order_id,
+            paymentId: actualPaymentData.razorpay_payment_id,
+            signature: actualPaymentData.razorpay_signature
         });
+
+        try {
+            // Create Payment
+            await prisma.payment.create({
+                data: {
+                    organisationId: organisation.id,
+                    razorpayOrderId: actualPaymentData.razorpay_order_id,
+                    razorpayPaymentId: actualPaymentData.razorpay_payment_id,
+                    razorpaySignature: actualPaymentData.razorpay_signature,
+                    amount: selectedPlan.price,
+                    currency: "INR",
+                    status: "success",
+                    plan: selectedPlan.name,
+                    receipt: `receipt_${Date.now()}`,
+                }
+            });
+        } catch (paymentError: any) {
+            console.error("FAILED TO CREATE PAYMENT RECORD:", paymentError);
+            // We still have the organisation, but payment record failed. 
+            // In a real app, we might want to retry or mark for manual review.
+            await logError("Payment record creation failed after successful verification", {
+                organisationId: organisation.id,
+                error: paymentError.message,
+                paymentData: actualPaymentData
+            });
+        }
 
         // Create Invoice
         await prisma.invoice.create({

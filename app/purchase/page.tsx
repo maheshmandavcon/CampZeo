@@ -63,15 +63,29 @@ function PurchaseContent() {
 
     const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
 
-    // Auto-fill email if user is signed in
+    // Auto-fill email and Sync User or Plan from Clerk metadata
     useEffect(() => {
-        if (isSignedIn && user?.primaryEmailAddress?.emailAddress && !formData.email) {
-            setFormData(prev => ({
-                ...prev,
-                email: user.primaryEmailAddress!.emailAddress
-            }));
-        }
-    }, [isSignedIn, user, formData.email]);
+        const syncUser = async () => {
+            if (userLoaded && isSignedIn && user) {
+                // Pre-fill email
+                if (user.primaryEmailAddress?.emailAddress && !formData.email) {
+                    setFormData(prev => ({
+                        ...prev,
+                        email: user.primaryEmailAddress!.emailAddress
+                    }));
+                }
+
+                // Sync user to database
+                try {
+                    await fetch("/api/user/sync");
+                } catch (error) {
+                    console.error("Error syncing user:", error);
+                }
+            }
+        };
+
+        syncUser();
+    }, [userLoaded, isSignedIn, user, formData.email]);
 
     useEffect(() => {
         if (plans.length > 0 && !selectedPlanId) {
@@ -197,6 +211,13 @@ function PurchaseContent() {
             }
         }
 
+        // Full name validation (at least two words)
+        const nameParts = formData.name.trim().split(/\s+/);
+        if (nameParts.length < 2) {
+            toast.error("Please enter your full name.");
+            return;
+        }
+
         if (!isSignedIn && formData.password !== formData.confirmPassword) {
             toast.error("Passwords do not match.");
             return;
@@ -318,8 +339,11 @@ function PurchaseContent() {
     };
 
     // Handle Organisation Creation (After Payment or for Free Trial)
-    const createOrganisation = async (paymentData?: any) => {
+    const createOrganisation = async (verificationData?: any) => {
         try {
+            // If verificationData has a payment sub-object, use that (from RazorpayButton)
+            const paymentData = verificationData?.payment || verificationData;
+
             // We need to re-fetch plan details
             const selectedPlan = plans.find(p => p.id === selectedPlanId);
 
@@ -632,7 +656,7 @@ function PurchaseContent() {
                                     <RazorpayButton
                                         plan={selectedPlan.name}
                                         amount={selectedPlan.price}
-                                        organizationName={formData.organisationName}
+                                        organizationName={accountType === 'individual' ? formData.name : formData.organisationName}
                                         isSignup={true} // Important to redirect correctly or handle flow
                                         onSuccess={createOrganisation}
                                         className="w-full h-12 text-lg"
