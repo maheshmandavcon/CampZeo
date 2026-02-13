@@ -39,7 +39,9 @@ import {
     Wand2,
     Sparkles,
     Search as SearchIcon, // Renamed to avoid potential conflict if Search is imported
-    Check, // Added Check
+    Check,
+    Rocket,
+    Plus, // Added Check
 } from 'lucide-react';
 import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
 import { useUser } from '@clerk/nextjs';
@@ -550,7 +552,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     youtubePrivacy,
                     youtubeContentType,
                     youtubePlaylistTitle,
-                    youtubePlaylistId,
+                    selectedYoutubePlaylistId,
                     pinterestBoardId,
                     pinterestLink,
                     isReel,

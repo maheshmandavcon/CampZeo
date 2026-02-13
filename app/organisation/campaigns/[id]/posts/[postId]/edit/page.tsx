@@ -24,7 +24,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"; // Added
 import { ScrollArea } from "@/components/ui/scroll-area"; // Added
 
-import { ArrowLeft, Loader2, Save, Upload, X, Youtube, Eye, Video, Trash2, FileText, Sparkles, Mail, MessageSquare, Phone, Facebook, Instagram, Linkedin, Send, Plus, Wand2, Check, Search as SearchIcon } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Upload, X, Youtube, Eye, Video, Trash2, FileText, Sparkles, Mail, MessageSquare, Phone, Facebook, Instagram, Linkedin, Send, Plus, Wand2, Check, Rocket, Search as SearchIcon } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import Image from 'next/image';
@@ -33,6 +33,7 @@ import { WYSIWYGPreview } from '../../_components/WYSIWYGPreview';
 import { useUser } from '@clerk/nextjs';
 import { upload } from '@vercel/blob/client';
 import { MetaBoostSection, MetaBoostOptions } from '../../_components/MetaBoostSection';
+import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
 
 
 
