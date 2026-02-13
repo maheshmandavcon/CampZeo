@@ -193,48 +193,6 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
         }(document, 'script', 'facebook-jssdk'));
     }, [appId]);
 
-    const handleLaunchNativeBoost = () => {
-        if (!selectedAccount || !fbPostId || !fbPageId) {
-            toast.error("Please select an ad account and ensure the post is published on Facebook.");
-            return;
-        }
-
-        const url = getNativeBoostUrl(options.adAccountId, fbPageId, fbPostId);
-
-        // Open in a centered popup
-        const width = 1000;
-        const height = 800;
-        const left = (window.innerWidth - width) / 2;
-        const top = (window.innerHeight - height) / 2;
-
-        window.open(url, 'fbBoost', `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`);
-        toast.info("Opening Native Meta Boost Centre...");
-    };
-
-    const handleAddPaymentMethod = () => {
-        if (!window.FB) {
-            toast.error("Facebook SDK not loaded yet. Please try again in a moment.");
-            return;
-        }
-
-        if (!selectedAccount) return;
-
-        // Strip 'act_' prefix if present
-        const accountId = selectedAccount.id.replace('act_', '');
-
-        window.FB.ui({
-            method: 'ads_payment',
-            account_id: accountId,
-        }, function (response: any) {
-            console.log("Ads Payment Dialog Response:", response);
-            if (response && !response.error_code) {
-                toast.success("Payment method update initiated.");
-                // Optionally refresh accounts after a delay
-                setTimeout(fetchAccounts, 5000);
-            }
-        });
-    };
-
     // Fetch reach estimate when inputs change
     useEffect(() => {
         if (!options.enabled || !options.adAccountId || !options.budget || !options.duration) {
@@ -272,7 +230,7 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
             setSelectedAccount(acc || null);
             if (acc) {
                 fetchBalanceForAccount(acc.id);
-        }
+            }
         }
     }, [options.adAccountId, accounts]);
 
@@ -458,15 +416,15 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
 
                                                     {/* Link Payment Method option */}
                                                     {hasPaymentMethod === false && (
-                                                    <Button
+                                                        <Button
                                                             type="button"
-                                                        variant="outline"
-                                                        size="sm"
+                                                            variant="outline"
+                                                            size="sm"
                                                             className="h-9 text-xs w-full border-blue-200 text-blue-700 hover:bg-blue-50 font-bold"
                                                             onClick={handleAddPaymentMethod}
-                                                    >
+                                                        >
                                                             <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Link Payment Method
-                                                    </Button>
+                                                        </Button>
                                                     )}
                                                 </div>
                                                 <p className="text-[10px] text-muted-foreground italic px-1">
@@ -600,7 +558,7 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                                 {options.adAccountId && fbPostId && fbPageId && (
                                     <p className="text-[9px] text-center text-muted-foreground mt-2">
                                         Opening Meta Ad Center: Account <b>{options.adAccountId.replace('act_', '')}</b> � Page <b>{fbPageId}</b>
-                                </p>
+                                    </p>
                                 )}
                             </div>
                         </div>
