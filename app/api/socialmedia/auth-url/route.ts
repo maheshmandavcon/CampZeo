@@ -62,16 +62,8 @@ async function getHandler(request: NextRequest) {
         case "FACEBOOK":
         case "INSTAGRAM": // Instagram Graph API uses Facebook Login
             // Permissions needed:
-            // - pages_show_list: To see user's Facebook Pages
-            // - pages_read_engagement: To read page insights
-            // - pages_read_user_content: To read page feed/posts
-            // - read_insights: For detailed metrics (reach, impressions)
-            // - pages_manage_posts: To post content to pages
-            // - instagram_basic: Basic Instagram account info
-            // - instagram_content_publish: To publish to Instagram
-            // - instagram_manage_insights: For Instagram analytics
-            // - business_management: For Instagram Business Account access
-            authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=pages_show_list,pages_read_engagement,pages_read_user_content,read_insights,pages_manage_posts,instagram_basic,instagram_content_publish,instagram_manage_insights,business_management`;
+            // ...
+            authUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=pages_show_list,pages_read_engagement,pages_read_user_content,read_insights,pages_manage_posts,pages_manage_ads,ads_management,ads_read,leads_retrieval,instagram_basic,instagram_content_publish,instagram_manage_insights,business_management,instagram_manage_messages,pages_messaging,public_profile`;
             break;
         case "INSTAGRAM_DIRECT":
             // Direct Instagram app authentication (not via Facebook)

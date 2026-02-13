@@ -63,6 +63,16 @@ export function Sidebar() {
                     </Link>
                 </Button>
                 <Button
+                    variant={isActive('/organisation/conversations') ? 'secondary' : 'ghost'}
+                    className="w-full justify-start"
+                    asChild
+                >
+                    <Link href="/organisation/conversations">
+                        <Users className="size-4 mr-2" />
+                        Conversations
+                    </Link>
+                </Button>
+                <Button
                     variant={isActive('/organisation/settings') ? 'secondary' : 'ghost'}
                     className="w-full justify-start"
                     asChild

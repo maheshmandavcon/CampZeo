@@ -24,7 +24,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"; // Added
 import { ScrollArea } from "@/components/ui/scroll-area"; // Added
 
-import { ArrowLeft, Loader2, Save, Upload, X, Youtube, Eye, Video, Trash2, FileText, Sparkles, Mail, MessageSquare, Phone, Facebook, Instagram, Linkedin, Send, Plus, Wand2, Check, Search as SearchIcon } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Upload, X, Youtube, Eye, Video, Trash2, FileText, Sparkles, Mail, MessageSquare, Phone, Facebook, Instagram, Linkedin, Send, Plus, Wand2, Check, Rocket, Search as SearchIcon } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import Image from 'next/image';
@@ -32,6 +32,8 @@ import { AIContentAssistant } from '@/components/ai-content-assistant';
 import { WYSIWYGPreview } from '../../_components/WYSIWYGPreview';
 import { useUser } from '@clerk/nextjs';
 import { upload } from '@vercel/blob/client';
+import { MetaBoostSection, MetaBoostOptions } from '../../_components/MetaBoostSection';
+import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
 
 
 
@@ -76,7 +78,15 @@ export default function EditPostPage() {
     // Pinterest Boards
     const [pinterestBoards, setPinterestBoards] = useState<any[]>([]);
     const [loadingPinterestBoards, setLoadingPinterestBoards] = useState(false);
+    const [boostOptions, setBoostOptions] = useState<MetaBoostOptions>({
+        enabled: false,
+        adAccountId: '',
+        budget: 5,
+        duration: 7,
+        objective: 'OUTCOME_ENGAGEMENT'
+    });
     const [loading, setLoading] = useState(true);
+    const [savingBoost, setSavingBoost] = useState(false);
     const [saving, setSaving] = useState(false);
 
     // Send Now Dialog State
@@ -220,6 +230,10 @@ export default function EditPostPage() {
                 // Load LinkedIn author
                 if (metadata.linkedInUrn) {
                     setSelectedLinkedInUrn(metadata.linkedInUrn);
+                }
+
+                if (metadata.metaBoost) {
+                    setBoostOptions(metadata.metaBoost);
                 }
 
                 if (post.scheduledPostTime) {
@@ -681,6 +695,10 @@ export default function EditPostPage() {
             return;
         }
 
+        if (boostOptions.enabled) {
+            metadata.metaBoost = boostOptions;
+        }
+
         try {
             setSaving(true);
 
@@ -711,6 +729,68 @@ export default function EditPostPage() {
             console.error('Error updating post:', error);
             toast.error(error instanceof Error ? error.message : 'Failed to update post');
             setSaving(false); // Only reset on error
+        }
+    };
+
+    // Handle Quick Boost
+    const handleQuickBoost = async () => {
+        if (!type || !['FACEBOOK', 'INSTAGRAM'].includes(type)) {
+            toast.error("Quick Boost is only available for Facebook and Instagram.");
+            return;
+        }
+
+        if (!message && !subject) {
+            toast.error('Please enter a message or title');
+            return;
+        }
+
+        try {
+            setSavingBoost(true);
+            const response = await fetch(`/api/campaigns/${campaignId}/posts/quick-boost`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    postId: parseInt(postId),
+                    subject: subject || null,
+                    message: message || null,
+                    type: type,
+                    mediaUrls: mediaUrls,
+                    isReel,
+                    contentType,
+                    metadata: {
+                        isReel: !!isReel,
+                        postType: contentType,
+                        metaBoost: boostOptions.enabled ? boostOptions : undefined,
+                    }
+                }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to prepare boost');
+            }
+
+            const data = await response.json();
+            const post = data.post;
+
+            // Use utility to open popup
+            const adAccountId = post.metadata?.metaBoost?.adAccountId || localStorage.getItem('last_meta_ad_account_id') || '';
+            const pageId = post.metadata?.facebookPageId || post.metadata?.platformPageId;
+            const fbPostId = post.metadata?.facebookPostId || post.metadata?.platformPostId || post.liveLink;
+
+            if (fbPostId) {
+                openNativeBoostPopup(adAccountId, pageId || '', fbPostId);
+                toast.success('Post updated and Boost Centre opened!');
+                router.push(`/organisation/campaigns/${campaignId}/posts`);
+            } else {
+                toast.error("Post updated but failed to retrieve IDs for boosting.");
+                router.push(`/organisation/campaigns/${campaignId}/posts`);
+            }
+        } catch (error) {
+            console.error('Error in Quick Boost:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to prepare boost');
+        } finally {
+            setSavingBoost(false);
         }
     };
 
@@ -1327,7 +1407,21 @@ export default function EditPostPage() {
                         >
                             Cancel
                         </Button>
-                        <Button className='cursor-pointer' type="submit" disabled={saving}>
+                        <Button
+                            className='cursor-pointer text-blue-600 border-blue-200 hover:bg-blue-50'
+                            type="button"
+                            variant="outline"
+                            onClick={handleQuickBoost}
+                            disabled={saving || savingBoost || !['FACEBOOK', 'INSTAGRAM'].includes(type)}
+                        >
+                            {savingBoost ? (
+                                <Loader2 className="size-4 mr-2 animate-spin" />
+                            ) : (
+                                <Rocket className="size-4 mr-2" />
+                            )}
+                            Boost Now
+                        </Button>
+                        <Button className='cursor-pointer' type="submit" disabled={saving || savingBoost}>
                             {saving ? (
                                 <>
                                     <Loader2 className="size-4 mr-2 animate-spin" />

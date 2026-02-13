@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { SettingsClient } from "./_components/settings-client";
 import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
+import { getFacebookAppId } from "@/lib/meta-ads";
 
 export default async function SettingsPage() {
   const user = await currentUser();
@@ -13,7 +14,7 @@ export default async function SettingsPage() {
 
   const dbUser = await prisma.user.findUnique({
     where: { clerkId: user.id },
-    select: { organisationId: true, role: true, firstName: true, lastName: true, mobile: true, email: true, facebookAccessToken: true, instagramAccessToken: true, linkedInAccessToken: true, linkedInAuthUrn: true, youtubeAccessToken: true, pinterestAccessToken: true }
+    select: { organisationId: true, role: true, firstName: true, lastName: true, mobile: true, email: true, facebookAccessToken: true, facebookPageId: true, facebookPageAccessToken: true, instagramAccessToken: true, linkedInAccessToken: true, linkedInAuthUrn: true, youtubeAccessToken: true, pinterestAccessToken: true }
   });
 
   if (!dbUser) {
@@ -63,6 +64,8 @@ export default async function SettingsPage() {
     mobile: dbUser.mobile,
     email: dbUser.email,
     facebookConnected: !!connectionSource.facebookAccessToken,
+    facebookPageId: connectionSource.facebookPageId,
+    facebookPageAccessToken: connectionSource.facebookPageAccessToken,
     instagramConnected: !!connectionSource.instagramAccessToken,
     linkedInConnected: !!connectionSource.linkedInAccessToken,
     linkedInAuthUrn: connectionSource.linkedInAuthUrn,
@@ -74,6 +77,7 @@ export default async function SettingsPage() {
   };
 
   const assignedPlatforms = organisation?.organisationPlatforms.map((p: any) => p.platform) || [];
+  const facebookAppId = await getFacebookAppId();
 
   return (
     <div className="p-6">
@@ -82,6 +86,7 @@ export default async function SettingsPage() {
           userData={userData}
           assignedPlatforms={assignedPlatforms}
           isImpersonating={isImpersonating}
+          facebookAppId={facebookAppId}
         />
       </div>
     </div>

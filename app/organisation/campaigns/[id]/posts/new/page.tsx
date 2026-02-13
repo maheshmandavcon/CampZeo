@@ -36,18 +36,21 @@ import {
     FileText,
     Image as ImageIcon,
     Video,
-    Plus,
     Wand2,
     Sparkles,
     Search as SearchIcon, // Renamed to avoid potential conflict if Search is imported
-    Check, // Added Check
+    Check,
+    Rocket,
+    Plus, // Added Check
 } from 'lucide-react';
+import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
 import { useUser } from '@clerk/nextjs';
 import { PostPreview } from './_components/post-preview';
 import { WYSIWYGPreview } from '../_components/WYSIWYGPreview';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import Image from 'next/image';
+import { MetaBoostSection, MetaBoostOptions } from '../_components/MetaBoostSection';
 import {
     Select,
     SelectContent,
@@ -82,6 +85,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [pinterestLink, setPinterestLink] = useState('');
     const [senderEmail, setSenderEmail] = useState('');
     const [scheduledPostTime, setScheduledPostTime] = useState('');
+    const [savingBoost, setSavingBoost] = useState(false);
     const [saving, setSaving] = useState(false);
     const [organisationPlatforms, setOrganisationPlatforms] = useState<string[]>([]);
     const [loadingPlatforms, setLoadingPlatforms] = useState(true);
@@ -127,7 +131,15 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [loadingPinterestBoards, setLoadingPinterestBoards] = useState(false);
     const [youtubePlaylists, setYoutubePlaylists] = useState<{ id: string; title: string }[]>([]);
     const [loadingYoutubePlaylists, setLoadingYoutubePlaylists] = useState(false);
-    const [youtubePlaylistId, setYoutubePlaylistId] = useState<string>('');
+
+    const [selectedYoutubePlaylistId, setSelectedYoutubePlaylistId] = useState<string>('');
+    const [boostOptions, setBoostOptions] = useState<MetaBoostOptions>({
+        enabled: false,
+        adAccountId: '',
+        budget: 5,
+        duration: 7,
+        objective: 'OUTCOME_ENGAGEMENT'
+    });
     const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
 
     // New Board State
@@ -137,6 +149,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [creatingBoard, setCreatingBoard] = useState(false);
     const [socialStatus, setSocialStatus] = useState<any>(null); // New state for social status
     const [selectedLinkedInUrn, setSelectedLinkedInUrn] = useState<string>(''); // For LinkedIn organization selection
+    const [leadForms, setLeadForms] = useState<any[]>([]);
+    const [loadingLeadForms, setLoadingLeadForms] = useState(false);
+    const [selectedLeadFormId, setSelectedLeadFormId] = useState<string>('');
 
     // AI Assistant state
     const [showAIAssistant, setShowAIAssistant] = useState(false);
@@ -282,6 +297,31 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             fetchPages();
         }
     }, [selectedPlatform]);
+
+    // Fetch Lead Forms when Facebook Page changes
+    useEffect(() => {
+        if ((selectedPlatform === 'FACEBOOK' || selectedPlatform === 'INSTAGRAM') && selectedFacebookPageId && selectedFacebookPageAccessToken) {
+            const fetchLeadForms = async () => {
+                try {
+                    setLoadingLeadForms(true);
+                    const response = await fetch(`/api/socialmedia/facebook/lead-forms?pageId=${selectedFacebookPageId}&pageAccessToken=${selectedFacebookPageAccessToken}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        setLeadForms(data.forms || []);
+                    }
+                } catch (error) {
+                    console.error('Error fetching lead forms:', error);
+                    toast.error('Failed to fetch lead forms');
+                } finally {
+                    setLoadingLeadForms(false);
+                }
+            };
+            fetchLeadForms();
+        } else {
+            setLeadForms([]);
+            setSelectedLeadFormId('');
+        }
+    }, [selectedFacebookPageId, selectedFacebookPageAccessToken, selectedPlatform]);
 
     // Get preview content with variables replaced
     const getPreviewContent = () => {
@@ -512,7 +552,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     youtubePrivacy,
                     youtubeContentType,
                     youtubePlaylistTitle,
-                    youtubePlaylistId,
+                    selectedYoutubePlaylistId,
                     pinterestBoardId,
                     pinterestLink,
                     isReel,
@@ -670,7 +710,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     youtubePrivacy,
                     youtubeContentType, // NEW: YouTube content type (VIDEO, SHORT, PLAYLIST)
                     youtubePlaylistTitle, // NEW: Playlist title if creating playlist
-                    youtubePlaylistId, // NEW: Existing Playlist ID
+                    youtubePlaylistId: selectedYoutubePlaylistId, // NEW: Existing Playlist ID
                     pinterestBoardId,
                     pinterestLink,
                     isReel, // Send isReel flag
@@ -679,7 +719,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     facebookPageId: selectedFacebookPageId, // NEW: Selected Facebook Page
                     facebookPageAccessToken: selectedFacebookPageAccessToken, // NEW: Selected Facebook Page Access Token
                     instagramBusinessId: selectedInstagramBusinessId, // NEW: Linked Instagram ID
-                    linkedInUrn: selectedLinkedInUrn // NEW: Selected LinkedIn Author URN
+                    linkedInUrn: selectedLinkedInUrn, // NEW: Selected LinkedIn Author URN
+                    leadFormId: selectedLeadFormId && selectedLeadFormId !== 'none' ? selectedLeadFormId : null,
+                    metaBoost: boostOptions.enabled ? boostOptions : undefined, // NEW: Meta Boost options
                 }),
             });
 
@@ -695,6 +737,72 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             toast.error(error instanceof Error ? error.message : 'Failed to create post');
         } finally {
             setSaving(false);
+        }
+    };
+
+    // Handle Quick Boost
+    const handleQuickBoost = async () => {
+        if (!selectedPlatform || !['FACEBOOK', 'INSTAGRAM'].includes(selectedPlatform)) {
+            toast.error("Quick Boost is only available for Facebook and Instagram.");
+            return;
+        }
+
+        if (!message && !subject) {
+            toast.error('Please enter a message or title');
+            return;
+        }
+
+        if (!selectedFacebookPageId) {
+            toast.error('Please select a Facebook Page');
+            return;
+        }
+
+        try {
+            setSavingBoost(true);
+            const response = await fetch(`/api/campaigns/${campaignId}/posts/quick-boost`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    subject: subject || null,
+                    message: message || null,
+                    type: selectedPlatform,
+                    mediaUrls: mediaUrls,
+                    isReel,
+                    contentType,
+                    thumbnailUrl,
+                    facebookPageId: selectedFacebookPageId,
+                    facebookPageAccessToken: selectedFacebookPageAccessToken,
+                    instagramBusinessId: selectedInstagramBusinessId,
+                    metaBoost: boostOptions.enabled ? boostOptions : undefined,
+                }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to prepare boost');
+            }
+
+            const data = await response.json();
+            const post = data.post;
+
+            // Use utility to open popup
+            const adAccountId = post.metadata?.metaBoost?.adAccountId || localStorage.getItem('last_meta_ad_account_id') || '';
+            const pageId = post.metadata?.facebookPageId || selectedFacebookPageId;
+            const postId = post.metadata?.facebookPostId || post.metadata?.platformPostId || post.liveLink;
+
+            if (pageId && postId) {
+                openNativeBoostPopup(adAccountId, pageId, postId);
+                toast.success('Post scheduled and Boost Centre opened!');
+                router.push(`/organisation/campaigns/${campaignId}/posts`);
+            } else {
+                toast.error("Post created but failed to retrieve IDs for boosting. You can boost it from the posts list.");
+                router.push(`/organisation/campaigns/${campaignId}/posts`);
+            }
+        } catch (error) {
+            console.error('Error in Quick Boost:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to prepare boost');
+        } finally {
+            setSavingBoost(false);
         }
     };
 
@@ -1338,6 +1446,50 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                         </div>
                                     )}
 
+                                    {/* Lead Form Selection */}
+                                    {(selectedPlatform === 'FACEBOOK' || selectedPlatform === 'INSTAGRAM') && selectedFacebookPageId && (
+                                        <div className="space-y-3 rounded-lg border bg-blue-50/30 p-4 border-blue-100">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-sm font-medium flex items-center gap-2">
+                                                    <FileText className="size-4 text-blue-600" />
+                                                    Attach Lead Form (Optional)
+                                                </Label>
+                                            </div>
+
+                                            {loadingLeadForms ? (
+                                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                    <Loader2 className="size-3 animate-spin" />
+                                                    Loading forms...
+                                                </div>
+                                            ) : (
+                                                <div className="flex gap-2">
+                                                    <div className="flex-1">
+                                                        <Select
+                                                            value={selectedLeadFormId}
+                                                            onValueChange={setSelectedLeadFormId}
+                                                        >
+                                                            <SelectTrigger className="bg-white">
+                                                                <SelectValue placeholder="Select a lead form" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="none">No lead form</SelectItem>
+                                                                {leadForms.map((form) => (
+                                                                    <SelectItem key={form.id} value={form.id}>
+                                                                        {form.name} ({form.status})
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <p className="text-[10px] text-muted-foreground">
+                                                Lead forms allow you to collect contact information directly from the post.
+                                                Manage your lead forms in <strong>Leads Management</strong>.
+                                            </p>
+                                        </div>
+                                    )}
+
                                     {/* Facebook & Instagram Content Type Selection */}
                                     {(selectedPlatform === 'FACEBOOK' || selectedPlatform === 'INSTAGRAM') && (
                                         <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
@@ -1442,21 +1594,19 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                             <>
                                                                 <div className="border rounded-md">
                                                                     <Select
-                                                                        value={isCreatingPlaylist ? 'create_new' : (youtubePlaylistId || 'select')}
+                                                                        value={isCreatingPlaylist ? 'create_new' : (selectedYoutubePlaylistId || 'select')}
                                                                         onValueChange={(val) => {
                                                                             if (val === 'create_new') {
                                                                                 setIsCreatingPlaylist(true);
-                                                                                setYoutubePlaylistId('');
+                                                                                setSelectedYoutubePlaylistId('');
                                                                                 return;
                                                                             }
-                                                                            // Explicitly handle "select" to clear value, though it shouldn't be selectable if disabled
                                                                             if (val === 'select') {
-                                                                                setYoutubePlaylistId('');
+                                                                                setSelectedYoutubePlaylistId('');
                                                                                 return;
                                                                             }
-
                                                                             setIsCreatingPlaylist(false);
-                                                                            setYoutubePlaylistId(val);
+                                                                            setSelectedYoutubePlaylistId(val);
                                                                         }}
                                                                     >
                                                                         <SelectTrigger id="youtubePlaylist">
@@ -1476,7 +1626,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                                 </SelectItem>
                                                                             ))}
                                                                         </SelectContent>
-                                                                    </Select></div>
+                                                                    </Select>
+                                                                </div>
                                                             </>
                                                         )}
 
@@ -1695,6 +1846,13 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                         </div>
                                     )}
 
+                                    {/* Meta Boost Section */}
+                                    <MetaBoostSection
+                                        platform={selectedPlatform || ''}
+                                        options={boostOptions}
+                                        onChange={setBoostOptions}
+                                    />
+
                                     {/* Schedule Field */}
                                     {selectedPlatform && (
                                         <div className="space-y-2">
@@ -1745,8 +1903,22 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                             Cancel
                         </Button>
                         <Button
+                            className='cursor-pointer text-blue-600 border-blue-200 hover:bg-blue-50'
+                            type="button"
+                            variant="outline"
+                            onClick={handleQuickBoost}
+                            disabled={saving || savingBoost || !selectedPlatform || uploadingMedia || !['FACEBOOK', 'INSTAGRAM'].includes(selectedPlatform)}
+                        >
+                            {savingBoost ? (
+                                <Loader2 className="size-4 mr-2 animate-spin" />
+                            ) : (
+                                <Rocket className="size-4 mr-2" />
+                            )}
+                            Boost Now
+                        </Button>
+                        <Button
                             className='cursor-pointer'
-                            type="submit" disabled={saving || !selectedPlatform || uploadingMedia}>
+                            type="submit" disabled={saving || savingBoost || !selectedPlatform || uploadingMedia}>
                             {saving ? (
                                 <>
                                     <Loader2 className="size-4 mr-2 animate-spin" />
@@ -1961,6 +2133,3 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         </div >
     );
 }
-
-
-
