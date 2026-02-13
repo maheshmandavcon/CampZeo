@@ -1275,7 +1275,7 @@ export default function EditPostPage() {
                         >
                             Cancel
                         </Button>
-                          {/* <Button
+                        {/* <Button
                             className='cursor-pointer text-blue-600 border-blue-200 hover:bg-blue-50'
                             type="button"
                             variant="outline"
@@ -1289,7 +1289,7 @@ export default function EditPostPage() {
                             )}
                             Boost Now
                         </Button> */}
-                        
+
                         <Button className='cursor-pointer' type="submit" disabled={saving || savingBoost}>
                             {saving ? (
                                 <>

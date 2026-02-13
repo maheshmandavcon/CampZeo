@@ -85,6 +85,7 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
     const [lastUsedAdAccountId, setLastUsedAdAccountId] = useState<string>('');
     const [boostPost, setBoostPost] = useState<Post | null>(null);
     const [campaign, setCampaign] = useState<Campaign | null>(null);
+    const [availableBalance, setAvailableBalance] = useState<number | null>(null);
     const [hasPaymentMethod, setHasPaymentMethod] = useState<boolean | null>(null);
 
     useEffect(() => {
@@ -118,13 +119,16 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
 
     const fetchBalanceForAccount = async (adAccountId: string) => {
         try {
+            setAvailableBalance(null);
             setHasPaymentMethod(null);
             const res = await fetch(`/api/meta/adaccount/balance?adAccountId=${encodeURIComponent(adAccountId)}`);
             if (!res.ok) return;
             const data = await res.json();
+            setAvailableBalance(data.available_balance);
             setHasPaymentMethod(!!data.has_payment_method);
         } catch (error) {
             console.error('Error fetching Meta ad account balance:', error);
+            setAvailableBalance(null);
             setHasPaymentMethod(null);
         }
     };
@@ -238,16 +242,17 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
     };
 
     const isAccountActive = selectedAccount?.account_status === 1;
-    // In Meta, balance is often what you OWE (postpaid). 
-    // For prepaid, it might be different. Let's assume if balance > 0 it means money is due. 
-    // Actually, users usually mean "Available Funds". 
-    // If account_status is 1, it's generally active.
+    // Account is ready if active AND (either has a payment method OR has available credit)
+    const isAccountReady = isAccountActive && (hasPaymentMethod === true || (availableBalance !== null && availableBalance > 0));
+
     const rawBalance = parseFloat(selectedAccount?.balance || '0');
-    const balanceDisplay = (rawBalance / 100).toFixed(2);
-    // If balance is 0 and status is 1, it's usually healthy (postpaid).
-    // If it's prepaid, balance 0 means action needed.
-    // For now, let's keep it simple: if account is active, it's green, but show Add Funds if they want.
-    const isAccountReady = isAccountActive;
+    // For display, we prefer availableBalance from the API if we have it
+    const balanceDisplay = availableBalance !== null
+        ? availableBalance.toFixed(2)
+        : (rawBalance / 100).toFixed(2);
+
+    // Only show warning if account is active but has NO payment method and NO available funds
+    const showFinancialWarning = isAccountActive && (hasPaymentMethod === false && (availableBalance === null || availableBalance <= 0));
 
     return (
         <Card className="border-primary/20 bg-primary/5 dark:bg-primary/10 overflow-hidden">
@@ -366,10 +371,10 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                                         <div className="grid grid-cols-2 gap-3">
                                             <div className="bg-white/40 dark:bg-black/20 p-2 rounded-lg border border-primary/10">
                                                 <p className="text-[9px] uppercase font-bold text-muted-foreground">
-                                                    {hasPaymentMethod === false ? 'Payment Method' : 'Available Balance'}
+                                                    {availableBalance !== null ? 'Available Funds' : 'Account Balance'}
                                                 </p>
-                                                <p className={`text-sm font-black ${rawBalance === 0 && isAccountActive ? 'text-amber-600' : 'text-foreground'}`}>
-                                                    {hasPaymentMethod === false
+                                                <p className={`text-sm font-black ${showFinancialWarning ? 'text-amber-600' : 'text-foreground'}`}>
+                                                    {hasPaymentMethod === false && (availableBalance === null || availableBalance <= 0)
                                                         ? 'Not Linked'
                                                         : `${selectedAccount.currency} ${balanceDisplay}`}
                                                 </p>
@@ -382,7 +387,7 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                                             </div>
                                         </div>
 
-                                        {(hasPaymentMethod === false || rawBalance === 0 || !isAccountActive) && (
+                                        {(showFinancialWarning || !isAccountActive) && (
                                             <div className="space-y-2">
                                                 <div className="flex flex-col gap-2">
                                                     <Button
@@ -407,7 +412,7 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                                                         }}
                                                     >
                                                         <DollarSign className="w-3.5 h-3.5 mr-1.5" />
-                                                        {rawBalance === 0 && isAccountActive ? "Add Funds" : "Resolve Payment Issues"}
+                                                        {availableBalance !== null && availableBalance <= 0 && hasPaymentMethod === false ? "Add Funds" : "Resolve Payment Issues"}
                                                     </Button>
 
                                                     {/* Link Payment Method option */}

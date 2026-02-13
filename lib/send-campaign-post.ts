@@ -243,7 +243,12 @@ export async function sendCampaignPost(
                         status: (options?.forceSchedule || post.status === 'SCHEDULED') ? 'SCHEDULED' : 'PUBLISHED',
                         mediaUrls: finalMediaUrls,
                         videoUrl: finalVideoUrl,
-                        liveLink: finalLiveLink
+                        liveLink: finalLiveLink,
+                        metadata: {
+                            ...(post.metadata || {}),
+                            facebookPostId: platformResponse.id,
+                            facebookPageId: fbPageId
+                        }
                     }
                 });
 
@@ -396,7 +401,12 @@ export async function sendCampaignPost(
                         status: (options?.forceSchedule || post.status === 'SCHEDULED') ? 'SCHEDULED' : 'PUBLISHED',
                         mediaUrls: finalMediaUrls,
                         videoUrl: finalVideoUrl,
-                        liveLink: finalLiveLink
+                        liveLink: finalLiveLink,
+                        metadata: {
+                            ...(post.metadata || {}),
+                            facebookPostId: platformResponse.id,
+                            facebookPageId: dbUser.facebookPageId
+                        }
                     }
                 });
 
@@ -430,7 +440,8 @@ export async function sendCampaignPost(
                             days: metadata.metaBoost.duration,
                             objective: metadata.metaBoost.objective,
                             startTime: post.scheduledPostTime,
-                            targeting: metadata.metaBoost.targeting
+                            targeting: metadata.metaBoost.targeting,
+                            instagramActorId: igUserId
                         });
                         igBoostMeta = {
                             campaignId: igBoostResult.campaignId || null,

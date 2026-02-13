@@ -14,6 +14,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    DialogFooter
 } from '@/components/ui/dialog';
 import {
     ArrowLeft,
@@ -36,7 +37,9 @@ import {
     Wand2,
     Sparkles,
     Rocket,
-    Plus
+    Plus,
+    Search as SearchIcon, // Renamed to avoid potential conflict if Search is imported
+    Check
 } from 'lucide-react';
 import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
 import { useUser } from '@clerk/nextjs';
@@ -56,6 +59,8 @@ import {
 import React from 'react'; // Import React for React.use
 import { AIContentAssistant } from '@/components/ai-content-assistant';
 import { upload } from '@vercel/blob/client';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function NewPostPage({ params }: { params: Promise<{ id: string }> }) {
     const { user } = useUser();
@@ -151,7 +156,12 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [showAIAssistant, setShowAIAssistant] = useState(false);
     const [aiAssistantTab, setAiAssistantTab] = useState<'text' | 'image'>('text');
 
-
+    // Send Now Dialog State
+    const [showSendNowDialog, setShowSendNowDialog] = useState(false);
+    const [sendNowStep, setSendNowStep] = useState<'initial' | 'select_contacts'>('initial');
+    const [selectedSendContacts, setSelectedSendContacts] = useState<string[]>([]);
+    const [contactSearchQuery, setContactSearchQuery] = useState('');
+    const [isSending, setIsSending] = useState(false);
     // Meta ad account balance/payment status
     const [balanceLow, setBalanceLow] = useState(false);
     const [metaHasPaymentMethod, setMetaHasPaymentMethod] = useState<boolean | null>(null);
@@ -507,6 +517,117 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             setCreatingBoard(false);
         }
     };
+    const filteredContacts = campaignContacts.filter((contact: any) => {
+        const query = contactSearchQuery.toLowerCase();
+        return (
+            contact.contactName?.toLowerCase().includes(query) ||
+            contact.contactEmail?.toLowerCase().includes(query) ||
+            contact.contactMobile?.toLowerCase().includes(query) ||
+            contact.contactWhatsApp?.toLowerCase().includes(query)
+        );
+    });
+
+    const toggleSendContact = (contactId: string) => {
+        setSelectedSendContacts(prev =>
+            prev.includes(contactId)
+                ? prev.filter(id => id !== contactId)
+                : [...prev, contactId]
+        );
+    };
+
+    const toggleAllContacts = () => {
+        if (filteredContacts.length === 0) return;
+        const visibleIds = filteredContacts.map((c: any) => String(c.id));
+        const allVisibleSelected = visibleIds.every(id => selectedSendContacts.includes(id));
+
+        if (allVisibleSelected) {
+            setSelectedSendContacts(prev => prev.filter(id => !visibleIds.includes(id)));
+        } else {
+            setSelectedSendContacts(prev => Array.from(new Set([...prev, ...visibleIds])));
+        }
+    };
+
+    const executeCreateAndSend = async (targetContactIds?: string[]) => {
+        try {
+            setSaving(true);
+            setIsSending(true);
+
+            // 1. Create Post
+            const response = await fetch(`/api/campaigns/${campaignId}/posts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    subject: subject || null,
+                    message: message || null,
+                    type: selectedPlatform,
+                    senderEmail: selectedPlatform === 'EMAIL' ? senderEmail : null,
+                    scheduledPostTime: null, // Ensure no schedule
+                    mediaUrls: mediaUrls,
+                    // Social fields (mostly unused for Email/SMS but good to keep)
+                    youtubeTags: youtubeTags ? youtubeTags.split(',').map(t => t.trim()) : [],
+                    youtubePrivacy,
+                    youtubeContentType,
+                    youtubePlaylistTitle,
+                    youtubePlaylistId: selectedYoutubePlaylistId,
+                    pinterestBoardId,
+                    pinterestLink,
+                    isReel,
+                    contentType,
+                    thumbnailUrl,
+                    facebookPageId: selectedFacebookPageId,
+                    facebookPageAccessToken: selectedFacebookPageAccessToken,
+                    instagramBusinessId: selectedInstagramBusinessId,
+                    linkedInUrn: selectedLinkedInUrn
+                }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to create post');
+            }
+
+            const data = await response.json();
+            const postId = data.post.id;
+
+            // 2. Send Post
+            // If targetContactIds is provided, use it. Otherwise send to ALL campaign contacts.
+            const contactsToSend = targetContactIds && targetContactIds.length > 0
+                ? targetContactIds
+                : campaignContacts.map(c => c.id);
+
+            if (contactsToSend.length === 0) {
+                toast.error('No contacts available to send to.');
+                // But post was created. redirect.
+                router.push(`/organisation/campaigns/${campaignId}/posts`);
+                return;
+            }
+
+            const sendResponse = await fetch(`/api/campaigns/${campaignId}/posts/${postId}/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contactIds: contactsToSend })
+            });
+
+            if (!sendResponse.ok) {
+                const errorData = await sendResponse.json().catch(() => ({}));
+                // Post created but send failed.
+                toast.warning(`Post created but failed to send: ${errorData.error || 'Unknown error'}`);
+            } else {
+                const sendData = await sendResponse.json();
+                toast.success(`Post sent successfully! Sent: ${sendData.sent}, Failed: ${sendData.failed}`);
+            }
+
+            router.push(`/organisation/campaigns/${campaignId}/posts`);
+
+        } catch (error) {
+            console.error('Error creating/sending post:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to create post');
+        } finally {
+            setSaving(false);
+            setIsSending(false);
+            setShowSendNowDialog(false);
+        }
+    };
 
     // Handle form submit
     const handleSubmit = async (e: React.FormEvent) => {
@@ -542,40 +663,43 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         }
 
         // Social Media validation
-        const isSocialPlatform = selectedPlatform && !['EMAIL', 'SMS'].includes(selectedPlatform);
+        const isSocialPlatform = selectedPlatform && !['EMAIL', 'SMS', 'WHATSAPP'].includes(selectedPlatform); // Added WHATSAPP to check
+
         if (isSocialPlatform) {
             if (!subject && selectedPlatform !== 'SMS') {
                 toast.error('Please enter a title');
-                return;
-            }
-            if (!message) {
-                toast.error('Please enter a message');
-                return;
-            }
 
-            // Media validation
-            if ((selectedPlatform === 'INSTAGRAM' || selectedPlatform === 'YOUTUBE' || selectedPlatform === 'PINTEREST') && mediaUrls.length === 0) {
-                toast.error(`Instagram, YouTube, and Pinterest posts require media`);
-                return;
             }
+        }
+        // INTERCEPTION LOGIC
+        // If it's Email/SMS/WhatsApp AND no schedule is set, prompt user.
+        if (['EMAIL', 'SMS', 'WHATSAPP'].includes(selectedPlatform) && !scheduledPostTime) {
+            setShowSendNowDialog(true);
+            setSendNowStep('initial');
+            return;
+        }
 
-            // YouTube specific validation
-            if (selectedPlatform === 'YOUTUBE' && mediaUrls.length > 0 && !mediaUrls[0].match(/\.(mp4|mov|webm)$/i)) {
-                toast.error('YouTube requires a video file');
-                return;
-            }
+        // Media validation
+        if ((selectedPlatform === 'INSTAGRAM' || selectedPlatform === 'YOUTUBE' || selectedPlatform === 'PINTEREST') && mediaUrls.length === 0) {
+            toast.error(`Instagram, YouTube, and Pinterest posts require media`);
+            return;
+        }
 
-            // Page validation
-            if ((selectedPlatform === 'FACEBOOK' || selectedPlatform === 'INSTAGRAM') && !selectedFacebookPageId && organisationPlatforms.includes(selectedPlatform)) {
-                toast.error('Please select a Facebook Page');
-                return;
-            }
+        // YouTube specific validation
+        if (selectedPlatform === 'YOUTUBE' && mediaUrls.length > 0 && !mediaUrls[0].match(/\.(mp4|mov|webm)$/i)) {
+            toast.error('YouTube requires a video file');
+            return;
+        }
 
-            // Pinterest board validation
-            if (selectedPlatform === 'PINTEREST' && !pinterestBoardId) {
-                toast.error('Please select a Pinterest board');
-                return;
-            }
+        // Page validation
+        if ((selectedPlatform === 'FACEBOOK' || selectedPlatform === 'INSTAGRAM') && !selectedFacebookPageId && organisationPlatforms.includes(selectedPlatform)) {
+            toast.error('Please select a Facebook Page');
+            return;
+        }
+
+        // Pinterest board validation
+        if (selectedPlatform === 'PINTEREST' && !pinterestBoardId) {
+            toast.error('Please select a Pinterest board');
         }
 
         try {
@@ -1835,7 +1959,143 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                         platform: selectedPlatform || undefined,
                         existingContent: message,
                     }}
-                />
+                /> {/* Send/Schedule Popup */}
+                <Dialog open={showSendNowDialog} onOpenChange={setShowSendNowDialog}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>
+                                {sendNowStep === 'initial' ? 'Unscheduled Post' : 'Select Contacts'}
+                            </DialogTitle>
+                            <DialogDescription>
+                                {sendNowStep === 'initial'
+                                    ? "You haven't scheduled this post. Would you like to send it immediately?"
+                                    : "Select the contacts you want to send this post to."}
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        {sendNowStep === 'initial' ? (
+                            <div className="flex flex-col gap-3 py-4">
+                                <Button
+                                    className='cursor-pointer w-full justify-start'
+                                    variant="outline"
+                                    onClick={() => {
+                                        setShowSendNowDialog(false);
+                                        // Focus the schedule input
+                                        document.getElementById('scheduledPostTime')?.focus();
+                                    }}
+                                >
+                                    <Sparkles className="mr-2 size-4" /> {/* Just using an icon for visual */}
+                                    Schedule for Later
+                                </Button>
+                                <Button
+                                    className='cursor-pointer w-full justify-start'
+                                    onClick={() => executeCreateAndSend()} // Send to ALL
+                                >
+                                    <Send className="mr-2 size-4" />
+                                    Send Now to All Contacts ({campaignContacts.length})
+                                </Button>
+                                <Button
+                                    className='cursor-pointer w-full justify-start'
+                                    variant="secondary"
+                                    onClick={() => {
+                                        setSendNowStep('select_contacts');
+                                        setSelectedSendContacts([]); // Reset selection
+                                    }}
+                                >
+                                    <Check className="mr-2 size-4" />
+                                    Select Contacts to Send
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-4 py-4 max-h-[60vh]">
+                                {/* Search and Filter */}
+                                <div className="space-y-2">
+                                    <div className="relative">
+                                        <SearchIcon className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+                                        <Input
+                                            className="pl-9"
+                                            placeholder="Search contacts..."
+                                            value={contactSearchQuery}
+                                            onChange={(e) => setContactSearchQuery(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                                        <span>{filteredContacts.length} contacts found</span>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-auto p-0 text-xs text-primary"
+                                            onClick={toggleAllContacts}
+                                        >
+                                            {filteredContacts.length > 0 && filteredContacts.every(c => selectedSendContacts.includes(String(c.id)))
+                                                ? 'Deselect All'
+                                                : 'Select All Visible'}
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {/* Contacts List */}
+                                <ScrollArea className="flex-1 border rounded-md h-[300px]">
+                                    <div className="p-4 space-y-2">
+                                        {filteredContacts.length === 0 ? (
+                                            <p className="text-center text-sm text-muted-foreground py-8">
+                                                No contacts found.
+                                            </p>
+                                        ) : (
+                                            filteredContacts.map((contact: any) => (
+                                                <div key={contact.id} className="flex items-start space-x-2 space-y-0 p-2 hover:bg-muted/50 rounded-md transition-colors">
+                                                    <Checkbox
+                                                        id={`contact-${contact.id}`}
+                                                        checked={selectedSendContacts.includes(String(contact.id))}
+                                                        onCheckedChange={() => toggleSendContact(String(contact.id))}
+                                                    />
+                                                    <div className="grid gap-1.5 leading-none">
+                                                        <label
+                                                            htmlFor={`contact-${contact.id}`}
+                                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                                        >
+                                                            {contact.contactName || 'Unnamed Contact'}
+                                                        </label>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {contact.contactEmail} • {contact.contactMobile}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </ScrollArea>
+
+                                <DialogFooter className="gap-2 sm:gap-0">
+                                    <Button
+                                        variant="outline"
+                                        className='mx-2'
+                                        onClick={() => setSendNowStep('initial')}
+                                        disabled={isSending}
+                                    >
+                                        Back
+                                    </Button>
+                                    <Button
+                                        onClick={() => executeCreateAndSend(selectedSendContacts)}
+                                        disabled={selectedSendContacts.length === 0 || isSending}
+                                    >
+                                        {isSending ? (
+                                            <>
+                                                <Loader2 className="mr-2  size-4 animate-spin" />
+                                                Sending...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Send className="mr-2  size-4" />
+                                                Send to {selectedSendContacts.length} Contacts
+                                            </>
+                                        )}
+                                    </Button>
+                                </DialogFooter>
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
             </div>
         </div >
     );

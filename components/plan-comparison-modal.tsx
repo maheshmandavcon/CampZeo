@@ -16,6 +16,8 @@ interface PlanComparisonModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     currentPlanId?: string;
+    currentPlanName?: string;
+    planStatus?: string;
     onSelectPlan?: (planId: string) => void;
 }
 
@@ -23,6 +25,8 @@ export function PlanComparisonModal({
     open,
     onOpenChange,
     currentPlanId,
+    currentPlanName,
+    planStatus,
     onSelectPlan,
 }: PlanComparisonModalProps) {
     const plans = Object.values(PLANS);
@@ -71,7 +75,7 @@ export function PlanComparisonModal({
                         {/* Plan Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
                             {plans.map((plan, index) => {
-                                const isCurrentPlan = currentPlanId === plan.id;
+                                const isCurrentPlan = currentPlanId === plan.id || currentPlanName?.toUpperCase() === plan.name?.toUpperCase();
                                 const isPopular = plan.popular;
 
                                 return (
@@ -82,8 +86,25 @@ export function PlanComparisonModal({
                                         transition={{ delay: 0.3 + index * 0.1 }}
                                         className="relative group"
                                     >
-                                        <Card className={`h-full border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)]  bg-white/50  backdrop-blur-xl rounded-[2rem] overflow-hidden transition-all duration-500 hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)] hover:-translate-y-2 ${isPopular ? "ring-2 ring-primary" : ""}`}>
+                                        <Card className={`h-full border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)]  bg-white/50  backdrop-blur-xl rounded-[2rem] overflow-hidden transition-all duration-500 hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)] hover:-translate-y-2 ${isPopular ? "ring-2 ring-primary" : ""} ${isCurrentPlan && planStatus?.toUpperCase() === 'ACTIVE' ? "ring-2 ring-[#dc2626] shadow-[0_0_20px_rgba(220,38,38,0.15)]" : ""}`}>
                                             <div className="p-8 pb-4">
+                                                {isCurrentPlan && planStatus && (
+                                                    <div className="absolute top-4 left-40 bottom-2">
+                                                        <Badge
+                                                            className={`${planStatus.toUpperCase() === 'ACTIVE'
+                                                                ? 'bg-[#dc2626] hover:bg-[#dc2626]/90 shadow-lg shadow-[#dc2626]/20'
+                                                                : planStatus.toUpperCase() === 'TRIAL'
+                                                                    ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20'
+                                                                    : planStatus.toUpperCase() === 'EXPIRED' || planStatus.toUpperCase() === 'CANCELLED'
+                                                                        ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20'
+                                                                        : 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20'
+                                                                } text-white text-[10px] font-bold px-3 py-1 rounded-full border-none transition-all duration-300 animate-in fade-in slide-in-from-top-2`}
+                                                        >
+                                                            {planStatus.toUpperCase() === 'ACTIVE' ? 'ACTIVE' : planStatus.toUpperCase()}
+                                                        </Badge>
+                                                    </div>
+                                                )}
+
                                                 {isPopular && (
                                                     <div className="absolute top-4 right-4 animate-pulse">
                                                         <Badge className="bg-primary text-white text-[10px] font-bold px-3 py-1 rounded-full border-none">MOST POPULAR</Badge>

@@ -109,7 +109,8 @@ export async function createBoostedAd(options: {
     days: number,
     objective: 'OUTCOME_ENGAGEMENT' | 'OUTCOME_LEAD_GENERATION',
     startTime?: Date | null,
-    targeting?: any
+    targeting?: any,
+    instagramActorId?: string | null
 }) {
     // 1. Create Campaign
     const campaignRes = await fetch(`https://graph.facebook.com/${FB_API_VERSION}/${options.adAccountId}/campaigns`, {
@@ -118,7 +119,7 @@ export async function createBoostedAd(options: {
         body: JSON.stringify({
             name: `CampZeo Boost: ${options.name}`,
             objective: options.objective,
-            status: 'PAUSED', // Start paused to let user review in Ads Manager if needed, or ACTIVE
+            status: 'PAUSED', // Start paused to let user review in Ads Manager if needed
             access_token: options.accessToken
         })
     });
@@ -126,7 +127,6 @@ export async function createBoostedAd(options: {
     if (!campaign.id) throw new Error(`Campaign creation failed: ${JSON.stringify(campaign)}`);
 
     // 2. Create Ad Set
-    // Using a broad relative targeting for simplicity in MVP
     const adSetRes = await fetch(`https://graph.facebook.com/${FB_API_VERSION}/${options.adAccountId}/adsets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -145,15 +145,27 @@ export async function createBoostedAd(options: {
     const adSet = await adSetRes.json();
     if (!adSet.id) throw new Error(`AdSet creation failed: ${JSON.stringify(adSet)}`);
 
-    // 3. Create Ad Creative (pointing to the Page Post)
+    // 3. Create Ad Creative
+    // For Instagram, we need to use instagram_story_id and instagram_actor_id
+    // For Facebook, we use object_story_id
+    const creativeBody: any = {
+        name: `Creative for ${options.name}`,
+        access_token: options.accessToken
+    };
+
+    if (options.instagramActorId) {
+        // Instagram boost requires the numeric ID and the Instagram Actor ID
+        creativeBody.instagram_story_id = options.postId;
+        creativeBody.instagram_actor_id = options.instagramActorId;
+    } else {
+        // Facebook boost uses the Page Post ID (PAGEID_POSTID or numerical)
+        creativeBody.object_story_id = options.postId;
+    }
+
     const creativeRes = await fetch(`https://graph.facebook.com/${FB_API_VERSION}/${options.adAccountId}/adcreatives`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            name: `Creative for ${options.name}`,
-            object_story_id: options.postId,
-            access_token: options.accessToken
-        })
+        body: JSON.stringify(creativeBody)
     });
     const creative = await creativeRes.json();
     if (!creative.id) throw new Error(`Creative creation failed: ${JSON.stringify(creative)}`);
