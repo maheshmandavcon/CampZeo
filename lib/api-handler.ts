@@ -29,15 +29,12 @@ type ApiHandler = (req: NextRequest, context: any) => Promise<Response>;
 /**
  * Wraps an API route handler with centralized error handling logic.
  */
-export function withErrorHandling(handler: ApiHandler, apiName: string, functionName: string = 'handler'): ApiHandler {
+export function withErrorHandling(handler: ApiHandler, apiName: string): ApiHandler {
     return async (req: NextRequest, context: any) => {
         try {
             return await handler(req, context);
         } catch (error) {
-            // Identifier for the failing component
-            const errorLocation = `${apiName} [${functionName}]`;
-
-            console.log(`[withErrorHandling] Caught error in ${errorLocation}:`, error instanceof Error ? error.message : error);
+            console.log(`[withErrorHandling] Caught error in ${apiName}:`, error instanceof Error ? error.message : error);
 
             // 1. Unified Logging and Alerting (Runs for ALL errors now)
             console.log(`[withErrorHandling] Proceeding with logging and alerts for ALL errors.`);
@@ -46,7 +43,6 @@ export function withErrorHandling(handler: ApiHandler, apiName: string, function
             const metadata = {
                 url: req.url,
                 method: req.method,
-                functionName: functionName,
                 query: Object.fromEntries(req.nextUrl.searchParams.entries()),
                 params: context?.params,
                 isApiError: error instanceof ApiError,
@@ -56,7 +52,7 @@ export function withErrorHandling(handler: ApiHandler, apiName: string, function
             // Structured Log (Pino)
             try {
                 logger.error({
-                    msg: `Error in ${errorLocation}`,
+                    msg: `Error in ${apiName}`,
                     err: error,
                     ...metadata
                 });
@@ -66,8 +62,8 @@ export function withErrorHandling(handler: ApiHandler, apiName: string, function
 
             // Database Log (Audit)
             try {
-                console.log(`[withErrorHandling] Attempting logError for ${errorLocation}`);
-                await logError(`API Failure: ${errorLocation}`, { ...metadata, reason: errorMessage }, error instanceof Error ? error : new Error(errorMessage));
+                console.log(`[withErrorHandling] Attempting logError for ${apiName}`);
+                await logError(`API Failure: ${apiName}`, { ...metadata, reason: errorMessage }, error instanceof Error ? error : new Error(errorMessage));
                 console.log(`[withErrorHandling] logError completed`);
             } catch (dbLogErr) {
                 console.error(`[withErrorHandling] logError failed:`, dbLogErr);
@@ -75,8 +71,8 @@ export function withErrorHandling(handler: ApiHandler, apiName: string, function
 
             // Admin Alert (Email)
             try {
-                console.log(`[withErrorHandling] Attempting notifyAdminOfError for ${errorLocation}`);
-                await notifyAdminOfError(errorLocation, error, metadata);
+                console.log(`[withErrorHandling] Attempting notifyAdminOfError for ${apiName}`);
+                await notifyAdminOfError(apiName, error, metadata);
                 console.log(`[withErrorHandling] notifyAdminOfError completed`);
             } catch (alertErr) {
                 console.error(`[withErrorHandling] notifyAdminOfError failed:`, alertErr);

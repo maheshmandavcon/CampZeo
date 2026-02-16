@@ -56,6 +56,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { exportChartToPDF } from '@/lib/chart-export';
 
 interface PostInsight {
+    reach: string | number;
+    impressions: string | number;
+    likes: string | number;
+    comments: string | number;
     saves: number;
     shares: number;
     videoViews: number;
@@ -650,7 +654,7 @@ export default function AnalyticsPage() {
             const message = `"${(post.message || '').replace(/"/g, '""')}"`;
             const subject = `"${(post.subject || '').replace(/"/g, '""')}"`;
 
-            let rowByType = [];
+            let rowByType: (string | number)[] = [];
             if (isEmailOrSms) {
                 rowByType = [
                     post.insight.reach, // Sent

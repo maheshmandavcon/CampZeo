@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
         const { searchParams } = new URL(request.url);
         const adAccountId = searchParams.get('adAccountId');
-        const budget = parseInt(searchParams.get('budget') || '0');
+        const budget = parseFloat(searchParams.get('budget') || '0');
         const days = parseInt(searchParams.get('days') || '0');
         const objective = searchParams.get('objective') as any;
 

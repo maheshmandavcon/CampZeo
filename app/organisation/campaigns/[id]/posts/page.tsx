@@ -32,8 +32,8 @@ import {
     DialogFooter,
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MetaBoostSection } from './_components/MetaBoostSection';
-import { Rocket, Edit, Trash2, ExternalLink, Share2, Facebook, Instagram, Linkedin, Youtube, Pin, MoreVertical, Search, Filter, Calendar, CheckCircle2, AlertCircle, Clock, Sparkles, Send, ArrowLeft, Loader2, Plus, Mail, MessageSquare, Phone, Copy, Eye, Check, Paperclip, Globe, Download } from 'lucide-react';
+import { MetaBoostSection, MetaBoostOptions } from './_components/MetaBoostSection';
+import { Rocket, Edit, Trash2, ExternalLink, Share2, Facebook, Instagram, Linkedin, Youtube, Pin, MoreVertical, Search, Filter, Calendar, CheckCircle2, AlertCircle, Clock, Sparkles, Send, ArrowLeft, Loader2, Plus, Mail, MessageSquare, Phone, Copy, Eye, Check, Paperclip, Globe, Download, Save } from 'lucide-react';
 import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
@@ -58,6 +58,7 @@ interface Campaign {
     name: string;
     description: string | null;
     contacts?: any[];
+    metadata?: any;
 }
 
 export default function CampaignPostsPage() {
@@ -72,6 +73,7 @@ export default function CampaignPostsPage() {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [deletePostId, setDeletePostId] = useState<number | null>(null);
     const [boostPost, setBoostPost] = useState<Post | null>(null);
+    const [savingBoost, setSavingBoost] = useState(false);
     const [facebookAppId, setFacebookAppId] = useState<string | null>(null);
 
     // Filter State
@@ -110,6 +112,8 @@ export default function CampaignPostsPage() {
     const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
     const [sendingShare, setSendingShare] = useState(false);
     const [contactSearchQuery, setContactSearchQuery] = useState('');
+    const [lastUsedAdAccountId, setLastUsedAdAccountId] = useState<string>('');
+    const [boostDialogOptions, setBoostDialogOptions] = useState<MetaBoostOptions | null>(null);
 
     // Fetch organisation platforms
     useEffect(() => {
@@ -126,8 +130,6 @@ export default function CampaignPostsPage() {
 
         fetchOrgPlatforms();
     }, []);
-
-    const [lastUsedAdAccountId, setLastUsedAdAccountId] = useState<string>('');
 
     // Fetch Meta Ads config
     useEffect(() => {
@@ -151,14 +153,63 @@ export default function CampaignPostsPage() {
 
     const handleDirectBoost = (post: any) => {
         const adAccountId = post.metadata?.metaBoost?.adAccountId || lastUsedAdAccountId;
-        const pageId = post.metadata?.facebookPageId || campaign?.metadata?.facebookPageId; // Assuming campaign metadata might hold pageId
-        const postId = post.metadata?.facebookPostId || post.metadata?.platformPostId || post.liveLink;
+        const pageId = post.metadata?.facebookPageId || campaign?.metadata?.facebookPageId;
+        const fbPostId = post.metadata?.facebookPostId || post.metadata?.platformPostId || post.liveLink;
 
-        if (adAccountId && pageId && postId) {
-            openNativeBoostPopup(adAccountId, pageId, postId);
+        if (post.isPostSent && adAccountId && pageId && fbPostId) {
+            openNativeBoostPopup(adAccountId, pageId, fbPostId);
             toast.info("Opening Native Meta Boost Centre...");
         } else {
-            setBoostPost(post); // Open dialog for selection
+            // Open dialog and allow user to configure boost options
+            const existingBoost = post.metadata?.metaBoost;
+            const initialOptions: MetaBoostOptions = {
+                enabled: true,
+                adAccountId: existingBoost?.adAccountId || lastUsedAdAccountId || '',
+                budget: existingBoost?.budget || 5,
+                duration: existingBoost?.duration || 7,
+                objective: existingBoost?.objective || 'OUTCOME_ENGAGEMENT',
+                balance: existingBoost?.balance || '0'
+            };
+            setBoostDialogOptions(initialOptions);
+            setBoostPost(post);
+        }
+    };
+
+    const handleSaveBoostSettings = async () => {
+        if (!boostPost || !boostDialogOptions) return;
+
+        try {
+            setSavingBoost(true);
+            const response = await fetch(`/api/campaigns/${campaignId}/posts/${boostPost.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...boostPost,
+                    metadata: {
+                        ...(boostPost.metadata || {}),
+                        metaBoost: boostDialogOptions
+                    }
+                }),
+            });
+
+            if (!response.ok) throw new Error('Failed to save boost settings');
+
+            toast.success('Boost settings saved! They will be applied when the post is published.');
+
+            // Update local state
+            setPosts(prev => prev.map(p =>
+                p.id === boostPost.id
+                    ? { ...p, metadata: { ...(p.metadata || {}), metaBoost: boostDialogOptions } }
+                    : p
+            ));
+
+            setBoostPost(null);
+            setBoostDialogOptions(null);
+        } catch (error) {
+            console.error('Error saving boost settings:', error);
+            toast.error('Failed to save boost settings');
+        } finally {
+            setSavingBoost(false);
         }
     };
 
@@ -181,9 +232,6 @@ export default function CampaignPostsPage() {
                 setPosts(postsData.posts);
             } catch (error) {
                 console.error('Error fetching data:', error);
-
-                console.error('Error fetching data:', error);
-
                 toast.error('Failed to load campaign posts');
                 router.push('/organisation/campaigns');
             } finally {
@@ -269,6 +317,8 @@ export default function CampaignPostsPage() {
 
     // Handle Share/Send
     const handleSendShare = async () => {
+        // debugger;
+
         const isSocialPlatform = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(sharePost?.type || '');
 
         if (!isSocialPlatform && selectedContacts.length === 0) {
@@ -281,12 +331,13 @@ export default function CampaignPostsPage() {
 
         try {
             setSendingShare(true);
+            const response = await fetch(`/api/campaigns/${campaignId}/posts/${sharePost.id}/send`,
 
-            const response = await fetch(`/api/campaigns/${campaignId}/posts/${sharePost.id}/send`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contactIds: selectedContacts })
-            });
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contactIds: selectedContacts })
+                });
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -295,7 +346,18 @@ export default function CampaignPostsPage() {
 
             const data = await response.json();
 
-            toast.success(isSocialPlatform ? 'Post published successfully!' : `Post shared successfully! Sent: ${data.sent}, Failed: ${data.failed}`);
+            if (isSocialPlatform) {
+                toast.success('Post published successfully!');
+            } else {
+                if (!data.success && data.sent === 0) {
+                    const firstError = data.errors?.[0]?.split(': ')[1] || data.error || 'Failed to send post';
+                    toast.error(`Failed: ${firstError}`);
+                } else if (data.failed > 0) {
+                    toast.warning(`Partial success. Sent: ${data.sent}, Failed: ${data.failed}`);
+                } else {
+                    toast.success('Post shared successfully!');
+                }
+            }
             setSharePost(null);
             setSelectedContacts([]);
 
@@ -668,16 +730,16 @@ export default function CampaignPostsPage() {
                                                     >
                                                         <Edit className="size-4" />
                                                     </Button>
-                                                    {post.isPostSent && (post.type === 'FACEBOOK' || post.type === 'INSTAGRAM') && (
+                                                    {(post.type === 'FACEBOOK' || post.type === 'INSTAGRAM') && (
                                                         <Button
-                                                            className='cursor-pointer text-blue-600 border border-blue-600 hover:text-blue-700 hover:bg-blue-50'
+                                                            className={`cursor-pointer ${post.isPostSent ? 'text-blue-600 border-blue-600 hover:bg-blue-50' : 'text-primary border-primary hover:bg-primary/5'}`}
                                                             size="sm"
-                                                            variant="ghost"
+                                                            variant="outline"
                                                             onClick={() => handleDirectBoost(post)}
                                                             title="Boost Post"
                                                         >
                                                             <Rocket className="size-4 mr-1" />
-                                                            <span className="hidden lg:inline">Boost</span>
+                                                            <span className="hidden lg:inline">{post.isPostSent ? 'Boost' : 'Set Boost'}</span>
                                                         </Button>
                                                     )}
                                                     <Button
@@ -851,8 +913,16 @@ export default function CampaignPostsPage() {
             </Dialog>
 
             {/* Meta Boost Dialog */}
-            <Dialog open={!!boostPost} onOpenChange={(open) => !open && setBoostPost(null)}>
-                <DialogContent className="max-w-xl">
+            <Dialog
+                open={!!boostPost}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setBoostPost(null);
+                        setBoostDialogOptions(null);
+                    }
+                }}
+            >
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Rocket className="w-5 h-5 text-primary" />
@@ -869,15 +939,19 @@ export default function CampaignPostsPage() {
                                 facebookAppId={facebookAppId}
                                 fbPostId={boostPost.metadata?.facebookPostId || boostPost.metadata?.platformPostId || boostPost.liveLink}
                                 fbPageId={boostPost.metadata?.facebookPageId || campaign?.metadata?.facebookPageId}
-                                options={{
-                                    enabled: true,
-                                    adAccountId: boostPost.metadata?.metaBoost?.adAccountId || '',
-                                    budget: boostPost.metadata?.metaBoost?.budget || 5,
-                                    duration: boostPost.metadata?.metaBoost?.duration || 7,
-                                    objective: boostPost.metadata?.metaBoost?.objective || 'OUTCOME_ENGAGEMENT'
-                                }}
+                                options={
+                                    boostDialogOptions || {
+                                        enabled: true,
+                                        adAccountId: boostPost.metadata?.metaBoost?.adAccountId || '',
+                                        budget: boostPost.metadata?.metaBoost?.budget || 5,
+                                        duration: boostPost.metadata?.metaBoost?.duration || 7,
+                                        objective: boostPost.metadata?.metaBoost?.objective || 'OUTCOME_ENGAGEMENT',
+                                        balance: boostPost.metadata?.metaBoost?.balance || '0'
+                                    }
+                                }
                                 onChange={(newOptions) => {
                                     console.log("Boost Options Updated:", newOptions);
+                                    setBoostDialogOptions(newOptions);
                                     if (newOptions.adAccountId) {
                                         setLastUsedAdAccountId(newOptions.adAccountId);
                                         localStorage.setItem('last_meta_ad_account_id', newOptions.adAccountId);
@@ -887,7 +961,18 @@ export default function CampaignPostsPage() {
                         </div>
                     )}
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setBoostPost(null)}>Close</Button>
+                        <Button variant="outline" onClick={() => {
+                            setBoostPost(null);
+                            setBoostDialogOptions(null);
+                        }} disabled={savingBoost}>Cancel</Button>
+                        <Button
+                            className="bg-primary text-white"
+                            onClick={handleSaveBoostSettings}
+                            disabled={savingBoost || !boostDialogOptions?.adAccountId}
+                        >
+                            {savingBoost ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                            Save Boost Settings
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

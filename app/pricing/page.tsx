@@ -103,25 +103,25 @@ export default function PricingPage() {
                                                 </Button>
                                             ) : (
                                                 // Paid Plan + Not Signed In: Show Clerk modal
-                                                   <SignUpButton
-                                                    mode="modal"
-                                                    forceRedirectUrl={`/purchase?planId=${plan.id}`}
-                                                    unsafeMetadata={{
-                                                        selectedPlanId: plan.id,
-                                                        selectedPlanName: plan.name,
-                                                        planPrice: plan.price,
-                                                        isTrial: false
-                                                    }}
-                                                ></SignUpButton>
-                                                // <Button
-                                                //     className="w-full"
-                                                //     variant={isPopular ? "default" : "outline"}
-                                                //     size="lg"
-                                                //     onClick={() => router.push("/coming-soon")}
-                                                // >
-                                                //     Purchase Now
-                                                //     <ArrowRight className="ml-2 size-4" />
-                                                // </Button>
+                                                //    <SignUpButton
+                                                //     mode="modal"
+                                                //     forceRedirectUrl={`/purchase?planId=${plan.id}`}
+                                                //     unsafeMetadata={{
+                                                //         selectedPlanId: plan.id,
+                                                //         selectedPlanName: plan.name,
+                                                //         planPrice: plan.price,
+                                                //         isTrial: false
+                                                //     }}
+                                                // ></SignUpButton>
+                                                <Button
+                                                    className="w-full"
+                                                    variant={isPopular ? "default" : "outline"}
+                                                    size="lg"
+                                                    onClick={() => router.push("/coming-soon")}
+                                                >
+                                                    Purchase Now
+                                                    <ArrowRight className="ml-2 size-4" />
+                                                </Button>
                                             )}
                                         </CardFooter>
                                     </Card>

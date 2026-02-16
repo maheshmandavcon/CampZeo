@@ -60,4 +60,4 @@ async function getOrganisationPostsHandler(request: NextRequest) {
     return NextResponse.json({ posts });
 }
 
-export const GET = withErrorHandling(getOrganisationPostsHandler, "GET /api/Organisation/posts", "getOrganisationPostsHandler");
+export const GET = withErrorHandling(getOrganisationPostsHandler, "GET /api/Organisation/posts");

@@ -5,18 +5,29 @@
 export function parseMetaPostId(fbPostId: string): string {
     if (!fbPostId) return '';
 
-    // Extract the numeric post ID if it's in PAGEID_POSTID format or a URL
+    // If it's already a numeric string, return it as Meta expects numeric IDs for boosting
+    if (/^\d+$/.test(fbPostId)) return fbPostId;
+
     let targetId = fbPostId;
+
+    // 1. Handle Facebook PAGEID_POSTID format (e.g., 12345_67890)
     if (fbPostId.includes('_')) {
         // PAGEID_POSTID format
         targetId = fbPostId.split('_')[1];
-    } else if (fbPostId.includes('/posts/')) {
-        // URL format: https://www.facebook.com/page/posts/123456789/
+    } 
+    // 2. Handle standard Facebook /posts/ URLs
+    else if (fbPostId.includes('/posts/')) {
         const match = fbPostId.match(/\/posts\/(\d+)/);
         if (match) targetId = match[1];
-    } else if (fbPostId.includes('fbid=')) {
-        // Alternative URL format: ...?fbid=123456789...
+    } 
+    // 3. Handle Facebook URL with fbid query parameter
+    else if (fbPostId.includes('fbid=')) {
         const match = fbPostId.match(/fbid=(\d+)/);
+        if (match) targetId = match[1];
+    }
+    // 4. Handle Reels or other structured URLs
+    else if (fbPostId.includes('/reels/')) {
+        const match = fbPostId.match(/\/reels\/(\d+)/);
         if (match) targetId = match[1];
     }
 

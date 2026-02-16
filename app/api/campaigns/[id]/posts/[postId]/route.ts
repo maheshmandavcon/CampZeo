@@ -68,7 +68,7 @@ async function getPostHandler(
     return NextResponse.json({ post });
 }
 
-export const GET = withErrorHandling(getPostHandler, "GET /api/campaigns/[id]/posts/[postId]", "getPostHandler");
+export const GET = withErrorHandling(getPostHandler, "GET /api/campaigns/[id]/posts/[postId]");
 
 // PUT - Update a post
 async function updatePostHandler(
@@ -233,7 +233,7 @@ async function updatePostHandler(
     return NextResponse.json({ post });
 }
 
-export const PUT = withErrorHandling(updatePostHandler, "PUT /api/campaigns/[id]/posts/[postId]", "updatePostHandler");
+export const PUT = withErrorHandling(updatePostHandler, "PUT /api/campaigns/[id]/posts/[postId]");
 
 // DELETE - Delete a post
 async function deletePostHandler(
@@ -309,4 +309,4 @@ async function deletePostHandler(
     return NextResponse.json({ message: 'Post deleted successfully' });
 }
 
-export const DELETE = withErrorHandling(deletePostHandler, "DELETE /api/campaigns/[id]/posts/[postId]", "deletePostHandler");
+export const DELETE = withErrorHandling(deletePostHandler, "DELETE /api/campaigns/[id]/posts/[postId]");

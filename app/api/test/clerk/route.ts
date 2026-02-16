@@ -3,30 +3,30 @@ import { NextResponse } from "next/server";
 import { withErrorHandling } from '@/lib/api-handler';
 async function getHandler() {
 
-    console.log("=== /api/test/clerk called ===");
-    console.log("CLERK_SECRET_KEY:", process.env.CLERK_SECRET_KEY?.substring(0, 10) + "...");
-    console.log("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:", process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.substring(0, 10) + "...");
+        console.log("=== /api/test/clerk called ===");
+        console.log("CLERK_SECRET_KEY:", process.env.CLERK_SECRET_KEY?.substring(0, 10) + "...");
+        console.log("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:", process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.substring(0, 10) + "...");
 
-    // Test 1: Check if Clerk module loads
-    const { currentUser } = await import("@clerk/nextjs/server");
-    console.log("Clerk module loaded successfully");
+        // Test 1: Check if Clerk module loads
+        const { currentUser } = await import("@clerk/nextjs/server");
+        console.log("Clerk module loaded successfully");
 
-    // Test 2: Try to get current user
-    const user = await currentUser();
-    console.log("currentUser() result:", user ? "User found" : "No user");
+        // Test 2: Try to get current user
+        const user = await currentUser();
+        console.log("currentUser() result:", user ? "User found" : "No user");
 
-    if (user) {
-        console.log("User ID:", user.id);
-        console.log("User email:", user.emailAddresses?.[0]?.emailAddress);
-    }
+        if (user) {
+            console.log("User ID:", user.id);
+            console.log("User email:", user.emailAddresses?.[0]?.emailAddress);
+        }
 
-    return NextResponse.json({
-        success: true,
-        hasUser: !!user,
-        userId: user?.id,
-        clerkConfigured: !!process.env.CLERK_SECRET_KEY
-    });
-
+        return NextResponse.json({
+            success: true,
+            hasUser: !!user,
+            userId: user?.id,
+            clerkConfigured: !!process.env.CLERK_SECRET_KEY
+        });
+    
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/test/clerk", "getHandler");
+export const GET = withErrorHandling(getHandler, "GET /api/test/clerk");

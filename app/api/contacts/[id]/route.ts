@@ -184,6 +184,6 @@ async function deleteHandler(
     return NextResponse.json({ message: 'Contact deleted successfully' });
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/contacts/:id", "getHandler");
-export const PATCH = withErrorHandling(patchHandler, "PATCH /api/contacts/:id", "patchHandler");
-export const DELETE = withErrorHandling(deleteHandler, "DELETE /api/contacts/:id", "deleteHandler");
+export const GET = withErrorHandling(getHandler, "GET /api/contacts/:id");
+export const PATCH = withErrorHandling(patchHandler, "PATCH /api/contacts/:id");
+export const DELETE = withErrorHandling(deleteHandler, "DELETE /api/contacts/:id");

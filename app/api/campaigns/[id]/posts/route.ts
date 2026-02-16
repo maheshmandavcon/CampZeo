@@ -67,7 +67,7 @@ async function getPostsHandler(
     return NextResponse.json({ posts });
 }
 
-export const GET = withErrorHandling(getPostsHandler, "GET /api/campaigns/[id]/posts", "getPostsHandler");
+export const GET = withErrorHandling(getPostsHandler, "GET /api/campaigns/[id]/posts");
 
 // POST - Create a new post for a campaign
 async function createPostHandler(
@@ -230,4 +230,4 @@ async function createPostHandler(
     return NextResponse.json({ post }, { status: 201 });
 }
 
-export const POST = withErrorHandling(createPostHandler, "POST /api/campaigns/[id]/posts", "createPostHandler");
+export const POST = withErrorHandling(createPostHandler, "POST /api/campaigns/[id]/posts");

@@ -6,77 +6,77 @@ import { logInfo, logError, logWarning } from "@/lib/audit-logger";
 import { withErrorHandling } from '@/lib/api-handler';
 async function postHandler(req: Request) {
 
-    const user = await currentUser();
+        const user = await currentUser();
 
-    if (!user) {
-        await logWarning("Unauthorized access attempt to toggle auto-renew", { action: "toggle-auto-renew" });
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+        if (!user) {
+            await logWarning("Unauthorized access attempt to toggle auto-renew", { action: "toggle-auto-renew" });
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
 
-    const dbUser = await prisma.user.findUnique({
-        where: { clerkId: user.id },
-        include: { organisation: true },
-    });
+        const dbUser = await prisma.user.findUnique({
+            where: { clerkId: user.id },
+            include: { organisation: true },
+        });
 
-    if (!dbUser || !dbUser.organisationId) {
-        return NextResponse.json(
-            { error: "User not found or no organisation" },
-            { status: 404 }
-        );
-    }
+        if (!dbUser || !dbUser.organisationId) {
+            return NextResponse.json(
+                { error: "User not found or no organisation" },
+                { status: 404 }
+            );
+        }
 
-    const { autoRenew } = await req.json();
+        const { autoRenew } = await req.json();
 
-    if (typeof autoRenew !== "boolean") {
-        return NextResponse.json(
-            { error: "autoRenew must be a boolean value" },
-            { status: 400 }
-        );
-    }
+        if (typeof autoRenew !== "boolean") {
+            return NextResponse.json(
+                { error: "autoRenew must be a boolean value" },
+                { status: 400 }
+            );
+        }
 
-    // Find active subscription
-    const subscription = await prisma.subscription.findFirst({
-        where: {
+        // Find active subscription
+        const subscription = await prisma.subscription.findFirst({
+            where: {
+                organisationId: dbUser.organisationId,
+                status: { in: ["ACTIVE", "CANCELING"] },
+            },
+            orderBy: {
+                createdAt: "desc",
+            },
+        });
+
+        if (!subscription) {
+            return NextResponse.json(
+                { error: "No active subscription found" },
+                { status: 404 }
+            );
+        }
+
+        // Update auto-renew setting
+        const updatedSubscription = await prisma.subscription.update({
+            where: { id: subscription.id },
+            data: { autoRenew },
+        });
+
+        // Create audit log
+        await logInfo(`Auto-renew ${autoRenew ? "enabled" : "disabled"}`, {
+            action: "toggle_auto_renew",
+            resourceType: "subscription",
+            subscriptionId: subscription.id,
             organisationId: dbUser.organisationId,
-            status: { in: ["ACTIVE", "CANCELING"] },
-        },
-        orderBy: {
-            createdAt: "desc",
-        },
-    });
+            autoRenew,
+            userId: user.id,
+        });
 
-    if (!subscription) {
-        return NextResponse.json(
-            { error: "No active subscription found" },
-            { status: 404 }
-        );
-    }
-
-    // Update auto-renew setting
-    const updatedSubscription = await prisma.subscription.update({
-        where: { id: subscription.id },
-        data: { autoRenew },
-    });
-
-    // Create audit log
-    await logInfo(`Auto-renew ${autoRenew ? "enabled" : "disabled"}`, {
-        action: "toggle_auto_renew",
-        resourceType: "subscription",
-        subscriptionId: subscription.id,
-        organisationId: dbUser.organisationId,
-        autoRenew,
-        userId: user.id,
-    });
-
-    return NextResponse.json({
-        success: true,
-        message: `Auto-renew ${autoRenew ? "enabled" : "disabled"} successfully`,
-        subscription: {
-            id: updatedSubscription.id,
-            autoRenew: updatedSubscription.autoRenew,
-        },
-    });
-
+        return NextResponse.json({
+            success: true,
+            message: `Auto-renew ${autoRenew ? "enabled" : "disabled"} successfully`,
+            subscription: {
+                id: updatedSubscription.id,
+                autoRenew: updatedSubscription.autoRenew,
+            },
+        });
+    
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/subscription/auto-renew", "postHandler");
+export const POST = withErrorHandling(postHandler, "POST /api/subscription/auto-renew");

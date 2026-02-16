@@ -12,7 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { AlertCircle, CheckCircle2, DollarSign, ExternalLink, Loader2, RefreshCw, Rocket, Sparkles, Facebook } from 'lucide-react';
 import { toast } from 'sonner';
 import Script from 'next/script';
-import { getNativeBoostUrl, parseMetaPostId } from '@/lib/meta-boost-utils';
+import { getNativeBoostUrl, openNativeBoostPopup, parseMetaPostId } from '@/lib/meta-boost-utils';
+import router from 'next/router';
 
 declare global {
     interface Window {
@@ -27,6 +28,7 @@ export interface MetaBoostOptions {
     budget: number;
     duration: number;
     objective: 'OUTCOME_ENGAGEMENT' | 'OUTCOME_LEAD_GENERATION';
+    balance: string;
 }
 
 interface MetaAdAccount {
@@ -35,6 +37,7 @@ interface MetaAdAccount {
     account_status: number;
     currency: string;
     balance: string;
+    amount_spent: string;
 }
 
 interface MetaBoostSectionProps {
@@ -46,6 +49,28 @@ interface MetaBoostSectionProps {
     fbPageId?: string | null;
 }
 
+interface Campaign {
+    id: number;
+    name: string;
+    description: string | null;
+    contacts?: any[];
+    metadata?: any;
+}
+
+interface Post {
+    id: number;
+    subject: string | null;
+    message: string | null;
+    type: string;
+    scheduledPostTime: string | null;
+    isPostSent: boolean;
+    createdAt: string;
+    senderEmail: string | null;
+    videoUrl: string | null;
+    mediaUrls: string[];
+    metadata?: any;
+    liveLink?: string | null;
+}
 export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, options, onChange, facebookAppId, fbPostId, fbPageId }) => {
     const [accounts, setAccounts] = useState<MetaAdAccount[]>([]);
     const [loading, setLoading] = useState(false);
@@ -56,6 +81,12 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
     const [sdkLoaded, setSdkLoaded] = useState(false);
 
     const isMeta = platform === 'FACEBOOK' || platform === 'INSTAGRAM';
+
+    const [lastUsedAdAccountId, setLastUsedAdAccountId] = useState<string>('');
+    const [boostPost, setBoostPost] = useState<Post | null>(null);
+    const [campaign, setCampaign] = useState<Campaign | null>(null);
+    const [availableBalance, setAvailableBalance] = useState<number | null>(null);
+    const [hasPaymentMethod, setHasPaymentMethod] = useState<boolean | null>(null);
 
     useEffect(() => {
         if (options.enabled && accounts.length === 0) {
@@ -71,7 +102,10 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                 const data = await res.json();
                 setAccounts(data.accounts || []);
                 if (data.accounts?.length > 0 && !options.adAccountId) {
-                    onChange({ ...options, adAccountId: data.accounts[0].id });
+                    const first = data.accounts[0];
+                    onChange({ ...options, adAccountId: first.id, balance: first.balance });
+                    // Pre-fetch balance/payment method for default account
+                    fetchBalanceForAccount(first.id);
                 }
             } else {
                 toast.error("Failed to fetch ad accounts. Please ensure Facebook is connected with Ads permissions.");
@@ -83,8 +117,59 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
         }
     };
 
+    const fetchBalanceForAccount = async (adAccountId: string) => {
+        try {
+            setAvailableBalance(null);
+            setHasPaymentMethod(null);
+            const res = await fetch(`/api/meta/adaccount/balance?adAccountId=${encodeURIComponent(adAccountId)}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            setAvailableBalance(data.available_balance);
+            setHasPaymentMethod(!!data.has_payment_method);
+        } catch (error) {
+            console.error('Error fetching Meta ad account balance:', error);
+            setAvailableBalance(null);
+            setHasPaymentMethod(null);
+        }
+    };
+    // Launch native Meta boost popup
+    const handleLaunchNativeBoost = () => {
+        if (!options.adAccountId || !fbPostId || !fbPageId) {
+            toast.error("Missing required information. Please ensure an ad account is selected and the post is published on Meta.");
+            return;
+        }
+
+        openNativeBoostPopup(options.adAccountId, fbPageId, fbPostId);
+        toast.info("Opening Native Meta Boost Centre...");
+    };
+    // Link payment method using FB SDK or fallback to Ads Manager
+    const handleAddPaymentMethod = () => {
+        if (!selectedAccount) return;
+
+        // Strip 'act_' prefix if present
+        const accountId = selectedAccount.id.replace('act_', '');
+
+        // Attempt to use FB UI if SDK is loaded
+        if (window.FB && sdkLoaded) {
+            window.FB.ui({
+                method: 'ads_payment',
+                account_id: accountId,
+            }, (response: any) => {
+                if (response && !response.error_code) {
+                    toast.success("Payment method update initiated!");
+                    setTimeout(fetchAccounts, 5000); // Refresh to see update
+                }
+            });
+        } else {
+            // Fallback to direct link
+            window.open(`https://adsmanager.facebook.com/billing_hub/payment_settings?act=${accountId}`, '_blank');
+            toast.info("Opening payment settings in a new tab...");
+        }
+    };
+
     // Initialize Facebook SDK when appId is available
     useEffect(() => {
+
         if (!appId || typeof window === 'undefined') return;
 
         window.fbAsyncInit = function () {
@@ -107,48 +192,6 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
             fjs.parentNode?.insertBefore(js, fjs);
         }(document, 'script', 'facebook-jssdk'));
     }, [appId]);
-
-    const handleLaunchNativeBoost = () => {
-        if (!selectedAccount || !fbPostId || !fbPageId) {
-            toast.error("Please select an ad account and ensure the post is published on Facebook.");
-            return;
-        }
-
-        const url = getNativeBoostUrl(options.adAccountId, fbPageId, fbPostId);
-
-        // Open in a centered popup
-        const width = 1000;
-        const height = 800;
-        const left = (window.innerWidth - width) / 2;
-        const top = (window.innerHeight - height) / 2;
-
-        window.open(url, 'fbBoost', `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`);
-        toast.info("Opening Native Meta Boost Centre...");
-    };
-
-    const handleAddPaymentMethod = () => {
-        if (!window.FB) {
-            toast.error("Facebook SDK not loaded yet. Please try again in a moment.");
-            return;
-        }
-
-        if (!selectedAccount) return;
-
-        // Strip 'act_' prefix if present
-        const accountId = selectedAccount.id.replace('act_', '');
-
-        window.FB.ui({
-            method: 'ads_payment',
-            account_id: accountId,
-        }, function (response: any) {
-            console.log("Ads Payment Dialog Response:", response);
-            if (response && !response.error_code) {
-                toast.success("Payment method update initiated.");
-                // Optionally refresh accounts after a delay
-                setTimeout(fetchAccounts, 5000);
-            }
-        });
-    };
 
     // Fetch reach estimate when inputs change
     useEffect(() => {
@@ -185,6 +228,9 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
         if (options.adAccountId && accounts.length > 0) {
             const acc = accounts.find(a => a.id === options.adAccountId);
             setSelectedAccount(acc || null);
+            if (acc) {
+                fetchBalanceForAccount(acc.id);
+            }
         }
     }, [options.adAccountId, accounts]);
 
@@ -195,16 +241,17 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
     };
 
     const isAccountActive = selectedAccount?.account_status === 1;
-    // In Meta, balance is often what you OWE (postpaid). 
-    // For prepaid, it might be different. Let's assume if balance > 0 it means money is due. 
-    // Actually, users usually mean "Available Funds". 
-    // If account_status is 1, it's generally active.
+    // Account is ready if active AND (either has a payment method OR has available credit)
+    const isAccountReady = isAccountActive && (hasPaymentMethod === true || (availableBalance !== null && availableBalance > 0));
+
     const rawBalance = parseFloat(selectedAccount?.balance || '0');
-    const balanceDisplay = (rawBalance / 100).toFixed(2);
-    // If balance is 0 and status is 1, it's usually healthy (postpaid).
-    // If it's prepaid, balance 0 means action needed.
-    // For now, let's keep it simple: if account is active, it's green, but show Add Funds if they want.
-    const isAccountReady = isAccountActive;
+    // For display, we prefer availableBalance from the API if we have it
+    const balanceDisplay = availableBalance !== null
+        ? availableBalance.toFixed(2)
+        : (rawBalance / 100).toFixed(2);
+
+    // Only show warning if account is active but has NO payment method and NO available funds
+    const showFinancialWarning = isAccountActive && (hasPaymentMethod === false && (availableBalance === null || availableBalance <= 0));
 
     return (
         <Card className="border-primary/20 bg-primary/5 dark:bg-primary/10 overflow-hidden">
@@ -222,9 +269,11 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                         onCheckedChange={handleToggle}
                         className="data-[state=checked]:bg-primary"
                     />
-                </div>
-            </CardHeader>
 
+                </div>
+
+            </CardHeader>
+            {/* Removed redundant insufficient balance message at top as it's now in the status card */}
             {options.enabled && (
                 <CardContent className="pt-6 space-y-6">
                     {loading ? (
@@ -239,7 +288,7 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                             <p className="text-xs text-muted-foreground mb-4">
                                 You need a Meta Ad Account to boost posts. Make sure your account has enough permissions.
                             </p>
-                            <Button variant="outline" size="sm" onClick={fetchAccounts}>
+                            <Button type="button" variant="outline" size="sm" onClick={fetchAccounts}>
                                 <RefreshCw className="w-3 h-3 mr-2" /> Retry
                             </Button>
                         </div>
@@ -250,15 +299,27 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                                 <Label className="text-sm font-semibold">Select Ad Account</Label>
                                 <Select
                                     value={options.adAccountId}
-                                    onValueChange={(val) => onChange({ ...options, adAccountId: val })}
+                                    onValueChange={(val) => {
+                                        const selected = accounts.find(a => a.id === val);
+                                        onChange({
+                                            ...options,
+                                            adAccountId: val,
+                                            balance: selected?.balance || '0'
+                                        });
+                                    }}
                                 >
-                                    <SelectTrigger className="bg-background/50 border-primary/20 focus:ring-primary">
+                                    <SelectTrigger className="bg-background/50 border-primary/20 focus:ring-primary backdrop-blur-sm">
                                         <SelectValue placeholder="Select account" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {accounts.map(acc => (
                                             <SelectItem key={acc.id} value={acc.id}>
-                                                {acc.name} ({acc.currency})
+                                                <div className="flex flex-col py-0.5">
+                                                    <span className="font-medium">{acc.name}</span>
+                                                    <span className="text-[10px] text-muted-foreground uppercase">
+                                                        {acc.currency} • ID: {acc.id.replace('act_', '')}
+                                                    </span>
+                                                </div>
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -275,28 +336,20 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                                             </div>
                                             <div>
                                                 <h4 className="text-sm font-bold">Integrated Native Boost</h4>
-                                                <p className="text-[10px] text-white/80">Use the original Meta interface in a popup</p>
+                                                <p className="text-[10px] text-white/80">Launch Meta's official boost tool</p>
                                             </div>
                                         </div>
                                         <Badge className="bg-white/20 text-[10px] hover:bg-white/30 border-none">PREMIUM</Badge>
                                     </div>
-                                    <Button
-                                        className="w-full bg-white text-blue-600 hover:bg-blue-50 font-bold shadow-sm"
-                                        onClick={handleLaunchNativeBoost}
-                                        disabled={!options.adAccountId}
-                                    >
-                                        <Rocket className="w-4 h-4 mr-2" />
-                                        Launch Native Meta Boost Centre
-                                    </Button>
-                                    <p className="text-[9px] text-center mt-2 text-white/70 italic">
-                                        * Provides advanced targeting, budget options, and native Meta trust.
+                                    <p className="text-[11px] text-white/90 leading-relaxed">
+                                        Use Meta's native interface for advanced targeting and budget options directly from CampZeo.
                                     </p>
                                 </div>
                             )}
 
                             {/* Account Status / Health */}
                             {selectedAccount && (
-                                <div className={`p-4 rounded-xl flex items-start gap-3 border shadow-sm transition-all ${isAccountReady ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+                                <div className={`p-4 rounded-xl flex items-start gap-4 border shadow-sm transition-all ${isAccountReady ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
                                     <div className={`p-2 rounded-full ${isAccountReady ? 'bg-emerald-500/20' : 'bg-red-500/20'}`}>
                                         {isAccountReady ? (
                                             <CheckCircle2 className="w-5 h-5 text-emerald-600" />
@@ -304,41 +357,82 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                                             <AlertCircle className="w-5 h-5 text-red-600" />
                                         )}
                                     </div>
-                                    <div className="flex-1">
-                                        <div className="flex items-center justify-between mb-1">
+                                    <div className="flex-1 space-y-3">
+                                        <div className="flex items-center justify-between">
                                             <span className={`text-xs font-bold uppercase tracking-wider ${isAccountReady ? 'text-emerald-700' : 'text-red-700'}`}>
-                                                {isAccountReady ? 'Account Ready' : 'Action Required'}
+                                                Financial Status
                                             </span>
-                                            <Badge variant="secondary" className="font-mono text-xs tabular-nums">
-                                                Balance: {selectedAccount.currency} {balanceDisplay}
+                                            <Badge variant={isAccountReady ? "secondary" : "destructive"} className="font-mono text-xs tabular-nums">
+                                                {isAccountReady ? 'Active' : 'Action Required'}
                                             </Badge>
                                         </div>
 
-                                        {!isAccountReady || rawBalance === 0 ? (
-                                            <div className="mt-2 text-xs text-muted-foreground bg-white/50 dark:bg-black/20 p-3 rounded-lg border border-red-200/50">
-                                                <p className="mb-3 font-medium text-red-800 dark:text-red-300">
-                                                    {!isAccountActive ? "Your ad account is currently disabled." : "Ready to boost! Add funds or a payment method if needed."}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="bg-white/40 dark:bg-black/20 p-2 rounded-lg border border-primary/10">
+                                                <p className="text-[9px] uppercase font-bold text-muted-foreground">
+                                                    {availableBalance !== null ? 'Available Funds' : 'Account Balance'}
                                                 </p>
+                                                <p className={`text-sm font-black ${showFinancialWarning ? 'text-amber-600' : 'text-foreground'}`}>
+                                                    {hasPaymentMethod === false && (availableBalance === null || availableBalance <= 0)
+                                                        ? 'Not Linked'
+                                                        : `${selectedAccount.currency} ${balanceDisplay}`}
+                                                </p>
+                                            </div>
+                                            <div className="bg-white/40 dark:bg-black/20 p-2 rounded-lg border border-primary/10">
+                                                <p className="text-[9px] uppercase font-bold text-muted-foreground">Lifetime Spent</p>
+                                                <p className="text-sm font-black text-foreground">
+                                                    {selectedAccount.currency} {(parseFloat(selectedAccount.amount_spent || '0') / 100).toFixed(2)}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {(showFinancialWarning || !isAccountActive) && (
+                                            <div className="space-y-2">
                                                 <div className="flex flex-col gap-2">
                                                     <Button
+                                                        type="button"
                                                         variant="default"
                                                         size="sm"
-                                                        className="h-8 text-xs w-full bg-red-600 hover:bg-red-700 text-white shadow-sm"
-                                                        onClick={handleAddPaymentMethod}
+                                                        className="h-9 text-xs w-full bg-blue-600 hover:bg-blue-700 text-white shadow-md font-bold"
+                                                        onClick={() => {
+                                                            // If we have all the info needed for boosting, open boost page
+                                                            if (fbPageId && fbPostId && options.adAccountId) {
+                                                                openNativeBoostPopup(options.adAccountId, fbPageId, fbPostId);
+                                                                toast.info("Opening Facebook Boost page to manage funds...");
+                                                            }
+                                                            // Otherwise, open Ads Manager billing page directly
+                                                            else if (selectedAccount) {
+                                                                const cleanAccountId = selectedAccount.id.replace('act_', '');
+                                                                window.open(`https://adsmanager.facebook.com/billing_hub/?act=${cleanAccountId}`, '_blank');
+                                                                toast.info("Opening Facebook Ads Manager to add funds...");
+                                                            } else {
+                                                                toast.error("Please select an ad account first.");
+                                                            }
+                                                        }}
                                                     >
-                                                        <DollarSign className="w-3 h-3 mr-1" /> Add Funds (Pop-up)
+                                                        <DollarSign className="w-3.5 h-3.5 mr-1.5" />
+                                                        {availableBalance !== null && availableBalance <= 0 && hasPaymentMethod === false ? "Add Funds" : "Resolve Payment Issues"}
                                                     </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-8 text-xs w-full border-red-200 text-red-700 hover:bg-red-50"
-                                                        onClick={() => window.open(`https://adsmanager.facebook.com/billing_hub/?act=${selectedAccount.id.replace('act_', '')}`, '_blank')}
-                                                    >
-                                                        <ExternalLink className="w-3 h-3 mr-1" /> Open Ads Manager Billing
-                                                    </Button>
+
+                                                    {/* Link Payment Method option */}
+                                                    {hasPaymentMethod === false && (
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="h-9 text-xs w-full border-blue-200 text-blue-700 hover:bg-blue-50 font-bold"
+                                                            onClick={handleAddPaymentMethod}
+                                                        >
+                                                            <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Link Payment Method
+                                                        </Button>
+                                                    )}
                                                 </div>
+                                                <p className="text-[10px] text-muted-foreground italic px-1">
+                                                    {!isAccountActive ? "Note: Your ad account is currently disabled. Check Ads Manager for details." : "Tip: You can add funds via the Meta Boost page or Ads Manager."}
+                                                </p>
                                             </div>
-                                        ) : (
+                                        )}
+                                        {isAccountReady && rawBalance > 0 && (
                                             <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80 font-medium">Your account is in good standing and ready for boosting.</p>
                                         )}
                                     </div>
@@ -373,15 +467,17 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                             {/* Budget & Duration */}
                             <div className="grid grid-cols-2 gap-4 pt-2">
                                 <div className="space-y-2">
-                                    <Label className="text-sm font-semibold">Daily Budget ($)</Label>
+                                    <Label className="text-sm font-semibold">Daily Budget ({selectedAccount?.currency || '$'})</Label>
                                     <div className="relative">
-                                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
+                                            {selectedAccount?.currency === 'USD' ? '$' : selectedAccount?.currency || '$'}
+                                        </div>
                                         <Input
                                             type="number"
                                             min="1"
                                             value={options.budget}
                                             onChange={(e) => onChange({ ...options, budget: parseInt(e.target.value) || 0 })}
-                                            className="pl-8 bg-background/50 border-primary/20 focus-visible:ring-primary h-10"
+                                            className="pl-12 bg-background/50 border-primary/20 focus-visible:ring-primary h-10"
                                         />
                                     </div>
                                 </div>
@@ -419,7 +515,7 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                                         <div className="text-right">
                                             <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Total Spend</p>
                                             <p className="text-sm font-bold text-foreground">
-                                                {selectedAccount?.currency} {options.budget * options.duration}
+                                                {selectedAccount?.currency || '$'} {new Intl.NumberFormat().format(options.budget * options.duration)}
                                             </p>
                                         </div>
                                     </div>
@@ -427,13 +523,43 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                                     <Sparkles className="absolute -bottom-2 -right-2 w-16 h-16 text-primary/5 -rotate-12" />
                                 </div>
                                 <p className="text-[9px] text-muted-foreground mt-2 px-1 italic">
-                                    * Estimates are based on average performance for your selected objective and budget in US. Actual results may vary.
+                                    * Estimates are based on Meta's historical performance data for your {selectedAccount?.currency} {options.budget} daily budget.
+                                    {selectedAccount?.currency !== 'USD' && " Figures are in your local account currency."}
                                     {estimate === null && !loadingEstimate && (
                                         <span className="block mt-1 text-amber-600 font-bold">
                                             Tip: If reach is 0, you might need to <Button variant="link" className="h-auto p-0 text-[9px] text-amber-600 underline" onClick={() => router.push('/organisation/settings')}>re-connect Facebook</Button> to grant "Ads Management" permissions.
                                         </span>
                                     )}
                                 </p>
+                            </div>
+
+
+
+                            {/* Final Boost Action */}
+                            <div className="pt-6 border-t border-primary/20">
+                                <Button
+                                    type="button"
+                                    className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 text-white shadow-xl transition-all transform hover:scale-[1.01] active:scale-[0.99] group overflow-hidden relative"
+                                    onClick={handleLaunchNativeBoost}
+                                    disabled={!options.adAccountId || !fbPostId || !fbPageId}
+                                >
+                                    <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                                    <div className="relative flex items-center justify-center">
+                                        <Rocket className="w-5 h-5 mr-3 animate-bounce" />
+                                        Boost Post Now
+                                    </div>
+                                </Button>
+                                {(!fbPostId || !fbPageId) && (
+                                    <p className="text-[10px] text-center text-amber-600 mt-2 font-medium flex items-center justify-center gap-1">
+                                        <AlertCircle className="w-3 h-3" />
+                                        Missing page or post ID. Ensure the post is published.
+                                    </p>
+                                )}
+                                {options.adAccountId && fbPostId && fbPageId && (
+                                    <p className="text-[9px] text-center text-muted-foreground mt-2">
+                                        Opening Meta Ad Center: Account <b>{options.adAccountId.replace('act_', '')}</b> � Page <b>{fbPageId}</b>
+                                    </p>
+                                )}
                             </div>
                         </div>
                     )}

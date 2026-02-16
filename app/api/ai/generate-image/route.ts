@@ -37,4 +37,4 @@ async function generateImageHandler(request: NextRequest) {
     });
 }
 
-export const POST = withErrorHandling(generateImageHandler, "POST /api/ai/generate-image", "generateImageHandler");
+export const POST = withErrorHandling(generateImageHandler, "POST /api/ai/generate-image");

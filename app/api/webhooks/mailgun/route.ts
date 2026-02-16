@@ -44,4 +44,4 @@ async function postHandler(req: Request) {
 
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/webhooks/mailgun", "postHandler");
+export const POST = withErrorHandling(postHandler, "POST /api/webhooks/mailgun");

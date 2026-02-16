@@ -18,4 +18,4 @@ Bob Johnson,bob.johnson@example.com,+1122334455,,Campaign1;Campaign2`;
 
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/contacts/template", "getHandler");
+export const GET = withErrorHandling(getHandler, "GET /api/contacts/template");

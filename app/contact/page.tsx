@@ -125,7 +125,7 @@ export default function ContactPage() {
                                 <ContactCard
                                     icon={Phone}
                                     title="Call Us"
-                                    value="+91 70183 11201"
+                                    value="+95 55 000-0000"
                                     description="Mon-Fri from 9am to 6pm IST."
                                     delay={0.5}
                                 />

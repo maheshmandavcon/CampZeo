@@ -14,10 +14,8 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-    DialogFooter, // Added DialogFooter
+    DialogFooter
 } from '@/components/ui/dialog';
-import { Checkbox } from "@/components/ui/checkbox"; // Added Checkbox
-import { ScrollArea } from "@/components/ui/scroll-area"; // Added ScrollArea
 import {
     ArrowLeft,
     Loader2,
@@ -38,10 +36,10 @@ import {
     Video,
     Wand2,
     Sparkles,
-    Search as SearchIcon, // Renamed to avoid potential conflict if Search is imported
-    Check,
     Rocket,
-    Plus, // Added Check
+    Plus,
+    Search as SearchIcon, // Renamed to avoid potential conflict if Search is imported
+    Check
 } from 'lucide-react';
 import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
 import { useUser } from '@clerk/nextjs';
@@ -61,12 +59,15 @@ import {
 import React from 'react'; // Import React for React.use
 import { AIContentAssistant } from '@/components/ai-content-assistant';
 import { upload } from '@vercel/blob/client';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function NewPostPage({ params }: { params: Promise<{ id: string }> }) {
     const { user } = useUser();
     const router = useRouter();
     const resolvedParams = React.use(params);
     const campaignId = resolvedParams.id;
+    // const balance :any  ;
 
     // Form state
     const [subject, setSubject] = useState('');
@@ -138,7 +139,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         adAccountId: '',
         budget: 5,
         duration: 7,
-        objective: 'OUTCOME_ENGAGEMENT'
+        objective: 'OUTCOME_ENGAGEMENT',
+        balance: ''
     });
     const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
 
@@ -163,6 +165,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [selectedSendContacts, setSelectedSendContacts] = useState<string[]>([]);
     const [contactSearchQuery, setContactSearchQuery] = useState('');
     const [isSending, setIsSending] = useState(false);
+    // Meta ad account balance/payment status
+    const [balanceLow, setBalanceLow] = useState(false);
+    const [metaHasPaymentMethod, setMetaHasPaymentMethod] = useState<boolean | null>(null);
 
     // Helper for inserting variables
     const insertVariable = (variable: string) => {
@@ -175,7 +180,6 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         const before = text.substring(0, start);
         const after = text.substring(end);
         const newText = before + `{{${variable}}}` + after;
-
         setMessage(newText);
 
         // Reset cursor position
@@ -185,6 +189,44 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         }, 0);
     };
 
+    const fetchAccounts = async () => {
+        try {
+            const res = await fetch('/api/socialmedia/meta-ads/accounts');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.accounts?.length > 0) {
+                    const firstAccount = data.accounts[0];
+                    const balance: any = firstAccount.balance;
+                    // Legacy low-balance flag used to disable quick-boost when no funds
+                    if (balance === "0") {
+                        setBalanceLow(true);
+                    } else {
+                        setBalanceLow(false);
+                    }
+
+                    // Also hydrate hasPaymentMethod via the dedicated balance endpoint
+                    try {
+                        const balanceRes = await fetch(
+                            `/api/meta/adaccount/balance?adAccountId=${encodeURIComponent(firstAccount.id)}`
+                        );
+                        if (balanceRes.ok) {
+                            const balJson = await balanceRes.json();
+                            setMetaHasPaymentMethod(!!balJson.has_payment_method);
+                        } else {
+                            setMetaHasPaymentMethod(null);
+                        }
+                    } catch (err) {
+                        console.error('Error fetching Meta ad account balance:', err);
+                        setMetaHasPaymentMethod(null);
+                    }
+                }
+            } else {
+                toast.error("Failed to fetch ad accounts balance. Please ensure Facebook is connected with Ads permissions.");
+            }
+        } catch (error) {
+            console.error("Error fetching ad accounts:", error);
+        }
+    };
     // Fetch organisation platforms
     useEffect(() => {
         const fetchOrgPlatforms = async () => {
@@ -278,6 +320,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     setLoadingFacebookPages(true);
                     const response = await fetch('/api/socialmedia/facebook/pages');
                     if (response.ok) {
+                        fetchAccounts();
                         const data = await response.json();
                         setFacebookPages(data.pages || []);
 
@@ -286,6 +329,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                             setSelectedFacebookPageId(data.pages[0].id);
                             setSelectedFacebookPageAccessToken(data.pages[0].access_token);
                         }
+                    } else {
+                        console.error('Failed to fetch Facebook pages');
                     }
                 } catch (error) {
                     console.error('Error fetching Facebook pages:', error);
@@ -500,14 +545,13 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             setCreatingBoard(false);
         }
     };
-
-    // Handle filtered contacts for the dialog
     const filteredContacts = campaignContacts.filter((contact: any) => {
         const query = contactSearchQuery.toLowerCase();
         return (
             contact.contactName?.toLowerCase().includes(query) ||
             contact.contactEmail?.toLowerCase().includes(query) ||
-            contact.contactMobile?.toLowerCase().includes(query)
+            contact.contactMobile?.toLowerCase().includes(query) ||
+            contact.contactWhatsApp?.toLowerCase().includes(query)
         );
     });
 
@@ -552,7 +596,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     youtubePrivacy,
                     youtubeContentType,
                     youtubePlaylistTitle,
-                    selectedYoutubePlaylistId,
+                    youtubePlaylistId: selectedYoutubePlaylistId,
                     pinterestBoardId,
                     pinterestLink,
                     isReel,
@@ -575,11 +619,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
             // 2. Send Post
             // If targetContactIds is provided, use it. Otherwise send to ALL campaign contacts.
-            // API expects contactIds. logic:
-            // "Send to all" -> Pass all IDs? Or maybe the API handles "all" if we pass special flag or all IDs.
-            // Based on posts/page.tsx, it passes `contactIds`. I will pass all IDs for "Send to All".
-
-            const contactsToSend = targetContactIds || campaignContacts.map(c => c.id);
+            const contactsToSend = targetContactIds && targetContactIds.length > 0
+                ? targetContactIds
+                : campaignContacts.map(c => c.id);
 
             if (contactsToSend.length === 0) {
                 toast.error('No contacts available to send to.');
@@ -650,47 +692,42 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
         // Social Media validation
         const isSocialPlatform = selectedPlatform && !['EMAIL', 'SMS', 'WHATSAPP'].includes(selectedPlatform); // Added WHATSAPP to check
+
         if (isSocialPlatform) {
             if (!subject && selectedPlatform !== 'SMS') {
                 toast.error('Please enter a title');
-                return;
-            }
-            if (!message) {
-                toast.error('Please enter a message');
-                return;
-            }
 
-            // Media validation
-            if ((selectedPlatform === 'INSTAGRAM' || selectedPlatform === 'YOUTUBE' || selectedPlatform === 'PINTEREST') && mediaUrls.length === 0) {
-                toast.error(`Instagram, YouTube, and Pinterest posts require media`);
-                return;
-            }
-
-            // YouTube specific validation
-            if (selectedPlatform === 'YOUTUBE' && mediaUrls.length > 0 && !mediaUrls[0].match(/\.(mp4|mov|webm)$/i)) {
-                toast.error('YouTube requires a video file');
-                return;
-            }
-
-            // Page validation
-            if ((selectedPlatform === 'FACEBOOK' || selectedPlatform === 'INSTAGRAM') && !selectedFacebookPageId && organisationPlatforms.includes(selectedPlatform)) {
-                toast.error('Please select a Facebook Page');
-                return;
-            }
-
-            // Pinterest board validation
-            if (selectedPlatform === 'PINTEREST' && !pinterestBoardId) {
-                toast.error('Please select a Pinterest board');
-                return;
             }
         }
-
         // INTERCEPTION LOGIC
         // If it's Email/SMS/WhatsApp AND no schedule is set, prompt user.
         if (['EMAIL', 'SMS', 'WHATSAPP'].includes(selectedPlatform) && !scheduledPostTime) {
             setShowSendNowDialog(true);
             setSendNowStep('initial');
             return;
+        }
+
+        // Media validation
+        if ((selectedPlatform === 'INSTAGRAM' || selectedPlatform === 'YOUTUBE' || selectedPlatform === 'PINTEREST') && mediaUrls.length === 0) {
+            toast.error(`Instagram, YouTube, and Pinterest posts require media`);
+            return;
+        }
+
+        // YouTube specific validation
+        if (selectedPlatform === 'YOUTUBE' && mediaUrls.length > 0 && !mediaUrls[0].match(/\.(mp4|mov|webm)$/i)) {
+            toast.error('YouTube requires a video file');
+            return;
+        }
+
+        // Page validation
+        if ((selectedPlatform === 'FACEBOOK' || selectedPlatform === 'INSTAGRAM') && !selectedFacebookPageId && organisationPlatforms.includes(selectedPlatform)) {
+            toast.error('Please select a Facebook Page');
+            return;
+        }
+
+        // Pinterest board validation
+        if (selectedPlatform === 'PINTEREST' && !pinterestBoardId) {
+            toast.error('Please select a Pinterest board');
         }
 
         try {
@@ -759,6 +796,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
         try {
             setSavingBoost(true);
+
             const response = await fetch(`/api/campaigns/${campaignId}/posts/quick-boost`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -890,6 +928,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             // Map Facebook/Instagram Content Type
             if (meta.postType && (selectedPlatform === 'FACEBOOK' || selectedPlatform === 'INSTAGRAM')) {
                 setContentType(meta.postType); // POST or REEL
+
                 setIsReel(meta.postType === 'REEL');
             }
 
@@ -1851,6 +1890,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                         platform={selectedPlatform || ''}
                                         options={boostOptions}
                                         onChange={setBoostOptions}
+                                        fbPageId={selectedFacebookPageId}
+                                        facebookAppId={process.env.NEXT_PUBLIC_FACEBOOK_APP_ID}
                                     />
 
                                     {/* Schedule Field */}
@@ -1902,20 +1943,22 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                         >
                             Cancel
                         </Button>
-                        <Button
-                            className='cursor-pointer text-blue-600 border-blue-200 hover:bg-blue-50'
-                            type="button"
-                            variant="outline"
-                            onClick={handleQuickBoost}
-                            disabled={saving || savingBoost || !selectedPlatform || uploadingMedia || !['FACEBOOK', 'INSTAGRAM'].includes(selectedPlatform)}
-                        >
-                            {savingBoost ? (
-                                <Loader2 className="size-4 mr-2 animate-spin" />
-                            ) : (
-                                <Rocket className="size-4 mr-2" />
-                            )}
-                            Boost Now
-                        </Button>
+                        {['FACEBOOK', 'INSTAGRAM'].includes(selectedPlatform || '') && (
+                            <Button
+                                className='cursor-pointer text-blue-600 border-blue-200 hover:bg-blue-50'
+                                type="button"
+                                variant="outline"
+                                onClick={handleQuickBoost}
+                                disabled={saving || savingBoost || !selectedPlatform || uploadingMedia || !['FACEBOOK', 'INSTAGRAM'].includes(selectedPlatform || '') || balanceLow === true}
+                            >
+                                {savingBoost ? (
+                                    <Loader2 className="size-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Rocket className="size-4 mr-2" />
+                                )}
+                                Boost Now
+                            </Button>
+                        )}
                         <Button
                             className='cursor-pointer'
                             type="submit" disabled={saving || savingBoost || !selectedPlatform || uploadingMedia}>
@@ -1989,9 +2032,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                         platform: selectedPlatform || undefined,
                         existingContent: message,
                     }}
-                />
-
-                {/* Send/Schedule Popup */}
+                /> {/* Send/Schedule Popup */}
                 <Dialog open={showSendNowDialog} onOpenChange={setShowSendNowDialog}>
                     <DialogContent className="sm:max-w-md">
                         <DialogHeader>
@@ -2128,7 +2169,6 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                         )}
                     </DialogContent>
                 </Dialog>
-
             </div>
         </div >
     );

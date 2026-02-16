@@ -72,7 +72,7 @@ export async function sendCampaignPost(
     post: any,
     contactIds?: number[],
     options?: { forceSchedule?: boolean }
-): Promise<{ success: boolean; sent: number; failed: number; error?: string }> {
+): Promise<{ success: boolean; sent: number; failed: number; error?: string; errors?: string[] }> {
     try {
         const isSocialPlatform = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(post.type);
 
@@ -215,7 +215,7 @@ export async function sendCampaignPost(
                     mediaToUse,
                     {
                         isReel: metadata?.isReel,
-                        scheduledPublishTime: scheduledTime ? Math.floor(scheduledTime.getTime() / 1000) : undefined
+                        scheduledPublishTime: (scheduledTime && scheduledTime.getTime() > Date.now() + 600000) ? Math.floor(scheduledTime.getTime() / 1000) : undefined
                     }
                 );
 
@@ -243,9 +243,53 @@ export async function sendCampaignPost(
                         status: (options?.forceSchedule || post.status === 'SCHEDULED') ? 'SCHEDULED' : 'PUBLISHED',
                         mediaUrls: finalMediaUrls,
                         videoUrl: finalVideoUrl,
-                        liveLink: finalLiveLink
+                        liveLink: finalLiveLink,
+                        metadata: {
+                            ...(post.metadata || {}),
+                            facebookPostId: platformResponse.id,
+                            facebookPageId: fbPageId
+                        }
                     }
                 });
+
+                // Handle Meta Boosting and transaction tracking
+                let fbBoostMeta:
+                    | { campaignId: string | null; adSetId: string | null; adId: string | null }
+                    | null = null;
+                let fbBoostFailed = false;
+                let fbBoostFailureReason: string | null = null;
+
+                if (metadata?.metaBoost?.enabled) {
+                    try {
+                        console.log(`[Facebook] Triggering boost for post ${platformResponse.id}`);
+                        const boostResult = await createBoostedAd({
+                            adAccountId: metadata.metaBoost.adAccountId,
+                            accessToken: dbUser.facebookAccessToken || fbToken, // Ad accounts need User Token
+                            postId: platformResponse.id,
+                            name: post.subject || post.message?.substring(0, 20) || "Boosted Post",
+                            budget: metadata.metaBoost.budget,
+                            days: metadata.metaBoost.duration,
+                            objective: metadata.metaBoost.objective,
+                            startTime: post.scheduledPostTime,
+                            targeting: metadata.metaBoost.targeting
+                        });
+                        fbBoostMeta = {
+                            campaignId: boostResult.campaignId || null,
+                            adSetId: boostResult.adSetId || null,
+                            adId: boostResult.adId || null
+                        };
+                        console.log(`[Facebook] Boost created successfully for post ${platformResponse.id}`);
+                    } catch (boostError) {
+                        console.error(`[Facebook] Meta Boosting failed:`, boostError);
+                        fbBoostFailed = true;
+                        fbBoostFailureReason =
+                            boostError instanceof Error ? boostError.message : String(boostError);
+                    }
+                }
+
+                const fbIsScheduledTx = !!(options?.forceSchedule || post.status === 'SCHEDULED' || scheduledTime);
+                const fbScheduledTimeTx = scheduledTime || post.scheduledPostTime || null;
+
                 await prisma.postTransaction.create({
                     data: {
                         refId: post.id,
@@ -256,6 +300,17 @@ export async function sendCampaignPost(
                         mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
                         postType: metadata?.isReel ? 'REEL' : ((finalMediaUrls.length > 0 || finalVideoUrl) ? 'IMAGE' : 'TEXT'),
                         accessToken: fbToken,
+                        isScheduled: fbIsScheduledTx,
+                        scheduledTime: fbScheduledTimeTx,
+                        metaPostId: platformResponse.id,
+                        metaCampaignId: fbBoostMeta?.campaignId || null,
+                        metaAdSetId: fbBoostMeta?.adSetId || null,
+                        metaAdId: fbBoostMeta?.adId || null,
+                        boostBudgetDaily: metadata?.metaBoost?.budget ?? null,
+                        boostDurationDays: metadata?.metaBoost?.duration ?? null,
+                        boostTargeting: metadata?.metaBoost?.targeting ?? null,
+                        boostFailed: fbBoostFailed,
+                        boostFailureReason: fbBoostFailureReason,
                         published: !(options?.forceSchedule || post.status === 'SCHEDULED'),
                         publishedAt: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
                     }
@@ -321,7 +376,7 @@ export async function sendCampaignPost(
                             isReel: (post.metadata as any)?.isReel,
                             shareToFeed: true,
                             isVideo: isVideoContent,
-                            scheduledPublishTime: scheduledTime ? Math.floor(scheduledTime.getTime() / 1000) : undefined
+                            scheduledPublishTime: (scheduledTime && scheduledTime.getTime() > Date.now() + 600000) ? Math.floor(scheduledTime.getTime() / 1000) : undefined
                         }
                     );
                 } catch (igError: any) {
@@ -365,7 +420,12 @@ export async function sendCampaignPost(
                         status: (options?.forceSchedule || post.status === 'SCHEDULED') ? 'SCHEDULED' : 'PUBLISHED',
                         mediaUrls: finalMediaUrls,
                         videoUrl: finalVideoUrl,
-                        liveLink: finalLiveLink
+                        liveLink: finalLiveLink,
+                        metadata: {
+                            ...(post.metadata || {}),
+                            facebookPostId: platformResponse.id,
+                            facebookPageId: dbUser.facebookPageId
+                        }
                     }
                 });
 
@@ -380,6 +440,45 @@ export async function sendCampaignPost(
                     const firstMedia = finalMediaUrls[0];
                     postType = firstMedia?.match(/\.(mp4|mov|webm)$/i) ? 'VIDEO' : 'IMAGE';
                 }
+                // Handle Meta Boosting and transaction tracking
+                let igBoostMeta:
+                    | { campaignId: string | null; adSetId: string | null; adId: string | null }
+                    | null = null;
+                let igBoostFailed = false;
+                let igBoostFailureReason: string | null = null;
+
+                if (metadata?.metaBoost?.enabled) {
+                    try {
+                        console.log(`[Instagram] Triggering boost for post ${platformResponse.id}`);
+                        const igBoostResult = await createBoostedAd({
+                            adAccountId: metadata.metaBoost.adAccountId,
+                            accessToken: dbUser.facebookAccessToken || igToken!, // Ad accounts need User Token
+                            postId: platformResponse.id,
+                            name: post.subject || post.message?.substring(0, 20) || "Boosted Post",
+                            budget: metadata.metaBoost.budget,
+                            days: metadata.metaBoost.duration,
+                            objective: metadata.metaBoost.objective,
+                            startTime: post.scheduledPostTime,
+                            targeting: metadata.metaBoost.targeting,
+                            instagramActorId: igUserId
+                        });
+                        igBoostMeta = {
+                            campaignId: igBoostResult.campaignId || null,
+                            adSetId: igBoostResult.adSetId || null,
+                            adId: igBoostResult.adId || null
+                        };
+                        console.log(`[Instagram] Boost created successfully for post ${platformResponse.id}`);
+                    } catch (boostError) {
+                        console.error(`[Instagram] Meta Boosting failed:`, boostError);
+                        igBoostFailed = true;
+                        igBoostFailureReason =
+                            boostError instanceof Error ? boostError.message : String(boostError);
+                    }
+                }
+
+                const igIsScheduledTx = !!(options?.forceSchedule || post.status === 'SCHEDULED' || scheduledTime);
+                const igScheduledTimeTx = scheduledTime || post.scheduledPostTime || null;
+
                 await prisma.postTransaction.create({
                     data: {
                         refId: post.id,
@@ -390,6 +489,17 @@ export async function sendCampaignPost(
                         mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
                         postType,
                         accessToken: igToken!,
+                        isScheduled: igIsScheduledTx,
+                        scheduledTime: igScheduledTimeTx,
+                        metaPostId: platformResponse.id,
+                        metaCampaignId: igBoostMeta?.campaignId || null,
+                        metaAdSetId: igBoostMeta?.adSetId || null,
+                        metaAdId: igBoostMeta?.adId || null,
+                        boostBudgetDaily: metadata?.metaBoost?.budget ?? null,
+                        boostDurationDays: metadata?.metaBoost?.duration ?? null,
+                        boostTargeting: metadata?.metaBoost?.targeting ?? null,
+                        boostFailed: igBoostFailed,
+                        boostFailureReason: igBoostFailureReason,
                         published: !(options?.forceSchedule || post.status === 'SCHEDULED'),
                         publishedAt: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
                     }
@@ -608,7 +718,6 @@ export async function sendCampaignPost(
                         boardId: targetBoardId,
                         coverImageUrl: metadata?.thumbnailUrl || undefined,
                         isVideo: isVideoPin,
-                        destinationLink: metadata?.link || undefined,
                     }
                 );
 
@@ -683,6 +792,7 @@ export async function sendCampaignPost(
 
         let successCount = 0;
         let failCount = 0;
+        const errors: string[] = [];
 
         // Email
         if (post.type === 'EMAIL') {
@@ -742,9 +852,12 @@ export async function sendCampaignPost(
                     message = message.replace(new RegExp(key, 'g'), value);
                 });
 
-                const sent = await sendSms(contact.contactMobile, message);
-                if (sent) successCount++;
-                else failCount++;
+                const result = await sendSms(contact.contactMobile, message);
+                if (result.success) successCount++;
+                else {
+                    failCount++;
+                    errors.push(`SMS to ${contact.contactMobile}: ${result.error || 'Unknown error'}`);
+                }
             }
         }
 
@@ -769,9 +882,12 @@ export async function sendCampaignPost(
                     message = message.replace(new RegExp(key, 'g'), value);
                 });
 
-                const sent = await sendWhatsapp(number, message, post.mediaUrls);
-                if (sent) successCount++;
-                else failCount++;
+                const result = await sendWhatsapp(number, message, post.mediaUrls);
+                if (result.success) successCount++;
+                else {
+                    failCount++;
+                    errors.push(`WhatsApp to ${number}: ${result.error || 'Unknown error'}`);
+                }
             }
         }
 
@@ -821,7 +937,8 @@ export async function sendCampaignPost(
         return {
             success: successCount > 0,
             sent: successCount,
-            failed: failCount
+            failed: failCount,
+            errors: errors.length > 0 ? errors : undefined
         };
 
     } catch (error) {

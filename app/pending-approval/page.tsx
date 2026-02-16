@@ -70,7 +70,7 @@ export default function PendingApprovalPage() {
               <div className="flex items-center gap-2">
                 <span className="font-medium">Phone:</span>
                 <a href="tel:+955500000000" className="text-primary hover:underline">
-                  +91 70183 11201
+                  +95 55 000-0000
                 </a>
               </div>
             </div>

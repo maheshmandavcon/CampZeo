@@ -632,7 +632,7 @@ export async function getFacebookPostInsights(
                 const newFields = newFieldsArr.join(',');
                 if (newFields !== fields) {
                     postResponse = await fetch(
-                        `https://graph.facebook.com/v21.0/${postId}?fields=${newFields}&access_token=${accessToken}`
+                        `https://graph.facebook.com/v24.0/${postId}?fields=${newFields}&access_token=${accessToken}`
                     );
                 }
             }

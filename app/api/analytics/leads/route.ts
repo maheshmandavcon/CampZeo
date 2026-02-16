@@ -52,4 +52,4 @@ async function getHandler(req: NextRequest) {
     });
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/analytics/leads", "getHandler");
+export const GET = withErrorHandling(getHandler, "GET /api/analytics/leads");
