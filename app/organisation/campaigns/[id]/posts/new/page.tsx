@@ -1960,20 +1960,6 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                             </Button>
                         )}
                         <Button
-                            className='cursor-pointer text-blue-600 border-blue-200 hover:bg-blue-50'
-                            type="button"
-                            variant="outline"
-                            onClick={handleQuickBoost}
-                            disabled={saving || savingBoost || !selectedPlatform || uploadingMedia || !['FACEBOOK', 'INSTAGRAM'].includes(selectedPlatform)}
-                        >
-                            {savingBoost ? (
-                                <Loader2 className="size-4 mr-2 animate-spin" />
-                            ) : (
-                                <Rocket className="size-4 mr-2" />
-                            )}
-                            Boost Now
-                        </Button>
-                        <Button
                             className='cursor-pointer'
                             type="submit" disabled={saving || savingBoost || !selectedPlatform || uploadingMedia}>
                             {saving ? (

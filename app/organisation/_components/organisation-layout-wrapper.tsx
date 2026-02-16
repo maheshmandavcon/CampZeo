@@ -33,7 +33,6 @@ const navItems = [
   { href: "/organisation/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/organisation/leads-analytics", label: "Leads Management", icon: Users },
   { href: "/organisation/reports", label: "Reports", icon: PieChart },
-  { href: "/organisation/leads", label: "Leads", icon: Target },
   { href: "/organisation/billing", label: "Billing", icon: CurrencyIcon },
 ];
 

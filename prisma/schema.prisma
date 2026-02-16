@@ -65,6 +65,7 @@ model Organisation {
   campaigns             Campaign[]
   chatHistories         ChatHistory[]
   contacts              Contact[]
+  leads                 Lead[]
   messageTemplates      MessageTemplate[]
   MessageUsage          MessageUsage[]
   notifications         Notification[]
@@ -73,9 +74,7 @@ model Organisation {
   socialMetricHistory   SocialMetricHistory[]
   subscriptions         Subscription[]
   users                 User[]
-  leads                 Lead[]
 }
-
 
 model AudienceInsight {
   id             Int          @id @default(autoincrement())
@@ -108,9 +107,9 @@ model Campaign {
   updatedAt      DateTime       @updatedAt
   organisation   Organisation   @relation(fields: [organisationId], references: [id])
   posts          CampaignPost[]
+  Lead           Lead[]
   notifications  Notification[]
   contacts       Contact[]      @relation("CampaignToContact")
-  leads          Lead[]
 }
 
 model CampaignPost {
@@ -251,16 +250,17 @@ model Lead {
   metaLeadId     String       @unique
   formId         String?
   organisationId Int
-  data           Json         // Raw lead data from Meta
-  status         String       @default("NEW") // NEW, CONTACTED, CONVERTED, NO_RESPONSE
+  data           Json
+  status         String       @default("NEW")
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  campaignId     Int?
+  Campaign       Campaign?    @relation(fields: [campaignId], references: [id])
   organisation   Organisation @relation(fields: [organisationId], references: [id])
 
   @@index([organisationId])
   @@index([metaLeadId])
 }
-
 
 model Notification {
   id             Int           @id @default(autoincrement())
@@ -320,33 +320,32 @@ model PostInsight {
 }
 
 model PostTransaction {
-  id                Int       @id @default(autoincrement())
-  refId             Int
-  platform          String
-  postId            String
-  accountId         String
-  message           String
-  mediaUrls         String?
-  postType          String
-  accessToken       String
-  isScheduled       Boolean   @default(false)
-  scheduledTime     DateTime?
-  // Meta Ads boost tracking (for Facebook/Instagram)
-  metaPostId        String?
-  metaCampaignId    String?
-  metaAdSetId       String?
-  metaAdId          String?
-  boostBudgetDaily  Int?
-  boostDurationDays Int?
-  boostTargeting    Json?
-  boostFailed       Boolean?  @default(false)
+  id                 Int       @id @default(autoincrement())
+  refId              Int
+  platform           String
+  postId             String
+  accountId          String
+  message            String
+  mediaUrls          String?
+  postType           String
+  accessToken        String
+  isScheduled        Boolean   @default(false)
+  scheduledTime      DateTime?
+  published          Boolean   @default(false)
+  publishedAt        DateTime?
+  insightsFetched    Boolean   @default(false)
+  lastInsightsCheck  DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  boostBudgetDaily   Int?
+  boostDurationDays  Int?
+  boostFailed        Boolean?  @default(false)
   boostFailureReason String?
-  published         Boolean   @default(false)
-  publishedAt       DateTime?
-  insightsFetched   Boolean   @default(false)
-  lastInsightsCheck DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  boostTargeting     Json?
+  metaAdId           String?
+  metaAdSetId        String?
+  metaCampaignId     String?
+  metaPostId         String?
 }
 
 model LogEvents {
@@ -455,18 +454,14 @@ model SocialMetricHistory {
   @@index([metricName, recordedAt])
 }
 
-model Lead {
-  id              Int          @id @default(autoincrement())
-  organisationId  Int
-  campaignId      Int?
-  metaLeadId      String       @unique
-  formId          String?
-  data            Json         // Stores lead fields (email, name, phone, etc.)
-  status          String       @default("NEW")
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  organisation    Organisation @relation(fields: [organisationId], references: [id])
-  campaign        Campaign?    @relation(fields: [campaignId], references: [id])
+model SystemNotificationLog {
+  id        Int      @id @default(autoincrement())
+  subject   String
+  recipient String
+  status    String
+  error     String?
+  createdAt DateTime @default(now())
+  metadata  Json?
 }
 
 enum PostStatus {
