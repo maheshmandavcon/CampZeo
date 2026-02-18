@@ -48,7 +48,7 @@ async function getHandler() {
             campaigns: 100,
             contacts: 100,
             users: 10,
-            platforms: 8,
+            platforms: 5, // Max 5 supported social platforms
             postsPerMonth: 100,
         };
 
@@ -65,8 +65,8 @@ async function getHandler() {
             usageLimits = defaultLimits;
         }
 
-        // Count current usage
-        const [campaignsCount, contactsCount, usersCount, platformsCount, postsThisMonthCount] =
+        // Count current usage — fetch org users to check real OAuth connections
+        const [campaignsCount, contactsCount, usersCount, postsThisMonthCount, orgUsers] =
             await Promise.all([
                 // Count active campaigns (not deleted)
                 prisma.campaign.count({
@@ -87,12 +87,6 @@ async function getHandler() {
                         organisationId,
                     },
                 }),
-                // Count organisation platforms
-                prisma.organisationPlatform.count({
-                    where: {
-                        organisationId,
-                    },
-                }),
                 // Count campaign posts created this month
                 prisma.campaignPost.count({
                     where: {
@@ -104,7 +98,37 @@ async function getHandler() {
                         },
                     },
                 }),
+                // Fetch all org users to check real OAuth tokens
+                prisma.user.findMany({
+                    where: { organisationId },
+                    select: {
+                        linkedInAccessToken: true,
+                        facebookAccessToken: true,
+                        facebookPageAccessToken: true,
+                        instagramAccessToken: true,
+                        instagramUserId: true,
+                        youtubeAccessToken: true,
+                        pinterestAccessToken: true,
+                    },
+                }),
             ]);
+
+        // Determine which social platforms are actually connected (have a live OAuth token)
+        const connectedPlatforms: string[] = [];
+
+        const hasLinkedIn = orgUsers.some(u => !!u.linkedInAccessToken);
+        const hasFacebook = orgUsers.some(u => !!(u.facebookAccessToken || u.facebookPageAccessToken));
+        const hasInstagram = orgUsers.some(u => !!(u.instagramAccessToken && u.instagramUserId && u.instagramUserId !== 'no-business-account'));
+        const hasYouTube = orgUsers.some(u => !!u.youtubeAccessToken);
+        const hasPinterest = orgUsers.some(u => !!u.pinterestAccessToken);
+
+        if (hasLinkedIn) connectedPlatforms.push('LinkedIn');
+        if (hasFacebook) connectedPlatforms.push('Facebook');
+        if (hasInstagram) connectedPlatforms.push('Instagram');
+        if (hasYouTube) connectedPlatforms.push('YouTube');
+        if (hasPinterest) connectedPlatforms.push('Pinterest');
+
+        const platformsCount = connectedPlatforms.length;
 
         // Calculate usage metrics
         const calculateMetric = (current: number, limit: number) => {
@@ -121,7 +145,10 @@ async function getHandler() {
             campaigns: calculateMetric(campaignsCount, usageLimits.campaigns),
             contacts: calculateMetric(contactsCount, usageLimits.contacts),
             users: calculateMetric(usersCount, usageLimits.users),
-            platforms: calculateMetric(platformsCount, usageLimits.platforms),
+            platforms: {
+                ...calculateMetric(platformsCount, 5), // Always max 5 supported social platforms
+                connectedNames: connectedPlatforms, // e.g. ['LinkedIn', 'Facebook']
+            },
             postsThisMonth: calculateMetric(postsThisMonthCount, usageLimits.postsPerMonth),
         };
 

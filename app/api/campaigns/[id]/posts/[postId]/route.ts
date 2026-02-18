@@ -300,6 +300,11 @@ async function deletePostHandler(
         return NextResponse.json({ error: 'Cannot delete a sent post' }, { status: 400 });
     }
 
+    // Delete related PostAudit records first (no cascade delete in schema)
+    await prisma.postAudit.deleteMany({
+        where: { postId: postIdNum },
+    });
+
     // Delete post
     await prisma.campaignPost.delete({
         where: { id: postIdNum },
