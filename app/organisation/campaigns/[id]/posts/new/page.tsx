@@ -95,6 +95,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [contentType, setContentType] = useState('POST'); // For Facebook/Instagram: POST or REEL
     const [loadingTemplates, setLoadingTemplates] = useState(false);
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('none');
+    const [campaign, setCampaign] = useState<any>(null);
 
     // Fetch campaign contacts
     useEffect(() => {
@@ -107,6 +108,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     return;
                 }
                 const data = await response.json();
+                setCampaign(data.campaign);
                 setCampaignContacts(data.campaign.contacts || []);
             } catch (error) {
                 console.error('Error fetching campaign contacts:', error);
@@ -728,6 +730,19 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         // Pinterest board validation
         if (selectedPlatform === 'PINTEREST' && !pinterestBoardId) {
             toast.error('Please select a Pinterest board');
+            return;
+        }
+
+        // Campaign duration validation
+        if (scheduledPostTime && campaign) {
+            const scheduledDate = new Date(scheduledPostTime);
+            const startDate = new Date(campaign.startDate);
+            const endDate = new Date(campaign.endDate);
+
+            if (scheduledDate < startDate || scheduledDate > endDate) {
+                toast.error(`Scheduled time must be between ${startDate.toLocaleDateString()} and ${endDate.toLocaleDateString()}`);
+                return;
+            }
         }
 
         try {
@@ -1264,7 +1279,13 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                             type="datetime-local"
                                             value={scheduledPostTime}
                                             onChange={(e) => setScheduledPostTime(e.target.value)}
-                                            min={new Date().toISOString().slice(0, 16)}
+                                            min={(() => {
+                                                const now = new Date();
+                                                const start = campaign?.startDate ? new Date(campaign.startDate) : now;
+                                                const minDate = start > now ? start : now;
+                                                return minDate.toISOString().slice(0, 16);
+                                            })()}
+                                            max={campaign?.endDate ? new Date(campaign.endDate).toISOString().slice(0, 16) : undefined}
                                         />
                                         <p className="text-xs text-muted-foreground">
                                             Leave empty to send immediately
@@ -1903,7 +1924,13 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                 type="datetime-local"
                                                 value={scheduledPostTime}
                                                 onChange={(e) => setScheduledPostTime(e.target.value)}
-                                                min={new Date().toISOString().slice(0, 16)}
+                                                min={(() => {
+                                                    const now = new Date();
+                                                    const start = campaign?.startDate ? new Date(campaign.startDate) : now;
+                                                    const minDate = start > now ? start : now;
+                                                    return minDate.toISOString().slice(0, 16);
+                                                })()}
+                                                max={campaign?.endDate ? new Date(campaign.endDate).toISOString().slice(0, 16) : undefined}
                                             />
                                             <p className="text-xs text-muted-foreground">
                                                 Leave empty to send immediately

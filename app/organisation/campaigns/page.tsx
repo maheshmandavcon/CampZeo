@@ -308,10 +308,11 @@ export default function CampaignsPage() {
                                                             <div className="flex items-center  gap-2">
                                                                 <div className="border border-1 rounded-md">
                                                                     <Button
-                                                                        className='cursor-pointer   '
+                                                                        className='cursor-pointer'
                                                                         size="sm"
                                                                         variant="outline"
                                                                         onClick={() => handleManagePosts(campaign)}
+                                                                        disabled={status.label === 'Completed'}
                                                                     >
                                                                         {campaign._count.posts === 0 ? 'Add Post' : 'Posts'}
                                                                     </Button>

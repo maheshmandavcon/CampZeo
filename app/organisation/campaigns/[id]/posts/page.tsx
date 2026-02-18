@@ -33,9 +33,9 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MetaBoostSection, MetaBoostOptions } from './_components/MetaBoostSection';
-import { Rocket, Edit, Trash2, ExternalLink, Share2, Facebook, Instagram, Linkedin, Youtube, Pin, MoreVertical, Search, Filter, Calendar, CheckCircle2, AlertCircle, Clock, Sparkles, Send, ArrowLeft, Loader2, Plus, Mail, MessageSquare, Phone, Copy, Eye, Check, Paperclip, Globe, Download, Save } from 'lucide-react';
+import { Rocket, Edit, Trash2, ExternalLink, Share2, Facebook, Instagram, Linkedin, Youtube, Pin, MoreVertical, Search, Filter, Calendar, CheckCircle2, AlertCircle, Clock, Sparkles, Send, ArrowLeft, Loader2, Plus, Mail, MessageSquare, Phone, Copy, Eye, Check, Paperclip, Globe, Download, Save, Users } from 'lucide-react';
 import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
 interface Post {
@@ -57,6 +57,8 @@ interface Campaign {
     id: number;
     name: string;
     description: string | null;
+    startDate: string;
+    endDate: string;
     contacts?: any[];
     metadata?: any;
 }
@@ -64,6 +66,7 @@ interface Campaign {
 export default function CampaignPostsPage() {
     const router = useRouter();
     const params = useParams();
+    const searchParams = useSearchParams();
     const campaignId = params.id as string;
 
     // State
@@ -242,6 +245,25 @@ export default function CampaignPostsPage() {
         fetchData();
     }, [campaignId, router]);
 
+    // Auto-open share dialog when returning from edit page after adding contacts
+    useEffect(() => {
+        const returnTo = searchParams.get('returnTo');
+        const sharePostId = searchParams.get('postId');
+
+        if (returnTo === 'share' && sharePostId && posts.length > 0 && !loading) {
+            const postToShare = posts.find(p => p.id === parseInt(sharePostId));
+            if (postToShare) {
+                setSharePost(postToShare);
+                setSelectedContacts([]);
+            }
+            // Clean up URL params without reloading
+            const url = new URL(window.location.href);
+            url.searchParams.delete('returnTo');
+            url.searchParams.delete('postId');
+            window.history.replaceState({}, '', url.toString());
+        }
+    }, [posts, loading, searchParams]);
+
     // Reset page on filter change
     useEffect(() => {
         setCurrentPage(1);
@@ -353,7 +375,7 @@ export default function CampaignPostsPage() {
                     const firstError = data.errors?.[0]?.split(': ')[1] || data.error || 'Failed to send post';
                     toast.error(`Failed: ${firstError}`);
                 } else if (data.failed > 0) {
-                    toast.warning(`Partial success. Sent: ${data.sent}, Failed: ${data.failed}`);
+                    toast.warning(`Sent: ${data.sent}, Failed: ${data.failed}`);
                 } else {
                     toast.success('Post shared successfully!');
                 }
@@ -526,6 +548,20 @@ export default function CampaignPostsPage() {
         return content;
     };
 
+    // Get campaign status
+    const getCampaignStatus = (campaign: Campaign | null) => {
+        if (!campaign) return null;
+        const now = new Date();
+        const start = new Date(campaign.startDate);
+        const end = new Date(campaign.endDate);
+
+        if (now < start) return { label: 'Scheduled', variant: 'secondary' as const };
+        if (now > end) return { label: 'Completed', variant: 'outline' as const };
+        return { label: 'Active', variant: 'default' as const };
+    };
+
+    const campaignStatus = getCampaignStatus(campaign);
+
     if (loading) {
         return (
             <div className="min-h-screen bg-background">
@@ -573,7 +609,11 @@ export default function CampaignPostsPage() {
                                     {campaign?.description || 'Manage posts for this campaign'}
                                 </p>
                             </div>
-                            <Button className='cursor-pointer shrink-0' onClick={() => router.push(`/organisation/campaigns/${campaignId}/posts/new`)}>
+                            <Button
+                                className='cursor-pointer shrink-0'
+                                onClick={() => router.push(`/organisation/campaigns/${campaignId}/posts/new`)}
+                                disabled={campaignStatus?.label === 'Completed'}
+                            >
                                 <Plus className="size-4 mr-2" />
                                 <span className="hidden sm:inline">Add Post</span>
                                 <span className="sm:hidden">Add</span>
@@ -715,7 +755,7 @@ export default function CampaignPostsPage() {
                                                             setSelectedContacts([]);
                                                         }}
                                                         title={isSocialPlatform ? "Publish Now" : "Share to Contacts"}
-                                                        disabled={post.isPostSent}
+                                                        disabled={post.isPostSent || campaignStatus?.label === 'Completed'}
                                                     >
                                                         {isSocialPlatform ? <Send className="size-4" /> : <Share2 className="size-4" />}
                                                     </Button>
@@ -1038,8 +1078,27 @@ export default function CampaignPostsPage() {
                                                 </div>
                                             ))
                                         ) : (
-                                            <div className="p-4 text-center text-muted-foreground text-sm">
-                                                {contactSearchQuery ? 'No contacts found matching your search' : 'No contacts found in this campaign'}
+                                            <div className="p-8 text-center space-y-4">
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <Users className="size-8 text-muted-foreground/50" />
+                                                    <p className="text-muted-foreground text-sm">
+                                                        {contactSearchQuery ? 'No contacts found matching your search' : 'No contacts found in this campaign'}
+                                                    </p>
+                                                </div>
+                                                {!contactSearchQuery && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="cursor-pointer"
+                                                        onClick={() => {
+                                                            setSharePost(null);
+                                                            router.push(`/organisation/campaigns/${campaignId}/edit?returnTo=share&postId=${sharePost?.id}`);
+                                                        }}
+                                                    >
+                                                        <Plus className="size-4 mr-2" />
+                                                        Add Contacts to Campaign
+                                                    </Button>
+                                                )}
                                             </div>
                                         )}
                                     </div>
