@@ -108,6 +108,7 @@ export default function EditPostPage() {
     const [selectedLinkedInUrn, setSelectedLinkedInUrn] = useState<string>('');
     const [fbPageId, setFbPageId] = useState<string>('');
     const [fbPostId, setFbPostId] = useState<string>('');
+    const [campaign, setCampaign] = useState<any>(null);
 
     const [organisationPlatforms, setOrganisationPlatforms] = useState<string[]>([]);
     const [loadingPlatforms, setLoadingPlatforms] = useState(true);
@@ -245,6 +246,14 @@ export default function EditPostPage() {
                     const minutes = String(date.getMinutes()).padStart(2, '0');
                     setScheduledPostTime(`${year}-${month}-${day}T${hours}:${minutes}`);
                 }
+
+                // Fetch campaign dates
+                const campaignResponse = await fetch(`/api/campaigns/${campaignId}`);
+                if (campaignResponse.ok) {
+                    const campaignData = await campaignResponse.json();
+                    setCampaign(campaignData.campaign);
+                }
+
             } catch (error) {
                 console.error('Error fetching post:', error);
                 toast.error('Failed to load post');
@@ -543,6 +552,18 @@ export default function EditPostPage() {
         if (type === 'PINTEREST' && !pinterestBoardId) {
             toast.error('Please select a Pinterest board');
             return;
+        }
+
+        // Campaign duration validation
+        if (scheduledPostTime && campaign) {
+            const scheduledDate = new Date(scheduledPostTime);
+            const startDate = new Date(campaign.startDate);
+            const endDate = new Date(campaign.endDate);
+
+            if (scheduledDate < startDate || scheduledDate > endDate) {
+                toast.error(`Scheduled time must be between ${startDate.toLocaleDateString()} and ${endDate.toLocaleDateString()}`);
+                return;
+            }
         }
 
         // Prepare metadata
@@ -1145,7 +1166,13 @@ export default function EditPostPage() {
                                     type="datetime-local"
                                     value={scheduledPostTime}
                                     onChange={(e) => setScheduledPostTime(e.target.value)}
-                                    min={new Date().toISOString().slice(0, 16)}
+                                    min={(() => {
+                                        const now = new Date();
+                                        const start = campaign?.startDate ? new Date(campaign.startDate) : now;
+                                        const minDate = start > now ? start : now;
+                                        return minDate.toISOString().slice(0, 16);
+                                    })()}
+                                    max={campaign?.endDate ? new Date(campaign.endDate).toISOString().slice(0, 16) : undefined}
                                 />
                                 <p className="text-xs text-muted-foreground">
                                     Leave empty to send immediately

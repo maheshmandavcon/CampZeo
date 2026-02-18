@@ -130,6 +130,36 @@ async function updateCampaignHandler(
         return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
+    // Check for scheduled posts outside the new date range
+    const conflictingPosts = await prisma.campaignPost.findMany({
+        where: {
+            campaignId: campaignId,
+            isDeleted: false,
+            isPostSent: false, // Only check unsent/scheduled posts
+            scheduledPostTime: {
+                not: null
+            },
+            OR: [
+                {
+                    scheduledPostTime: {
+                        lt: new Date(startDate)
+                    }
+                },
+                {
+                    scheduledPostTime: {
+                        gt: new Date(endDate)
+                    }
+                }
+            ]
+        }
+    });
+
+    if (conflictingPosts.length > 0) {
+        return NextResponse.json({
+            error: `Cannot update campaign duration. There are ${conflictingPosts.length} posts scheduled outside the new date range (${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}). Please reschedule or delete those posts first.`
+        }, { status: 400 });
+    }
+
     // Update campaign
     const campaign = await prisma.campaign.update({
         where: { id: campaignId },
