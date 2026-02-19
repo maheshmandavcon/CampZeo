@@ -156,6 +156,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [leadForms, setLeadForms] = useState<any[]>([]);
     const [loadingLeadForms, setLoadingLeadForms] = useState(false);
     const [selectedLeadFormId, setSelectedLeadFormId] = useState<string>('');
+    const [isFreeTrial, setIsFreeTrial] = useState(false); // Track if user is on free trial
 
     // AI Assistant state
     const [showAIAssistant, setShowAIAssistant] = useState(false);
@@ -269,8 +270,24 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             }
         };
 
+        const fetchSubscriptionStatus = async () => {
+            try {
+                const res = await fetch("/api/subscription/current");
+                if (res.ok) {
+                    const data = await res.json();
+                    // Free trial = isTrial active AND no paid subscription
+                    const trialActive = data.trial?.isActive === true;
+                    const hasPaidPlan = !!data.subscription;
+                    setIsFreeTrial(trialActive && !hasPaidPlan);
+                }
+            } catch (error) {
+                console.error("Failed to fetch subscription status", error);
+            }
+        };
+
         fetchOrgPlatforms();
         fetchSocialStatus();
+        fetchSubscriptionStatus();
     }, []);
 
     // Fetch Pinterest boards
@@ -607,7 +624,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     facebookPageId: selectedFacebookPageId,
                     facebookPageAccessToken: selectedFacebookPageAccessToken,
                     instagramBusinessId: selectedInstagramBusinessId,
-                    linkedInUrn: selectedLinkedInUrn
+                    linkedInUrn: selectedLinkedInUrn === 'personal' ? null : selectedLinkedInUrn
                 }),
             });
 
@@ -771,7 +788,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     facebookPageId: selectedFacebookPageId, // NEW: Selected Facebook Page
                     facebookPageAccessToken: selectedFacebookPageAccessToken, // NEW: Selected Facebook Page Access Token
                     instagramBusinessId: selectedInstagramBusinessId, // NEW: Linked Instagram ID
-                    linkedInUrn: selectedLinkedInUrn, // NEW: Selected LinkedIn Author URN
+                    linkedInUrn: selectedLinkedInUrn === 'personal' ? null : selectedLinkedInUrn, // NEW: Selected LinkedIn Author URN
                     leadFormId: selectedLeadFormId && selectedLeadFormId !== 'none' ? selectedLeadFormId : null,
                     metaBoost: boostOptions.enabled ? boostOptions : undefined, // NEW: Meta Boost options
                 }),
@@ -1013,6 +1030,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                 // Check if assigned to organization
                                                 const isAssigned = organisationPlatforms.includes(platform);
 
+                                                // Free trial blocks SMS and WhatsApp
+                                                const isTrialBlocked = isFreeTrial && ['SMS', 'WHATSAPP'].includes(platform);
+
                                                 // Check if user has connected account (or if it's an admin platform like EMAIL/SMS)
                                                 let isConnected = false;
                                                 if (['EMAIL', 'SMS', 'WHATSAPP'].includes(platform)) {
@@ -1026,50 +1046,61 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                 const isSelected = selectedPlatform === platform;
                                                 const Icon = getPlatformIcon(platform);
 
-                                                if (!isAssigned) return null; // Only show assigned platforms in the list? 
-                                                // Wait, user request implies showing them so they can connect.
-                                                // But usually if not assigned to Org, user can't connect it?
-                                                // Re-reading code: GetPlatforms API returns what IS created in OrganisationPlatform.
-                                                // If 'isAssigned' is false, it means organization doesn't have it enabled.
-                                                // Let's assume we show ALL supported platforms, but if not assigned, maybe we should also prompt to connect (which might create the assignment?)
-                                                // However, for now let's stick to showing ALL and prompting connect if !isConnected.
-
-                                                // Refined logic: Show all. 
-                                                // Connected = (Assigned & Token) OR (Assigned & AdminPlatform).
-                                                // Actually, if we want to prompt user to connect, we should show it even if not assigned?
-                                                // Users usually connect via Settings.
-                                                // If I hide it, they can't see it.
-                                                // My previous code mapped strict list.
-
-                                                // Update: logic to match prompt "platform is not yet connected... navigate to account screen"
+                                                if (!isAssigned) return null;
 
                                                 return (
-                                                    <button
-                                                        key={platform}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            if (!isConnected) {
-                                                                toast("Platform not connected", {
-                                                                    description: "You need to connect this platform in your account settings.",
-                                                                    action: {
-                                                                        label: "Connect",
-                                                                        onClick: () => router.push('/organisation/settings')
-                                                                    }
-                                                                });
-                                                                return;
-                                                            }
-                                                            togglePlatform(platform);
-                                                        }}
-                                                        className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] ${isSelected
-                                                            ? 'border-primary bg-primary/10 shadow-sm'
-                                                            : 'border-border hover:border-primary/50 hover:bg-muted/50 cursor-pointer'
-                                                            } ${!isConnected ? 'opacity-50 grayscale' : ''}`}
-                                                    >
-                                                        <Icon className={`size-6 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-                                                        <span className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
-                                                            {platform}
-                                                        </span>
-                                                    </button>
+                                                    <div key={platform} className="relative group">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (isTrialBlocked) {
+                                                                    toast('Free trial does not have access', {
+                                                                        description: 'SMS and WhatsApp are not available on the free trial. Please upgrade your plan.',
+                                                                        action: {
+                                                                            label: 'Upgrade',
+                                                                            onClick: () => router.push('/organisation/billing')
+                                                                        }
+                                                                    });
+                                                                    return;
+                                                                }
+                                                                if (!isConnected) {
+                                                                    toast('Platform not connected', {
+                                                                        description: 'You need to connect this platform in your account settings.',
+                                                                        action: {
+                                                                            label: 'Connect',
+                                                                            onClick: () => router.push('/organisation/settings')
+                                                                        }
+                                                                    });
+                                                                    return;
+                                                                }
+                                                                togglePlatform(platform);
+                                                            }}
+                                                            className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] ${isTrialBlocked
+                                                                    ? 'border-dashed border-muted-foreground/30 bg-muted/20 opacity-50 cursor-not-allowed'
+                                                                    : isSelected
+                                                                        ? 'border-primary bg-primary/10 shadow-sm'
+                                                                        : 'border-border hover:border-primary/50 hover:bg-muted/50 cursor-pointer'
+                                                                } ${!isConnected && !isTrialBlocked ? 'opacity-50 grayscale' : ''}`}
+                                                        >
+                                                            <Icon className={`size-6 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                                                            <span className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                                                                {platform}
+                                                            </span>
+                                                            {isTrialBlocked && (
+                                                                <span className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 leading-tight text-center">
+                                                                    Trial locked
+                                                                </span>
+                                                            )}
+                                                        </button>
+                                                        {/* Hover tooltip for trial-blocked platforms */}
+                                                        {isTrialBlocked && (
+                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-44 bg-popover text-popover-foreground text-xs rounded-md shadow-lg border px-3 py-2 hidden group-hover:block z-50 pointer-events-none text-center">
+                                                                Free trial does not have access to {platform}.
+                                                                <br />
+                                                                <span className="text-primary font-medium">Upgrade your plan</span> to unlock.
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 );
                                             })}
                                         </div>

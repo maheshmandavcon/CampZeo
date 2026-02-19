@@ -13,9 +13,35 @@ export async function postToLinkedIn(
 ) {
     let { accessToken, authorUrn } = credentials;
 
-    // Ensure authorUrn is a valid URN
+    // Resolve authorUrn if missing or 'personal' or invalidly formatted
+    if (!authorUrn || authorUrn === 'personal' || authorUrn === 'urn:li:person:personal') {
+        console.log("[LinkedIn] Author URN invalid or 'personal'. Fetching profile to resolve...");
+        try {
+            const profileRes = await fetch("https://api.linkedin.com/v2/me", {
+                headers: { 
+                    "Authorization": `Bearer ${accessToken}`,
+                    "X-Restli-Protocol-Version": "2.0.0" 
+                },
+            });
+            if (profileRes.ok) {
+                const profileData = await profileRes.json();
+                authorUrn = `urn:li:person:${profileData.id}`;
+                console.log(`[LinkedIn] Resolved Author URN to: ${authorUrn}`);
+            } else {
+                console.warn(`[LinkedIn] Failed to fetch profile: ${profileRes.status}`);
+            }
+        } catch (e) {
+            console.error("[LinkedIn] Error resolving profile URN:", e);
+        }
+    }
+
+    // Ensure authorUrn is a valid URN (fallback)
     if (authorUrn && !authorUrn.startsWith("urn:li:")) {
         authorUrn = `urn:li:person:${authorUrn}`;
+    }
+
+    if (!authorUrn) {
+        throw new Error("Could not determine LinkedIn Author URN.");
     }
 
     // Normalize mediaUrls to array

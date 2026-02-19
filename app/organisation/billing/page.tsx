@@ -80,7 +80,7 @@ interface UsageData {
     campaigns: UsageMetric;
     contacts: UsageMetric;
     users: UsageMetric;
-    platforms: UsageMetric;
+    platforms: UsageMetric & { connectedNames?: string[] };
     postsThisMonth: UsageMetric;
   };
 }

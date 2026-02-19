@@ -155,6 +155,33 @@ async function createPostHandler(
         return NextResponse.json({ error: 'Message, subject or media is required' }, { status: 400 });
     }
 
+    // Free trial restriction: block SMS and WhatsApp
+    if (['SMS', 'WHATSAPP'].includes(type)) {
+        const organisation = await prisma.organisation.findUnique({
+            where: { id: effectiveOrganisationId },
+            select: { isTrial: true, trialEndDate: true },
+        });
+        const hasPaidSubscription = await prisma.subscription.findFirst({
+            where: {
+                organisationId: effectiveOrganisationId,
+                status: { in: ['ACTIVE', 'CANCELING'] },
+            },
+        });
+        const now = new Date();
+        const isFreeTrial =
+            organisation?.isTrial === true &&
+            organisation.trialEndDate != null &&
+            now < new Date(organisation.trialEndDate) &&
+            !hasPaidSubscription;
+
+        if (isFreeTrial) {
+            return NextResponse.json(
+                { error: `Free trial does not have access to ${type}. Please upgrade your plan to use this platform.` },
+                { status: 403 }
+            );
+        }
+    }
+
         // Prepare metadata
         let metadata: any = {};
         if (type === 'YOUTUBE') {

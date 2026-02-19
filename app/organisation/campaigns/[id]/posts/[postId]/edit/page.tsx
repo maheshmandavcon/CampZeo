@@ -176,7 +176,10 @@ export default function EditPostPage() {
             try {
                 setLoading(true);
                 const response = await fetch(`/api/campaigns/${campaignId}/posts/${postId}`);
-                if (!response.ok) throw new Error('Failed to fetch post');
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `Failed to fetch post (${response.status})`);
+                }
 
                 const data = await response.json();
                 const post: Post = data.post;
