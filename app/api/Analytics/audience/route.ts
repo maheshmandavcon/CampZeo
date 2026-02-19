@@ -51,4 +51,4 @@ async function getAudienceHandler() {
     return NextResponse.json(audienceData);
 }
 
-export const GET = withErrorHandling(getAudienceHandler, "GET /api/Analytics/audience");
+export const GET = withErrorHandling(getAudienceHandler, "GET /api/analytics/audience");

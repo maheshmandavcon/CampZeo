@@ -204,7 +204,7 @@ export default function AnalyticsPage() {
 
         setLoadingPosts(true);
         try {
-            let url = `/api/Analytics/posts?platform=${selectedPlatform}&page=${page}&limit=${limit}`;
+            let url = `/api/analytics/posts?platform=${selectedPlatform}&page=${page}&limit=${limit}`;
             if (forceRefresh) url += '&fresh=true';
             if (startDate) url += `&startDate=${startDate}`;
             if (endDate) url += `&endDate=${endDate}`;
@@ -245,7 +245,7 @@ export default function AnalyticsPage() {
             console.log(`[Analytics Page] Syncing ${forceFullSync ? 'FRESH' : 'cached'} metrics...`);
             // Professional approach: If not forced, we could have a 'fast' endpoint that only reads DB
             // but for now we use the existing sync-all. We can add a Param if we want to optimize further.
-            const response = await fetch(`/api/Analytics/sync-all${forceFullSync ? '' : '?skipSync=true'}`);
+            const response = await fetch(`/api/analytics/sync-all${forceFullSync ? '' : '?skipSync=true'}`);
             if (!response.ok) throw new Error('Failed to sync analytics');
 
             const data = await response.json();
@@ -301,7 +301,7 @@ export default function AnalyticsPage() {
         const fetchFunnelData = async () => {
             setLoadingFunnel(true);
             try {
-                let url = '/api/Analytics/funnel';
+                let url = '/api/analytics/funnel';
                 if (startDate || endDate) {
                     const params = new URLSearchParams();
                     if (startDate) params.append('startDate', startDate);
@@ -326,7 +326,7 @@ export default function AnalyticsPage() {
     const handleSync = async (post: Post) => {
         setSyncing(post.id);
         try {
-            const response = await fetch(`/api/Analytics/post-details/${post.id}?fresh=true&platform=${post.platform}&postId=${post.postId}`);
+            const response = await fetch(`/api/analytics/post-details/${post.id}?fresh=true&platform=${post.platform}&postId=${post.postId}`);
             if (!response.ok) throw new Error('Failed to sync post');
 
             const data = await response.json();
