@@ -119,4 +119,4 @@ async function getHandler(
     return NextResponse.json({ post: formattedPost });
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/Analytics/post-details/:id");
+export const GET = withErrorHandling(getHandler, "GET /api/analytics/post-details/:id");

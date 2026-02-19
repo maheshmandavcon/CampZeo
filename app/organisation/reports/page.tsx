@@ -314,7 +314,7 @@ export default function ReportsPage() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetch('/api/Analytics/audience');
+                const response = await fetch('/api/analytics/audience');
                 if (!response.ok) throw new Error('Failed to fetch audience data');
                 const result = await response.json();
                 setData(result);
@@ -341,7 +341,7 @@ export default function ReportsPage() {
             params.append('sortBy', sortBy);
             params.append('sortOrder', sortOrder);
 
-            const response = await fetch(`/api/Analytics/reports/posts?${params.toString()}`);
+            const response = await fetch(`/api/analytics/reports/posts?${params.toString()}`);
             if (!response.ok) throw new Error('Failed to fetch post analytics');
             const result = await response.json();
             setPostData(result);
@@ -358,7 +358,7 @@ export default function ReportsPage() {
         setSyncing(true);
         toast.info("Syncing metrics from all platforms...");
         try {
-            const response = await fetch('/api/Analytics/sync-all');
+            const response = await fetch('/api/analytics/sync-all');
             if (!response.ok) throw new Error('Sync failed');
             toast.success("Metrics synchronized successfully!");
             fetchPostPerformance(1);

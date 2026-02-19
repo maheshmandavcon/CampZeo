@@ -199,4 +199,4 @@ async function getHandler(request: NextRequest) {
     
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/Analytics/sync-all");
+export const GET = withErrorHandling(getHandler, "GET /api/analytics/sync-all");
