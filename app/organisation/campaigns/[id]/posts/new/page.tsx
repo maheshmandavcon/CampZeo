@@ -97,6 +97,15 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('none');
     const [campaign, setCampaign] = useState<any>(null);
 
+    const formatDateTimeLocal = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+
     // Fetch campaign contacts
     useEffect(() => {
         const fetchCampaignContacts = async () => {
@@ -753,11 +762,24 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         // Campaign duration validation
         if (scheduledPostTime && campaign) {
             const scheduledDate = new Date(scheduledPostTime);
-            const startDate = new Date(campaign.startDate);
-            const endDate = new Date(campaign.endDate);
+            const now = new Date();
+            const campaignStart = new Date(campaign.startDate);
+            const campaignEnd = new Date(campaign.endDate);
 
-            if (scheduledDate < startDate || scheduledDate > endDate) {
-                toast.error(`Scheduled time must be between ${startDate.toLocaleDateString()} and ${endDate.toLocaleDateString()}`);
+            // User's logic: must be within campaign and not in the past
+            const effectiveStart = campaignStart > now ? campaignStart : now;
+
+            if (scheduledDate < effectiveStart) {
+                if (scheduledDate < now) {
+                    toast.error('Scheduled time cannot be in the past');
+                } else {
+                    toast.error(`Scheduled time must be after campaign start (${campaignStart.toLocaleString()})`);
+                }
+                return;
+            }
+
+            if (scheduledDate > campaignEnd) {
+                toast.error(`Scheduled time must be before campaign end (${campaignEnd.toLocaleString()})`);
                 return;
             }
         }
@@ -1076,10 +1098,10 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                 togglePlatform(platform);
                                                             }}
                                                             className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] ${isTrialBlocked
-                                                                    ? 'border-dashed border-muted-foreground/30 bg-muted/20 opacity-50 cursor-not-allowed'
-                                                                    : isSelected
-                                                                        ? 'border-primary bg-primary/10 shadow-sm'
-                                                                        : 'border-border hover:border-primary/50 hover:bg-muted/50 cursor-pointer'
+                                                                ? 'border-dashed border-muted-foreground/30 bg-muted/20 opacity-50 cursor-not-allowed'
+                                                                : isSelected
+                                                                    ? 'border-primary bg-primary/10 shadow-sm'
+                                                                    : 'border-border hover:border-primary/50 hover:bg-muted/50 cursor-pointer'
                                                                 } ${!isConnected && !isTrialBlocked ? 'opacity-50 grayscale' : ''}`}
                                                         >
                                                             <Icon className={`size-6 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
@@ -1314,9 +1336,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                 const now = new Date();
                                                 const start = campaign?.startDate ? new Date(campaign.startDate) : now;
                                                 const minDate = start > now ? start : now;
-                                                return minDate.toISOString().slice(0, 16);
+                                                return formatDateTimeLocal(minDate);
                                             })()}
-                                            max={campaign?.endDate ? new Date(campaign.endDate).toISOString().slice(0, 16) : undefined}
+                                            max={campaign?.endDate ? formatDateTimeLocal(new Date(campaign.endDate)) : undefined}
                                         />
                                         <p className="text-xs text-muted-foreground">
                                             Leave empty to send immediately
@@ -1959,9 +1981,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                     const now = new Date();
                                                     const start = campaign?.startDate ? new Date(campaign.startDate) : now;
                                                     const minDate = start > now ? start : now;
-                                                    return minDate.toISOString().slice(0, 16);
+                                                    return formatDateTimeLocal(minDate);
                                                 })()}
-                                                max={campaign?.endDate ? new Date(campaign.endDate).toISOString().slice(0, 16) : undefined}
+                                                max={campaign?.endDate ? formatDateTimeLocal(new Date(campaign.endDate)) : undefined}
                                             />
                                             <p className="text-xs text-muted-foreground">
                                                 Leave empty to send immediately

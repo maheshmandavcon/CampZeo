@@ -197,7 +197,10 @@ export async function checkImageStatus(jobId: string): Promise<{
             const resultData = await statusResult.json();
 
             if (resultData.generations && resultData.generations.length > 0) {
-                return { done: true, imageUrl: resultData.generations[0].img };
+                const imgData = resultData.generations[0].img;
+                // AI Horde returns base64 string. Ensure it's a valid Data URL
+                const formattedImg = imgData.startsWith('http') ? imgData : `data:image/webp;base64,${imgData}`;
+                return { done: true, imageUrl: formattedImg };
             }
         }
 

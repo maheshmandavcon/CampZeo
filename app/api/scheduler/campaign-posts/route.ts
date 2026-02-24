@@ -41,9 +41,10 @@ async function schedulerHandler(request: NextRequest) {
 
     // 2. Verify the request is from a trusted source (cron job)
     const authHeader = request.headers.get('authorization');
+    const querySecret = request.nextUrl.searchParams.get('secret');
     const cronSecret = process.env.CRON_SECRET || 'your-secret-key';
 
-    if (authHeader !== `Bearer ${cronSecret}`) {
+    if (authHeader !== `Bearer ${cronSecret}` && querySecret !== cronSecret) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

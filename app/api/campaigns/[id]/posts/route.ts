@@ -182,6 +182,20 @@ async function createPostHandler(
         }
     }
 
+    if (type === 'FACEBOOK' && isReel && !mediaUrls?.length) {
+        return NextResponse.json(
+            { error: 'Media is required for Facebook Reels. Please upload a video.' },
+            { status: 400 }
+        );
+    }
+
+    if (type === 'INSTAGRAM' && !mediaUrls?.length) {
+        return NextResponse.json(
+            { error: 'Media is required for Instagram posts. Please upload an image or video.' },
+            { status: 400 }
+        );
+    }
+
         // Prepare metadata
         let metadata: any = {};
         if (type === 'YOUTUBE') {
@@ -194,7 +208,7 @@ async function createPostHandler(
                 playlistId: youtubePlaylistId
             };
         } else if (type === 'PINTEREST') {
-            metadata = { boardId: pinterestBoardId, link: pinterestLink };
+            metadata = { boardId: pinterestBoardId, link: pinterestLink, thumbnailUrl };
         } else if (type === 'FACEBOOK' || type === 'INSTAGRAM') {
             metadata = {
                 isReel: !!isReel,
@@ -219,6 +233,8 @@ async function createPostHandler(
             }, { status: 400 });
         }
     }
+    // If it's a social post and not scheduled, send it immediately
+    const isSocialPlatform = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(type);
 
     // Create post
     const post = await prisma.campaignPost.create({
@@ -228,7 +244,7 @@ async function createPostHandler(
             message,
             type,
             senderEmail: type === 'EMAIL' ? senderEmail : null,
-            scheduledPostTime: scheduledPostTime ? new Date(scheduledPostTime) : null,
+            scheduledPostTime: scheduledPostTime ? new Date(scheduledPostTime) : (!isSocialPlatform ? new Date() : null),
             isAttachedToCampaign: true,
             videoUrl: mediaUrls && mediaUrls.length > 0 ? mediaUrls[0] : null, // Legacy support
             mediaUrls: mediaUrls || [],
@@ -243,9 +259,7 @@ async function createPostHandler(
         }
     });
 
-    // If it's a social post and not scheduled, send it immediately
-    const isSocialPlatform = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(type);
-
+    
     if (isSocialPlatform && !scheduledPostTime) {
         const result = await sendCampaignPost(post);
         if (!result.success) {

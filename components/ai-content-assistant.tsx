@@ -151,6 +151,7 @@ export function AIContentAssistant({
             setImageLoading(true);
             setGeneratedImagePrompt('');
 
+
             // Create a minimum delay promise of 5 seconds (5000ms)
             const delayPromise = new Promise(resolve => setTimeout(resolve, 5000));
 
@@ -172,8 +173,8 @@ export function AIContentAssistant({
 
             const data = await response.json();
 
-            if (data.imagePrompt) {
-                setGeneratedImagePrompt(data.imagePrompt);
+            if (data.imagePrompt || data.imageUrl) {
+                setGeneratedImagePrompt(data.imageUrl || data.imagePrompt);
                 toast.success('Image generated!');
             } else {
                 throw new Error(data.error || 'Failed to generate image');
@@ -523,15 +524,20 @@ export function AIContentAssistant({
                                                         </p>
                                                     </div>
                                                 </div>
-                                            ) : generatedImagePrompt.startsWith('http') ? (
+                                            ) : (generatedImagePrompt.startsWith('http') || generatedImagePrompt.startsWith('data:')) ? (
                                                 <img
                                                     src={generatedImagePrompt}
                                                     alt="Generated content"
                                                     className="object-contain w-full h-full"
+                                                    onLoad={() => console.log('Image loaded successfully')}
+                                                    onError={(e) => {
+                                                        console.error('Image load failed');
+                                                        // Fallback logic could go here, but for now we just log it
+                                                    }}
                                                 />
                                             ) : (
-                                                <div className="text-center p-4">
-                                                    <p className="text-sm text-muted-foreground">{generatedImagePrompt}</p>
+                                                <div className="text-center p-6 bg-muted/20 rounded-lg">
+                                                    <p className="text-xs text-muted-foreground">{generatedImagePrompt}</p>
                                                 </div>
                                             )}
                                         </div>

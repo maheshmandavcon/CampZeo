@@ -34,15 +34,17 @@ export function parseMetaPostId(fbPostId: string): string {
     return targetId;
 }
 
-export function getNativeBoostUrl(adAccountId: string, pageId: string, fbPostId: string): string {
+export function getNativeBoostUrl(adAccountId: string, pageId: string, fbPostId: string, isInstagram: boolean = false): string {
     const cleanAdAccountId = adAccountId.replace('act_', '');
     const targetId = parseMetaPostId(fbPostId);
 
-    return `https://www.facebook.com/ad_center/create/boostpost/?ad_account_id=${cleanAdAccountId}&page_id=${pageId}&target_id=${targetId}&entry_point=partner_campzeo`;
+    const idParam = isInstagram ? 'instagram_post_id' : 'target_id';
+
+    return `https://www.facebook.com/ad_center/create/boostpost/?ad_account_id=${cleanAdAccountId}&page_id=${pageId}&${idParam}=${targetId}&entry_point=partner_campzeo`;
 }
 
-export function openNativeBoostPopup(adAccountId: string, pageId: string, fbPostId: string) {
-    const url = getNativeBoostUrl(adAccountId, pageId, fbPostId);
+export function openNativeBoostPopup(adAccountId: string, pageId: string, fbPostId: string, isInstagram: boolean = false) {
+    const url = getNativeBoostUrl(adAccountId, pageId, fbPostId, isInstagram);
 
     // Open in a centered popup
     const width = 1000;

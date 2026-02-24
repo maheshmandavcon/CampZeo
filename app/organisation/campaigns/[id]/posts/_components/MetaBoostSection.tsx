@@ -139,7 +139,7 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
             return;
         }
 
-        openNativeBoostPopup(options.adAccountId, fbPageId, fbPostId);
+        openNativeBoostPopup(options.adAccountId, fbPageId, fbPostId, platform === 'INSTAGRAM');
         toast.info("Opening Native Meta Boost Centre...");
     };
     // Link payment method using FB SDK or fallback to Ads Manager
@@ -397,7 +397,7 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                                                         onClick={() => {
                                                             // If we have all the info needed for boosting, open boost page
                                                             if (fbPageId && fbPostId && options.adAccountId) {
-                                                                openNativeBoostPopup(options.adAccountId, fbPageId, fbPostId);
+                                                                openNativeBoostPopup(options.adAccountId, fbPageId, fbPostId, platform === 'INSTAGRAM');
                                                                 toast.info("Opening Facebook Boost page to manage funds...");
                                                             }
                                                             // Otherwise, open Ads Manager billing page directly

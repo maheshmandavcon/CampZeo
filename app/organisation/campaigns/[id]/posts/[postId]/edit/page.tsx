@@ -110,6 +110,15 @@ export default function EditPostPage() {
     const [fbPostId, setFbPostId] = useState<string>('');
     const [campaign, setCampaign] = useState<any>(null);
 
+    const formatDateTimeLocal = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+
     const [organisationPlatforms, setOrganisationPlatforms] = useState<string[]>([]);
     const [loadingPlatforms, setLoadingPlatforms] = useState(true);
 
@@ -541,6 +550,30 @@ export default function EditPostPage() {
             return;
         }
 
+        if (scheduledPostTime && campaign) {
+            const scheduledDate = new Date(scheduledPostTime);
+            const now = new Date();
+            const campaignStart = new Date(campaign.startDate);
+            const campaignEnd = new Date(campaign.endDate);
+
+            // User's logic: must be within campaign and not in the past
+            const effectiveStart = campaignStart > now ? campaignStart : now;
+
+            if (scheduledDate < effectiveStart) {
+                if (scheduledDate < now) {
+                    toast.error('Scheduled time cannot be in the past');
+                } else {
+                    toast.error(`Scheduled time must be after campaign start (${campaignStart.toLocaleString()})`);
+                }
+                return;
+            }
+
+            if (scheduledDate > campaignEnd) {
+                toast.error(`Scheduled time must be before campaign end (${campaignEnd.toLocaleString()})`);
+                return;
+            }
+        }
+
         if (type === 'EMAIL' && !senderEmail) {
             toast.error('Please enter sender email for email posts');
             return;
@@ -557,17 +590,7 @@ export default function EditPostPage() {
             return;
         }
 
-        // Campaign duration validation
-        if (scheduledPostTime && campaign) {
-            const scheduledDate = new Date(scheduledPostTime);
-            const startDate = new Date(campaign.startDate);
-            const endDate = new Date(campaign.endDate);
 
-            if (scheduledDate < startDate || scheduledDate > endDate) {
-                toast.error(`Scheduled time must be between ${startDate.toLocaleDateString()} and ${endDate.toLocaleDateString()}`);
-                return;
-            }
-        }
 
         // Prepare metadata
         let metadata: any = {};
@@ -1173,9 +1196,9 @@ export default function EditPostPage() {
                                         const now = new Date();
                                         const start = campaign?.startDate ? new Date(campaign.startDate) : now;
                                         const minDate = start > now ? start : now;
-                                        return minDate.toISOString().slice(0, 16);
+                                        return formatDateTimeLocal(minDate);
                                     })()}
-                                    max={campaign?.endDate ? new Date(campaign.endDate).toISOString().slice(0, 16) : undefined}
+                                    max={campaign?.endDate ? formatDateTimeLocal(new Date(campaign.endDate)) : undefined}
                                 />
                                 <p className="text-xs text-muted-foreground">
                                     Leave empty to send immediately
