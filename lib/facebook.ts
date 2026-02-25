@@ -4,7 +4,7 @@ import { Buffer } from 'buffer';
 async function debugFacebookToken(accessToken: string, logPrefix: string = '[Facebook]'): Promise<void> {
     try {
         console.log(`${logPrefix} Debugging Token permissions...`);
-        const response = await fetch(`https://graph.facebook.com/v21.0/debug_token?input_token=${accessToken}&access_token=${accessToken}`);
+        const response = await fetch(`https://graph.facebook.com/v24.0/debug_token?input_token=${accessToken}&access_token=${accessToken}`);
 
         if (response.ok) {
             const data = await response.json();
@@ -54,7 +54,7 @@ export async function postToFacebook(
 
         if (mediaList.length === 0) {
             // Text-only post
-            const response = await fetch(`https://graph.facebook.com/v21.0/${pageId}/feed`, {
+            const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/feed`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -62,7 +62,7 @@ export async function postToFacebook(
                 body: JSON.stringify({
                     message,
                     access_token: accessToken,
-                    privacy: { value: 'EVERYONE' }, // Ensure post is public
+                    // Note: 'privacy' is often not supported for Page posts and can cause (#3) errors
                     published: options?.scheduledPublishTime ? false : true,
                     scheduled_publish_time: options?.scheduledPublishTime
                 }),
@@ -86,7 +86,7 @@ export async function postToFacebook(
             if (!validation.valid) {
                 console.warn(`[Facebook] ${validation.message} Posting as text-only.`);
                 // Fall back to text-only post
-                const response = await fetch(`https://graph.facebook.com/v21.0/${pageId}/feed`, {
+                const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/feed`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -94,7 +94,6 @@ export async function postToFacebook(
                     body: JSON.stringify({
                         message: message + '\n\n(Media not posted: URL not publicly accessible)',
                         access_token: accessToken,
-                        privacy: { value: 'EVERYONE' },
                         published: true
                     }),
                 });
@@ -120,16 +119,15 @@ export async function postToFacebook(
 
                     if (isVideo) {
                         // Regular video post - Single shot is more reliable for simple URL-based uploads
-                        const response = await fetch(`https://graph.facebook.com/v21.0/${pageId}/videos`, {
+                        const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/videos`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
                             body: JSON.stringify({
-                                message,
+                                description: message, // Use description for videos
                                 file_url: publicUrl,
                                 access_token: accessToken,
-                                privacy: { value: 'EVERYONE' },
                                 published: options?.scheduledPublishTime ? false : true,
                                 scheduled_publish_time: options?.scheduledPublishTime
                             }),
@@ -148,7 +146,7 @@ export async function postToFacebook(
                         await waitForFacebookVideoProcessing(data.id, accessToken);
                     } else {
                         // Standard photo post
-                        const response = await fetch(`https://graph.facebook.com/v21.0/${pageId}/photos`, {
+                        const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/photos`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -157,7 +155,6 @@ export async function postToFacebook(
                                 message,
                                 url: publicUrl,
                                 access_token: accessToken,
-                                privacy: { value: 'EVERYONE' },
                                 published: options?.scheduledPublishTime ? false : true,
                                 scheduled_publish_time: options?.scheduledPublishTime
                             }),
@@ -192,7 +189,7 @@ export async function postToFacebook(
 
                 console.log(`[Facebook] Uploading ${endpoint}: ${validation.url}`);
 
-                const response = await fetch(`https://graph.facebook.com/v21.0/${pageId}/${endpoint}`, {
+                const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/${endpoint}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -212,6 +209,11 @@ export async function postToFacebook(
 
                 const data = await response.json();
                 mediaIds.push(data.id);
+
+                // Wait for processing if it's a video (important for multi-media posts)
+                if (isVideo) {
+                    await waitForFacebookVideoProcessing(data.id, accessToken);
+                }
             }
 
             if (mediaIds.length === 0) {
@@ -219,7 +221,7 @@ export async function postToFacebook(
             }
 
             // Create post with all media (photos and videos)
-            const response = await fetch(`https://graph.facebook.com/v21.0/${pageId}/feed`, {
+            const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/feed`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -228,7 +230,6 @@ export async function postToFacebook(
                     message,
                     attached_media: mediaIds.map(id => ({ media_fbid: id })),
                     access_token: accessToken,
-                    privacy: { value: 'EVERYONE' },
                     published: options?.scheduledPublishTime ? false : true,
                     scheduled_publish_time: options?.scheduledPublishTime
                 }),
@@ -236,7 +237,13 @@ export async function postToFacebook(
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(`Facebook API error: ${JSON.stringify(error)}`);
+                const errorMsg = JSON.stringify(error);
+                
+                if (errorMsg.includes('(#3)') || errorMsg.includes('whitelist')) {
+                    throw new Error(`Facebook API error: Multi-item posting is restricted for this Page or App. ${errorMsg}. Hint: Try posting photos and videos separately, or ensure your app is in Live mode.`);
+                }
+                
+                throw new Error(`Facebook API error: ${errorMsg}`);
             }
 
             const data = await response.json();
@@ -266,7 +273,7 @@ async function postFacebookReel(
     console.log(`[Facebook] Creating Reel (Binary Upload) for video: ${videoUrl}`);
 
     // 1. Initialize Reel Upload
-    const startResponse = await fetch(`https://graph.facebook.com/v21.0/${pageId}/video_reels?upload_phase=start&access_token=${accessToken}`, {
+    const startResponse = await fetch(`https://graph.facebook.com/v24.0/${pageId}/video_reels?upload_phase=start&access_token=${accessToken}`, {
         method: 'POST'
     });
 
@@ -308,7 +315,7 @@ async function postFacebookReel(
     console.log(`[Facebook] Reel binary uploaded: ${videoId}. Finalizing...`);
 
     // 4. Finish Reel Upload & Publish
-    const finishResponse = await fetch(`https://graph.facebook.com/v21.0/${pageId}/video_reels`, {
+    const finishResponse = await fetch(`https://graph.facebook.com/v24.0/${pageId}/video_reels`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -337,7 +344,7 @@ async function postFacebookReel(
 async function waitForFacebookVideoProcessing(
     videoId: string,
     accessToken: string,
-    timeout: number = 60000 // 60 second timeout
+    timeout: number = 300000 // 5 minute timeout for video processing
 ): Promise<void> {
     const startTime = Date.now();
     const pollInterval = 3000; // Check every 3 seconds
@@ -347,7 +354,7 @@ async function waitForFacebookVideoProcessing(
     while (Date.now() - startTime < timeout) {
         try {
             const statusResponse = await fetch(
-                `https://graph.facebook.com/v21.0/${videoId}?fields=status&access_token=${accessToken}`
+                `https://graph.facebook.com/v24.0/${videoId}?fields=status&access_token=${accessToken}`
             );
 
             if (statusResponse.ok) {
@@ -366,13 +373,13 @@ async function waitForFacebookVideoProcessing(
             } else {
                 console.warn(`[Facebook] Status check failed for ${videoId}: ${statusResponse.status}`);
             }
-        } catch (e) {
-            console.error(`[Facebook] Error checking status for ${videoId}`, e);
-            // Don't swallow the specific error thrown above
-            if (e instanceof Error && e.message.includes('Video processing failed')) {
+        } catch (e: any) {
+            // Re-throw processing failures immediately to stop the polling loop
+            if (e.message?.includes('Video processing failed')) {
                 await debugFacebookToken(accessToken);
                 throw e;
             }
+            console.error(`[Facebook] Error checking status for ${videoId}`, e);
         }
 
         await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -393,7 +400,7 @@ export async function createFacebookVideoCollection(
 
     try {
         // Facebook uses "video_collections" endpoint for organizing videos
-        const response = await fetch(`https://graph.facebook.com/v21.0/${pageId}/video_collections`, {
+        const response = await fetch(`https://graph.facebook.com/v24.0/${pageId}/video_collections`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -450,7 +457,7 @@ export async function addVideoToFacebookCollection(
             body.description = metadata.description;
         }
 
-        const response = await fetch(`https://graph.facebook.com/v21.0/${collectionId}/videos`, {
+        const response = await fetch(`https://graph.facebook.com/v24.0/${collectionId}/videos`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -503,7 +510,7 @@ async function setFacebookVideoThumbnail(
 
         // Upload thumbnail to Facebook
         const response = await fetch(
-            `https://graph.facebook.com/v21.0/${videoId}/picture?access_token=${accessToken}`,
+            `https://graph.facebook.com/v24.0/${videoId}/picture?access_token=${accessToken}`,
             {
                 method: 'POST',
                 headers: {
@@ -544,7 +551,7 @@ export async function getFacebookPagePosts(
     try {
         const fields = 'id,message,created_time,full_picture,permalink_url,likes.summary(true),comments.summary(true)';
         const response = await fetch(
-            `https://graph.facebook.com/v21.0/${pageId}/feed?fields=${fields}&limit=${limit}&access_token=${accessToken}`,
+            `https://graph.facebook.com/v24.0/${pageId}/feed?fields=${fields}&limit=${limit}&access_token=${accessToken}`,
             { method: 'GET' }
         );
 
@@ -567,7 +574,7 @@ export async function getFacebookPagePosts(
 export async function getFacebookPages(userAccessToken: string) {
     try {
         const response = await fetch(
-            `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,category,instagram_business_account&access_token=${userAccessToken}`
+            `https://graph.facebook.com/v24.0/me/accounts?fields=id,name,access_token,category,instagram_business_account&access_token=${userAccessToken}`
         );
 
         if (!response.ok) {
@@ -606,7 +613,7 @@ export async function getFacebookPostInsights(
         // We also handle the case where 'shares' field might not exist on some objects (like Photos).
         let fields = 'likes.summary(true),reactions.summary(true),comments.summary(true),shares,engagement,message,full_picture,permalink_url';
         let postResponse = await fetch(
-            `https://graph.facebook.com/v21.0/${postId}?fields=${fields}&access_token=${accessToken}`
+            `https://graph.facebook.com/v24.0/${postId}?fields=${fields}&access_token=${accessToken}`
         );
 
         if (!postResponse.ok) {
@@ -661,7 +668,7 @@ export async function getFacebookPostInsights(
                     const pageId = postId.includes('_') ? postId.split('_')[0] : null;
                     if (pageId) {
                         const feedResponse = await fetch(
-                            `https://graph.facebook.com/v21.0/${pageId}/feed?fields=id,likes.summary(true),comments.summary(true)&limit=25&access_token=${accessToken}`
+                            `https://graph.facebook.com/v24.0/${pageId}/feed?fields=id,likes.summary(true),comments.summary(true)&limit=25&access_token=${accessToken}`
                         );
 
                         if (feedResponse.ok) {
@@ -732,7 +739,7 @@ export async function getFacebookPostInsights(
             // User requested: post_impressions, post_reach, post_engaged_users, post_reactions
             const metrics = 'post_impressions,post_reach,post_engaged_users,post_reactions,post_impressions_unique';
             const insightsResponse = await fetch(
-                `https://graph.facebook.com/v21.0/${postId}/insights?metric=${metrics}&access_token=${accessToken}`
+                `https://graph.facebook.com/v24.0/${postId}/insights?metric=${metrics}&access_token=${accessToken}`
             );
 
             if (insightsResponse.ok) {
@@ -817,7 +824,7 @@ export async function getFacebookPageAudience(
     try {
         // 1. Fetch Total Follower Count
         const pageResponse = await fetch(
-            `https://graph.facebook.com/v21.0/${pageId}?fields=followers_count&access_token=${accessToken}`
+            `https://graph.facebook.com/v24.0/${pageId}?fields=followers_count&access_token=${accessToken}`
         );
         await capture(pageResponse, 'page_profile');
 
@@ -830,7 +837,7 @@ export async function getFacebookPageAudience(
         // 1. Fetch Follower (Fan) Demographics
         const fanMetrics = 'page_fans_city,page_fans_country,page_fans_gender_age';
         const fanResponse = await fetch(
-            `https://graph.facebook.com/v21.0/${pageId}/insights?metric=${fanMetrics}&period=lifetime&access_token=${accessToken}`
+            `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${fanMetrics}&period=lifetime&access_token=${accessToken}`
         );
         await capture(fanResponse, 'fan_demographics');
 
@@ -848,7 +855,7 @@ export async function getFacebookPageAudience(
         // 2. Fetch Reached Audience Demographics
         const reachMetricsList = 'page_impressions_by_city_unique,page_impressions_by_country_unique,page_impressions_by_age_gender_unique';
         const reachDemographicsResponse = await fetch(
-            `https://graph.facebook.com/v21.0/${pageId}/insights?metric=${reachMetricsList}&period=days_28&access_token=${accessToken}`
+            `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${reachMetricsList}&period=days_28&access_token=${accessToken}`
         );
         await capture(reachDemographicsResponse, 'reach_demographics_28d');
 
@@ -866,7 +873,7 @@ export async function getFacebookPageAudience(
         // 3. Fetch Fan vs Non-Fan Reach
         const reachSplitMetrics = 'page_posts_impressions_fan_unique,page_posts_impressions_unique';
         const reachSplitResponse = await fetch(
-            `https://graph.facebook.com/v21.0/${pageId}/insights?metric=${reachSplitMetrics}&period=days_28&access_token=${accessToken}`
+            `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${reachSplitMetrics}&period=days_28&access_token=${accessToken}`
         );
         await capture(reachSplitResponse, 'reach_split_28d');
 
@@ -885,7 +892,7 @@ export async function getFacebookPageAudience(
         try {
             const fanGrowthMetrics = 'page_fan_adds,page_fan_removes';
             const growthRes = await fetch(
-                `https://graph.facebook.com/v21.0/${pageId}/insights?metric=${fanGrowthMetrics}&period=lifetime&access_token=${accessToken}`
+                `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${fanGrowthMetrics}&period=lifetime&access_token=${accessToken}`
             );
             await capture(growthRes, 'fan_growth_lifetime');
             if (growthRes.ok) {
@@ -958,7 +965,7 @@ export async function getFacebookAccountInsights(
 
         // Fetch metrics using robust v24-safe metrics
         const accountInsightsMetrics = 'page_impressions_unique,page_post_engagements';
-        const insightsUrl = `https://graph.facebook.com/v21.0/${pageId}/insights?metric=${accountInsightsMetrics}&period=days_28&access_token=${accessToken}`;
+        const insightsUrl = `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${accountInsightsMetrics}&period=days_28&access_token=${accessToken}`;
 
         let pageViews = 0;
         let pageLikes = 0; // page_fan_adds is deprecated/unreliable in v24
@@ -984,7 +991,7 @@ export async function getFacebookAccountInsights(
 
         // Separate call for page_views (daily only in v24)
         try {
-            const viewsRes = await fetch(`https://graph.facebook.com/v21.0/${pageId}/insights?metric=page_views_total&period=day&access_token=${accessToken}`);
+            const viewsRes = await fetch(`https://graph.facebook.com/v24.0/${pageId}/insights?metric=page_views_total&period=day&access_token=${accessToken}`);
             await capture(viewsRes, 'page_views_day');
             if (viewsRes.ok) {
                 const viewsData = await viewsRes.json();
@@ -996,7 +1003,7 @@ export async function getFacebookAccountInsights(
         }
 
         // Follower count (fans) - Always use profile field in v24
-        const pageRes = await fetch(`https://graph.facebook.com/v21.0/${pageId}?fields=followers_count&access_token=${accessToken}`);
+        const pageRes = await fetch(`https://graph.facebook.com/v24.0/${pageId}?fields=followers_count&access_token=${accessToken}`);
         await capture(pageRes, 'page_profile_follower_v24');
         let followerCount = 0;
         if (pageRes.ok) {
@@ -1040,7 +1047,7 @@ export async function getFacebookLeadForms(
     try {
         const fields = 'id,name,status,privacy_policy_url,questions,created_time';
         const response = await fetch(
-            `https://graph.facebook.com/v21.0/${pageId}/leadgen_forms?fields=${fields}&access_token=${accessToken}`
+            `https://graph.facebook.com/v24.0/${pageId}/leadgen_forms?fields=${fields}&access_token=${accessToken}`
         );
 
         if (!response.ok) {
@@ -1068,7 +1075,7 @@ export async function getFacebookLeadFormDetails(
         // Note: Many fields like custom_disclaimer, context_card, thank_you_page are not available when fetching individual forms
         const fields = 'id,name,status,privacy_policy_url,questions,created_time';
         const response = await fetch(
-            `https://graph.facebook.com/v21.0/${formId}?fields=${fields}&access_token=${accessToken}`
+            `https://graph.facebook.com/v24.0/${formId}?fields=${fields}&access_token=${accessToken}`
         );
 
         if (!response.ok) {
@@ -1254,7 +1261,7 @@ export async function createFacebookLeadForm(
         console.log('[Facebook] Debugging Lead Form Payload:', JSON.stringify(payload, null, 2));
 
         const response = await fetch(
-            `https://graph.facebook.com/v21.0/${pageId}/leadgen_forms`,
+            `https://graph.facebook.com/v24.0/${pageId}/leadgen_forms`,
             {
                 method: 'POST',
                 headers: {
@@ -1334,7 +1341,7 @@ export async function getFacebookLeads(
     try {
         const fields = 'id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,field_data';
         const response = await fetch(
-            `https://graph.facebook.com/v21.0/${objectId}/leads?fields=${fields}&limit=${limit}&access_token=${accessToken}`
+            `https://graph.facebook.com/v24.0/${objectId}/leads?fields=${fields}&limit=${limit}&access_token=${accessToken}`
         );
 
         if (!response.ok) {
@@ -1368,7 +1375,7 @@ export async function getFacebookAds(
     try {
         const fields = 'id,name,status,adset{id,name},campaign{id,name}';
         const response = await fetch(
-            `https://graph.facebook.com/v21.0/${pageId}/ads?fields=${fields}&access_token=${accessToken}`
+            `https://graph.facebook.com/v24.0/${pageId}/ads?fields=${fields}&access_token=${accessToken}`
         );
 
         if (!response.ok) {

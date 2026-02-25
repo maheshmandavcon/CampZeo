@@ -52,12 +52,22 @@ export function NotificationBell() {
 
         fetchNotifications();
 
-        // Poll for new notifications
-        const pollInterval = isOpen ? 10000 : 30000; // 10s when open, 30s when closed
-        const interval = setInterval(fetchNotifications, pollInterval);
+        const interval = setInterval(fetchNotifications, isOpen ? 10000 : 30000);
 
         return () => clearInterval(interval);
     }, [mounted, isOpen, fetchNotifications]);
+
+    // useEffect(() => {
+    //     if (!mounted) return;
+
+    //     fetchNotifications();
+
+    //     // Poll for new notifications
+    //     const pollInterval = isOpen ? 10000 : 30000; // 10s when open, 30s when closed
+    //     const interval = setInterval(fetchNotifications, pollInterval);
+
+    //     return () => clearInterval(interval);
+    // }, [mounted, isOpen, fetchNotifications]);
 
     const handleMarkAsRead = async (id: number) => {
         try {

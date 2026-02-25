@@ -74,7 +74,7 @@ async function getHandler(request: NextRequest) {
         let expiresIn = 0;
 
         if (platform === "FACEBOOK" || platform === "INSTAGRAM") {
-            const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${clientSecretConfig.value}&code=${code}`;
+            const tokenUrl = `https://graph.facebook.com/v24.0/oauth/access_token?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${clientSecretConfig.value}&code=${code}`;
             const res = await fetch(tokenUrl);
             const data = await res.json();
             if (data.error) throw new Error(data.error.message);
@@ -162,7 +162,7 @@ async function getHandler(request: NextRequest) {
 
         try {
             // Fetch user's pages to find the connected Instagram Business Account
-            const pagesRes = await fetch(`https://graph.facebook.com/v21.0/me/accounts?fields=instagram_business_account,name,access_token&access_token=${accessToken}`);
+            const pagesRes = await fetch(`https://graph.facebook.com/v24.0/me/accounts?fields=instagram_business_account,name,access_token&access_token=${accessToken}`);
             const pagesData = await pagesRes.json();
 
                 let instagramBusinessId: string | null = null;

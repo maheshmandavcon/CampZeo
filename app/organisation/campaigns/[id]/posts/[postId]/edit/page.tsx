@@ -697,9 +697,13 @@ export default function EditPostPage() {
             const pageId = post.metadata?.facebookPageId || post.metadata?.platformPageId;
             const fbPostId = post.metadata?.facebookPostId || post.metadata?.platformPostId || post.liveLink;
 
-            if (fbPostId) {
+            if (fbPostId && type !== 'INSTAGRAM') {
                 openNativeBoostPopup(adAccountId, pageId || '', fbPostId);
                 toast.success('Post updated and Boost Centre opened!');
+                router.push(`/organisation/campaigns/${campaignId}/posts`);
+            } else if (fbPostId && type === 'INSTAGRAM') {
+                // Facebook doesn't support IG boosting in the popup, guide them to lists.
+                toast.success("Post updated! To boost Instagram posts, click the Boost button on the posts list.");
                 router.push(`/organisation/campaigns/${campaignId}/posts`);
             } else {
                 toast.error("Post updated but failed to retrieve IDs for boosting.");

@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 
-const META_API_VERSION = 'v21.0';
+const META_API_VERSION = 'v24.0';
 const BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 
 export interface MetaConversation {

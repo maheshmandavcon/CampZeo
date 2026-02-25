@@ -63,7 +63,7 @@ async function getHandler(request: NextRequest) {
         case "INSTAGRAM": // Instagram Graph API uses Facebook Login
             // Permissions needed:
             // ...
-            authUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=pages_show_list,pages_read_engagement,pages_read_user_content,read_insights,pages_manage_posts,pages_manage_ads,ads_management,ads_read,leads_retrieval,instagram_basic,instagram_content_publish,instagram_manage_insights,business_management,instagram_manage_messages,pages_messaging,public_profile`;
+            authUrl = `https://www.facebook.com/v24.0/dialog/oauth?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=pages_show_list,pages_read_engagement,pages_read_user_content,read_insights,pages_manage_posts,pages_manage_ads,ads_management,ads_read,leads_retrieval,instagram_basic,instagram_content_publish,instagram_manage_insights,business_management,instagram_manage_messages,pages_messaging,public_profile`;
             break;
         case "INSTAGRAM_DIRECT":
             // Direct Instagram app authentication (not via Facebook)
