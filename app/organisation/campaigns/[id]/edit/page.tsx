@@ -249,6 +249,11 @@ export default function EditCampaignPage() {
                 return;
             }
 
+            if (!hasScheduledPosts && new Date(startDate) < now) {
+                toast.error('Start date cannot be in the past');
+                return;
+            }
+
             const effectiveStartDate = hasScheduledPosts ? originalStartDate : startDate;
             if (new Date(effectiveStartDate) > new Date(endDate)) {
                 toast.error('End date must be after start date');
@@ -295,7 +300,7 @@ export default function EditCampaignPage() {
     const allOnPageSelected = contacts.length > 0 && contacts.every((c) => selectedContacts.includes(c.id));
     const someOnPageSelected = contacts.some((c) => selectedContacts.includes(c.id)) && !allOnPageSelected;
 
-    const minDate = new Date().toISOString().slice(0, 16);
+    const minDate = formatDateTimeLocal(new Date());
 
     if (loadingCampaign) {
         return (

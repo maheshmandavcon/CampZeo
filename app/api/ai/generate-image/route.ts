@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { generateImage } from '@/lib/pollinations';
-
+import { generateImage as generatePollinationsImage } from '@/lib/pollinations';
+import { generateImage as generateHordeImage } from '@/lib/ai-horde';
 import { withErrorHandling } from '@/lib/api-handler';
 
 async function generateImageHandler(request: NextRequest) {
@@ -18,22 +18,34 @@ async function generateImageHandler(request: NextRequest) {
         return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
-    const result = await generateImage(prompt, style, { model, width, height });
+    console.log(`[GenerateImage] Attempting generation for: "${prompt}"`);
+
+    // Try AI Horde first as it is currently more stable than Pollinations for many users
+    // or if the prompt is complex. We'll try Horde because the user reported Pollinations failure.
+    let result = await generateHordeImage(prompt, style);
+
+    // If Horde fails, try Pollinations as a secondary
+    if (!result.success) {
+        console.log(`[GenerateImage] Horde failed (${result.error}), trying Pollinations...`);
+        result = await generatePollinationsImage(prompt, style, { model, width, height });
+    }
 
     if (!result.success) {
         return NextResponse.json(
             {
-                error: result.error || 'Failed to generate image',
-                imagePrompt: result.imageData // Return the enhanced prompt even on "error"
+                error: result.error || 'Failed to generate image after multiple attempts',
+                imagePrompt: result.imageData
             },
-            { status: 200 } // Return 200 since we're providing useful data
+            { status: 200 } // Still 200 to show the useful prompt if available
         );
     }
 
     return NextResponse.json({
         success: true,
-        imagePrompt: result.imageData,
-        message: 'Image prompt generated. You can use this with image generation services like DALL-E or Midjourney.',
+        imagePrompt: result.imageData, // This could be a URL or data URL
+        imageUrl: result.imageData,
+        provider: result.imageData?.startsWith('data:') ? 'horde' : 'pollinations',
+        message: 'Image generated successfully',
     });
 }
 

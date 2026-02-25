@@ -11,7 +11,6 @@ async function sendPostHandler(
     { params }: { params: Promise<{ id: string; postId: string }> }
 ) {
     console.log("POST /api/campaigns/[id]/posts/[postId]/send hit");
-
     const user = await currentUser();
     if (!user) {
         await logWarning("Unauthorized access attempt to send campaign post", { action: "send-campaign-post" });
@@ -77,9 +76,11 @@ async function sendPostHandler(
     }
 
     // Use the shared sendCampaignPost function
+    // For manual publishing, we intend to publish immediately, so ignore scheduled time
     const result = await sendCampaignPost(
         post,
-        contactIds ? contactIds.map((id: string) => parseInt(id)) : undefined
+        contactIds ? contactIds.map((id: string) => parseInt(id)) : undefined,
+        { publishNow: true }
     );
 
     if (!result.success && result.error) {

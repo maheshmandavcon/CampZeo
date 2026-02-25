@@ -9,6 +9,7 @@ import { postToYouTube, postYouTubeCommunity, createYouTubePlaylist, addVideoToP
 import { postToPinterest, createPinterestBoard, getPinterestPostInsights } from '@/lib/pinterest';
 import { sendSms, sendWhatsapp } from '@/lib/twilio';
 import { createBoostedAd } from '@/lib/meta-ads';
+import { logInfo } from '@/lib/audit-logger';
 
 /**
  * Clean up Vercel Storage blobs after successful publication and update DB with platform URLs
@@ -71,7 +72,7 @@ async function cleanupBlobs(urls: (string | string[] | null | undefined)[]) {
 export async function sendCampaignPost(
     post: any,
     contactIds?: number[],
-    options?: { forceSchedule?: boolean }
+    options?: { forceSchedule?: boolean; publishNow?: boolean }
 ): Promise<{ success: boolean; sent: number; failed: number; error?: string; errors?: string[] }> {
     try {
         const isSocialPlatform = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(post.type);
@@ -109,13 +110,19 @@ export async function sendCampaignPost(
                 const metadata = (post.metadata || {}) as any;
                 const authorUrn = metadata?.linkedInUrn || dbUser.linkedInAuthUrn;
 
+                const liMediaUrls = Array.isArray(post.mediaUrls) ? post.mediaUrls : [];
+                const allLiMedia = [...liMediaUrls];
+                if (post.videoUrl && !allLiMedia.includes(post.videoUrl)) {
+                    allLiMedia.push(post.videoUrl);
+                }
+
                 const linkedInResponse = await postToLinkedIn(
                     {
                         accessToken: dbUser.linkedInAccessToken,
                         authorUrn: authorUrn,
                     },
                     post.message || post.subject || "",
-                    post.mediaUrls.length > 0 ? post.mediaUrls : post.videoUrl
+                    allLiMedia
                 );
 
                 // Extract post ID from LinkedIn response (response is the full post data)
@@ -146,12 +153,15 @@ export async function sendCampaignPost(
                     console.warn('[LinkedIn] Failed to fetch final URLs:', e);
                 }
 
+                const liIsScheduledTx = !!(options?.forceSchedule || (!options?.publishNow && post.scheduledPostTime && post.scheduledPostTime.getTime() > Date.now()));
+                const liScheduledTimeTx = options?.publishNow ? null : (post.scheduledPostTime || null);
+
                 await prisma.campaignPost.update({
                     where: { id: post.id },
                     data: {
                         isPostSent: true,
-                        publishedDate: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
-                        status: (options?.forceSchedule || post.status === 'SCHEDULED') ? 'SCHEDULED' : 'PUBLISHED',
+                        publishedDate: liIsScheduledTx ? null : new Date(),
+                        status: liIsScheduledTx ? 'SCHEDULED' : 'PUBLISHED',
                         mediaUrls: finalMediaUrls,
                         videoUrl: finalVideoUrl,
                         liveLink: finalLiveLink
@@ -170,10 +180,14 @@ export async function sendCampaignPost(
                             ((finalMediaUrls[0] || finalVideoUrl || '').match(/\.(mp4|mov|webm)$/i) ? 'VIDEO' : 'IMAGE')
                             : 'TEXT',
                         accessToken: dbUser.linkedInAccessToken,
-                        published: !(options?.forceSchedule || post.status === 'SCHEDULED'),
-                        publishedAt: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
+                        isScheduled: liIsScheduledTx,
+                        scheduledTime: liScheduledTimeTx,
+                        published: !liIsScheduledTx,
+                        publishedAt: liIsScheduledTx ? null : new Date(),
                     }
                 });
+
+                await logInfo(`LinkedIn post ${linkedInPostId} processed`, { postId: post.id, platform: 'LINKEDIN', isScheduled: liIsScheduledTx });
 
                 await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };
@@ -195,13 +209,27 @@ export async function sendCampaignPost(
                 }
 
                 // Auto-detect if it's a Reel (single video only)
-                const mediaToUse = post.mediaUrls.length > 0 ? post.mediaUrls : post.videoUrl;
+                // Consolidate all media into an array for multi-media support
+                const fbMediaUrls = Array.isArray(post.mediaUrls) ? post.mediaUrls : [];
+                const allFbMedia = [...fbMediaUrls];
+                if (post.videoUrl && !allFbMedia.includes(post.videoUrl)) {
+                    allFbMedia.push(post.videoUrl);
+                }
 
-                // User logic: explicitly check check metadata.isReel. If not set, it is a standard post. 
+                // If it's a Reel, pick the video URL. If multiple media, use the array.
+                const isReel = !!metadata?.isReel;
+                const mediaToUse = isReel ? (post.videoUrl || allFbMedia[0]) : (allFbMedia.length > 0 ? allFbMedia : (post.videoUrl || []));
+
+                const hasMedia = allFbMedia.length > 0;
+
+                if (isReel && !hasMedia) {
+                    throw new Error('Media is required for Facebook Reels. Please upload a video file.');
+                }
+
                 // Multiple videos are handled by postToFacebook automatically as an album/feed post.
 
                 // If forceSchedule is true and there is no scheduledPostTime, default to 1 day from now
-                let scheduledTime = post.scheduledPostTime;
+                let scheduledTime = options?.publishNow ? null : post.scheduledPostTime;
                 if (options?.forceSchedule && !scheduledTime) {
                     scheduledTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
                 }
@@ -214,7 +242,7 @@ export async function sendCampaignPost(
                     post.message || post.subject || "",
                     mediaToUse,
                     {
-                        isReel: metadata?.isReel,
+                        isReel: isReel,
                         scheduledPublishTime: (scheduledTime && scheduledTime.getTime() > Date.now() + 600000) ? Math.floor(scheduledTime.getTime() / 1000) : undefined
                     }
                 );
@@ -235,12 +263,16 @@ export async function sendCampaignPost(
                     console.warn('[Facebook] Failed to fetch final URLs:', e);
                 }
 
+                const isPlatformScheduled = !!(scheduledTime && (scheduledTime instanceof Date ? scheduledTime.getTime() : new Date(scheduledTime).getTime()) > Date.now() + 600000);
+                const fbIsScheduledTx = !!(options?.forceSchedule || (isPlatformScheduled && !options?.publishNow));
+                const fbScheduledTimeTx = options?.publishNow ? null : (scheduledTime || post.scheduledPostTime || null);
+
                 await prisma.campaignPost.update({
                     where: { id: post.id },
                     data: {
                         isPostSent: true,
-                        publishedDate: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
-                        status: (options?.forceSchedule || post.status === 'SCHEDULED') ? 'SCHEDULED' : 'PUBLISHED',
+                        publishedDate: fbIsScheduledTx ? null : new Date(),
+                        status: fbIsScheduledTx ? 'SCHEDULED' : 'PUBLISHED',
                         mediaUrls: finalMediaUrls,
                         videoUrl: finalVideoUrl,
                         liveLink: finalLiveLink,
@@ -287,9 +319,6 @@ export async function sendCampaignPost(
                     }
                 }
 
-                const fbIsScheduledTx = !!(options?.forceSchedule || post.status === 'SCHEDULED' || scheduledTime);
-                const fbScheduledTimeTx = scheduledTime || post.scheduledPostTime || null;
-
                 await prisma.postTransaction.create({
                     data: {
                         refId: post.id,
@@ -311,29 +340,12 @@ export async function sendCampaignPost(
                         boostTargeting: metadata?.metaBoost?.targeting ?? null,
                         boostFailed: fbBoostFailed,
                         boostFailureReason: fbBoostFailureReason,
-                        published: !(options?.forceSchedule || post.status === 'SCHEDULED'),
-                        publishedAt: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
+                        published: !fbIsScheduledTx,
+                        publishedAt: fbIsScheduledTx ? null : new Date(),
                     }
                 });
 
-                // Handle Meta Boosting
-                if (metadata?.metaBoost?.enabled) {
-                    try {
-                        console.log(`[Facebook] Triggering boost for post ${platformResponse.id}`);
-                        await createBoostedAd({
-                            adAccountId: metadata.metaBoost.adAccountId,
-                            accessToken: dbUser.facebookAccessToken || fbToken, // Ad accounts need User Token
-                            postId: platformResponse.id,
-                            name: post.subject || post.message?.substring(0, 20) || "Boosted Post",
-                            budget: metadata.metaBoost.budget,
-                            days: metadata.metaBoost.duration,
-                            objective: metadata.metaBoost.objective
-                        });
-                        console.log(`[Facebook] Boost created successfully for post ${platformResponse.id}`);
-                    } catch (boostError) {
-                        console.error(`[Facebook] Meta Boosting failed:`, boostError);
-                    }
-                }
+                await logInfo(`Facebook post ${platformResponse.id} processed`, { postId: post.id, platform: 'FACEBOOK', isScheduled: fbIsScheduledTx, boostEnabled: !!metadata?.metaBoost?.enabled });
 
                 await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };
@@ -353,12 +365,25 @@ export async function sendCampaignPost(
                     throw new Error('No Instagram Business Account found');
                 }
 
-                const mediaToUse = post.mediaUrls.length > 0 ? post.mediaUrls : post.videoUrl;
+                // Consolidate all media for Instagram Carousel support
+                const igMediaUrls = Array.isArray(post.mediaUrls) ? post.mediaUrls : [];
+                const allIgMedia = [...igMediaUrls];
+                if (post.videoUrl && !allIgMedia.includes(post.videoUrl)) {
+                    allIgMedia.push(post.videoUrl);
+                }
+
+                const isReel = !!(post.metadata as any)?.isReel;
+                const mediaToUse = isReel ? (post.videoUrl || allIgMedia[0]) : (allIgMedia.length > 1 ? allIgMedia : (allIgMedia[0] || post.videoUrl));
+
+                if (!mediaToUse || (Array.isArray(mediaToUse) && mediaToUse.length === 0)) {
+                    throw new Error('Media is required for Instagram posts. Please upload an image or video.');
+                }
+
                 // If using videoUrl logic or isReel is set, treat as video
                 const isVideoContent = (!post.mediaUrls.length && !!post.videoUrl) || (post.metadata as any)?.isReel;
 
                 // If forceSchedule is true and there is no scheduledPostTime, default to 1 day from now
-                let scheduledTime = post.scheduledPostTime;
+                let scheduledTime = options?.publishNow ? null : post.scheduledPostTime;
                 if (options?.forceSchedule && !scheduledTime) {
                     scheduledTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
                 }
@@ -412,12 +437,16 @@ export async function sendCampaignPost(
                     console.warn('[Instagram] Failed to fetch final URLs:', e);
                 }
 
+                const isIgPlatformScheduled = !!(scheduledTime && (scheduledTime instanceof Date ? scheduledTime.getTime() : new Date(scheduledTime).getTime()) > Date.now() + 600000);
+                const igIsScheduledTx = !!(options?.forceSchedule || (isIgPlatformScheduled && !options?.publishNow));
+                const igScheduledTimeTx = options?.publishNow ? null : (scheduledTime || post.scheduledPostTime || null);
+
                 await prisma.campaignPost.update({
                     where: { id: post.id },
                     data: {
                         isPostSent: true,
-                        publishedDate: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
-                        status: (options?.forceSchedule || post.status === 'SCHEDULED') ? 'SCHEDULED' : 'PUBLISHED',
+                        publishedDate: igIsScheduledTx ? null : new Date(),
+                        status: igIsScheduledTx ? 'SCHEDULED' : 'PUBLISHED',
                         mediaUrls: finalMediaUrls,
                         videoUrl: finalVideoUrl,
                         liveLink: finalLiveLink,
@@ -476,9 +505,6 @@ export async function sendCampaignPost(
                     }
                 }
 
-                const igIsScheduledTx = !!(options?.forceSchedule || post.status === 'SCHEDULED' || scheduledTime);
-                const igScheduledTimeTx = scheduledTime || post.scheduledPostTime || null;
-
                 await prisma.postTransaction.create({
                     data: {
                         refId: post.id,
@@ -500,29 +526,12 @@ export async function sendCampaignPost(
                         boostTargeting: metadata?.metaBoost?.targeting ?? null,
                         boostFailed: igBoostFailed,
                         boostFailureReason: igBoostFailureReason,
-                        published: !(options?.forceSchedule || post.status === 'SCHEDULED'),
-                        publishedAt: (options?.forceSchedule || post.status === 'SCHEDULED') ? null : new Date(),
+                        published: !igIsScheduledTx,
+                        publishedAt: igIsScheduledTx ? null : new Date(),
                     }
                 });
 
-                // Handle Meta Boosting
-                if (metadata?.metaBoost?.enabled) {
-                    try {
-                        console.log(`[Instagram] Triggering boost for post ${platformResponse.id}`);
-                        await createBoostedAd({
-                            adAccountId: metadata.metaBoost.adAccountId,
-                            accessToken: dbUser.facebookAccessToken || igToken!, // Ad accounts need User Token
-                            postId: platformResponse.id,
-                            name: post.subject || post.message?.substring(0, 20) || "Boosted Post",
-                            budget: metadata.metaBoost.budget,
-                            days: metadata.metaBoost.duration,
-                            objective: metadata.metaBoost.objective
-                        });
-                        console.log(`[Instagram] Boost created successfully for post ${platformResponse.id}`);
-                    } catch (boostError) {
-                        console.error(`[Instagram] Meta Boosting failed:`, boostError);
-                    }
-                }
+                await logInfo(`Instagram post ${platformResponse.id} processed`, { postId: post.id, platform: 'INSTAGRAM', isScheduled: igIsScheduledTx, boostEnabled: !!metadata?.metaBoost?.enabled });
 
                 await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };
@@ -551,7 +560,7 @@ export async function sendCampaignPost(
                     }
                 }
 
-                const media = post.mediaUrls.length > 0 ? post.mediaUrls[0] : post.videoUrl;
+                const media = post.videoUrl || (post.mediaUrls.length > 0 ? post.mediaUrls[0] : null);
                 let platformResponse;
 
                 if (media && media.match(/\.(mp4|mov|webm)$/i)) {
@@ -633,6 +642,7 @@ export async function sendCampaignPost(
                     where: { id: post.id },
                     data: {
                         isPostSent: true,
+                        status: 'PUBLISHED',
                         publishedDate: new Date(),
                         mediaUrls: finalMediaUrls,
                         videoUrl: finalVideoUrl,
@@ -650,10 +660,14 @@ export async function sendCampaignPost(
                         mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
                         postType: media && media.match(/\.(mp4|mov|webm)$/i) ? ((platformResponse as any).isShort || metadata?.postType === 'SHORT' ? 'SHORT' : 'VIDEO') : 'TEXT',
                         accessToken: dbUser.youtubeAccessToken,
+                        isScheduled: !!(!options?.publishNow && post.scheduledPostTime),
+                        scheduledTime: options?.publishNow ? null : (post.scheduledPostTime || null),
                         published: true,
                         publishedAt: new Date(),
                     }
                 });
+
+                await logInfo(`YouTube post ${platformResponse.id} processed`, { postId: post.id, platform: 'YOUTUBE' });
 
                 await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };
@@ -666,7 +680,12 @@ export async function sendCampaignPost(
                 }
 
                 const metadata = post.metadata as any;
-                const media = (post.mediaUrls && post.mediaUrls.length > 0) ? post.mediaUrls : post.videoUrl;
+                const pinMediaUrls = Array.isArray(post.mediaUrls) ? post.mediaUrls : [];
+                const allPinMedia = [...pinMediaUrls];
+                if (post.videoUrl && !allPinMedia.includes(post.videoUrl)) {
+                    allPinMedia.push(post.videoUrl);
+                }
+                const media = allPinMedia;
 
                 if (!media || (Array.isArray(media) && media.length === 0)) {
                     throw new Error('Pinterest requires an image or video');
@@ -740,6 +759,7 @@ export async function sendCampaignPost(
                     where: { id: post.id },
                     data: {
                         isPostSent: true,
+                        status: 'PUBLISHED',
                         publishedDate: new Date(),
                         mediaUrls: finalMediaUrls,
                         videoUrl: finalVideoUrl,
@@ -757,10 +777,14 @@ export async function sendCampaignPost(
                         mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
                         postType: isVideoPin ? 'VIDEO' : (Array.isArray(media) && media.length > 1 ? 'CAROUSEL' : 'IMAGE'),
                         accessToken: dbUser.pinterestAccessToken,
+                        isScheduled: !!(!options?.publishNow && post.scheduledPostTime),
+                        scheduledTime: options?.publishNow ? null : (post.scheduledPostTime || null),
                         published: true,
                         publishedAt: new Date(),
                     }
                 });
+
+                await logInfo(`Pinterest pin ${platformResponse.id} processed`, { postId: post.id, platform: 'PINTEREST' });
 
                 await cleanupBlobs([...post.mediaUrls, post.videoUrl]);
                 return { success: true, sent: 1, failed: 0 };
@@ -897,6 +921,7 @@ export async function sendCampaignPost(
                 where: { id: post.id },
                 data: {
                     isPostSent: true,
+                    status: 'PUBLISHED',
                     publishedDate: new Date()
                 }
             });
@@ -915,10 +940,14 @@ export async function sendCampaignPost(
                     mediaUrls: Array.isArray(post.mediaUrls) && post.mediaUrls.length > 0 ? post.mediaUrls[0] : '',
                     postType: (Array.isArray(post.mediaUrls) && post.mediaUrls.length > 0) ? 'IMAGE' : 'TEXT',
                     accessToken: 'system',
+                    isScheduled: !!(!options?.publishNow && post.scheduledPostTime),
+                    scheduledTime: options?.publishNow ? null : (post.scheduledPostTime || null),
                     published: true,
                     publishedAt: new Date(),
                 }
             });
+
+            await logInfo(`${post.type} campaign post processed`, { postId: post.id, platform: post.type, count: successCount });
 
             // Create initial PostInsight with reach = sent count
             await prisma.postInsight.create({

@@ -139,7 +139,7 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
             return;
         }
 
-        openNativeBoostPopup(options.adAccountId, fbPageId, fbPostId);
+        openNativeBoostPopup(options.adAccountId, fbPageId, fbPostId, platform === 'INSTAGRAM');
         toast.info("Opening Native Meta Boost Centre...");
     };
     // Link payment method using FB SDK or fallback to Ads Manager
@@ -397,7 +397,7 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                                                         onClick={() => {
                                                             // If we have all the info needed for boosting, open boost page
                                                             if (fbPageId && fbPostId && options.adAccountId) {
-                                                                openNativeBoostPopup(options.adAccountId, fbPageId, fbPostId);
+                                                                openNativeBoostPopup(options.adAccountId, fbPageId, fbPostId, platform === 'INSTAGRAM');
                                                                 toast.info("Opening Facebook Boost page to manage funds...");
                                                             }
                                                             // Otherwise, open Ads Manager billing page directly
@@ -537,27 +537,36 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
 
                             {/* Final Boost Action */}
                             <div className="pt-6 border-t border-primary/20">
-                                <Button
-                                    type="button"
-                                    className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 text-white shadow-xl transition-all transform hover:scale-[1.01] active:scale-[0.99] group overflow-hidden relative"
-                                    onClick={handleLaunchNativeBoost}
-                                    disabled={!options.adAccountId || !fbPostId || !fbPageId}
-                                >
-                                    <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                                    <div className="relative flex items-center justify-center">
-                                        <Rocket className="w-5 h-5 mr-3 animate-bounce" />
-                                        Boost Post Now
+                                {fbPostId ? (
+                                    <>
+                                        <Button
+                                            type="button"
+                                            className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 text-white shadow-xl transition-all transform hover:scale-[1.01] active:scale-[0.99] group overflow-hidden relative"
+                                            onClick={handleLaunchNativeBoost}
+                                            disabled={!options.adAccountId || !fbPostId || !fbPageId}
+                                        >
+                                            <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                                            <div className="relative flex items-center justify-center">
+                                                <Rocket className="w-5 h-5 mr-3 animate-bounce" />
+                                                Boost Post Now
+                                            </div>
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-3">
+                                        <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                                        <div className="space-y-1">
+                                            <p className="font-bold">Scheduled Auto-Boost</p>
+                                            <p className="leading-relaxed">
+                                                Since this post isn't published yet, you can configure your boost settings here. CampZeo will <strong>automatically apply</strong> these settings when the post goes live on Meta.
+                                            </p>
+                                        </div>
                                     </div>
-                                </Button>
-                                {(!fbPostId || !fbPageId) && (
-                                    <p className="text-[10px] text-center text-amber-600 mt-2 font-medium flex items-center justify-center gap-1">
-                                        <AlertCircle className="w-3 h-3" />
-                                        Missing page or post ID. Ensure the post is published.
-                                    </p>
                                 )}
+
                                 {options.adAccountId && fbPostId && fbPageId && (
                                     <p className="text-[9px] text-center text-muted-foreground mt-2">
-                                        Opening Meta Ad Center: Account <b>{options.adAccountId.replace('act_', '')}</b> � Page <b>{fbPageId}</b>
+                                        Opening Meta Ad Center: Account <b>{options.adAccountId.replace('act_', '')}</b> • Page <b>{fbPageId}</b>
                                     </p>
                                 )}
                             </div>

@@ -43,7 +43,7 @@ async function postHandler(request: NextRequest) {
     try {
         // Step 1: Get OAuth token for Instagram Graph API
         const tokenResponse = await fetch(
-            'https://graph.instagram.com/v21.0/oauth/access_token',
+            'https://graph.instagram.com/v24.0/oauth/access_token',
             {
                 method: 'POST',
                 headers: {
@@ -74,7 +74,7 @@ async function postHandler(request: NextRequest) {
 
         // Step 2: Fetch user information
         const meResponse = await fetch(
-            `https://graph.instagram.com/v21.0/me?fields=id,username,name,account_type&access_token=${accessToken}`
+            `https://graph.instagram.com/v24.0/me?fields=id,username,name,account_type&access_token=${accessToken}`
         );
 
             const meData = await meResponse.json();

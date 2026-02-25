@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-const META_API_VERSION = 'v21.0';
+const META_API_VERSION = 'v24.0';
 
 export async function GET(request: NextRequest) {
     try {

@@ -38,7 +38,7 @@ export async function postToInstagram(
                 if (isVideo) {
                     itemUrl += `&media_type=VIDEO&video_url=${encodeURIComponent(mediaUrl)}`;
                 } else {
-                    itemUrl += `&image_url=${encodeURIComponent(mediaUrl)}`;
+                    itemUrl += `&media_type=IMAGE&image_url=${encodeURIComponent(mediaUrl)}`;
                 }
 
                 console.log(`[Instagram] Creating carousel item (${mediaType}): ${mediaUrl}`);
@@ -52,10 +52,9 @@ export async function postToInstagram(
                 const itemData = await itemRes.json();
                 itemIds.push(itemData.id);
 
-                // Wait for video processing if needed
-                if (isVideo) {
-                    await waitForInstagramMediaProcessing(itemData.id, accessToken);
-                }
+                // Wait for media processing (important for both videos and images in carousels)
+                console.log(`[Instagram] Waiting for item ${itemData.id} to be ready...`);
+                await waitForInstagramMediaProcessing(itemData.id, accessToken);
             }
 
             // 2. Create Carousel Container
@@ -101,7 +100,7 @@ export async function postToInstagram(
                     // containerUrl += `&share_to_feed=true`; // Specific to REELS sometimes, but often automatic
                 }
             } else {
-                containerUrl += `&image_url=${encodeURIComponent(mediaUrl)}`;
+                containerUrl += `&media_type=IMAGE&image_url=${encodeURIComponent(mediaUrl)}`;
             }
 
             if (options?.scheduledPublishTime) {
@@ -145,11 +144,10 @@ export async function postToInstagram(
         throw error;
     }
 }
-
 async function waitForInstagramMediaProcessing(
     containerId: string,
     accessToken: string,
-    timeout: number = 60000
+    timeout: number = 300000 // 5 minute timeout for video processing
 ): Promise<void> {
     const startTime = Date.now();
     const pollInterval = 5000; // Increased poll interval to 5s
@@ -177,7 +175,11 @@ async function waitForInstagramMediaProcessing(
             } else {
                 console.warn(`[Instagram] Status check failed for ${containerId}: ${response.status}`);
             }
-        } catch (e) {
+        } catch (e: any) {
+            // Re-throw processing failures immediately to stop the polling loop
+            if (e.message?.includes('Media processing failed')) {
+                throw e;
+            }
             console.error(`[Instagram] Error checking status for ${containerId}`, e);
         }
 

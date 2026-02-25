@@ -159,7 +159,21 @@ export default function CampaignPostsPage() {
         const pageId = post.metadata?.facebookPageId || campaign?.metadata?.facebookPageId;
         const fbPostId = post.metadata?.facebookPostId || post.metadata?.platformPostId || post.liveLink;
 
-        if (post.isPostSent && adAccountId && pageId && fbPostId) {
+        if (post.type === 'INSTAGRAM') {
+            // Facebook Ad Center natively rejects Instagram Media IDs and throws a "can't be promoted" error.
+            // We MUST use CampZeo's internal dialog for Instagram to perform the API auto-boost.
+            const existingBoost = post.metadata?.metaBoost;
+            const initialOptions: MetaBoostOptions = {
+                enabled: true,
+                adAccountId: existingBoost?.adAccountId || lastUsedAdAccountId || '',
+                budget: existingBoost?.budget || 5,
+                duration: existingBoost?.duration || 7,
+                objective: existingBoost?.objective || 'OUTCOME_ENGAGEMENT',
+                balance: existingBoost?.balance || '0'
+            };
+            setBoostDialogOptions(initialOptions);
+            setBoostPost(post);
+        } else if (post.isPostSent && adAccountId && pageId && fbPostId) {
             openNativeBoostPopup(adAccountId, pageId, fbPostId);
             toast.info("Opening Native Meta Boost Centre...");
         } else {
@@ -339,8 +353,6 @@ export default function CampaignPostsPage() {
 
     // Handle Share/Send
     const handleSendShare = async () => {
-        // debugger;
-
         const isSocialPlatform = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(sharePost?.type || '');
 
         if (!isSocialPlatform && selectedContacts.length === 0) {
