@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -37,11 +37,11 @@ interface Campaign {
     _count?: { posts: number; contacts: number };
 }
 
-export default function EditCampaignPage() {
+export default function EditCampaignPage({ params }: { params: Promise<{ id: string }> }) {
     const router = useRouter();
-    const params = useParams();
+    const resolvedParams = React.use(params);
     const searchParams = useSearchParams();
-    const campaignId = params.id as string;
+    const campaignId = resolvedParams.id;
 
     // Check for return-to-share params
     const returnTo = searchParams.get('returnTo');

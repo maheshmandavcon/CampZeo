@@ -8,141 +8,180 @@ interface InstagramCredentials {
 }
 
 export async function postToInstagram(
-    credentials: InstagramCredentials,
-    caption: string,
-    media: string | string[],
-    options?: { isReel?: boolean; shareToFeed?: boolean; isVideo?: boolean; scheduledPublishTime?: number }
+  credentials: InstagramCredentials,
+  caption: string,
+  media: string | string[],
+  options?: {
+    shareToFeed?: boolean;
+    scheduledPublishTime?: number;
+  }
 ) {
-    const { accessToken, userId } = credentials;
+  const { accessToken, userId } = credentials;
 
-    // Normalize media to array
-    const mediaList = Array.isArray(media) ? media : [media];
-    const isCarousel = mediaList.length > 1;
+  const mediaList = Array.isArray(media) ? media : [media];
+  const isCarousel = mediaList.length > 1;
 
-    console.log(`[Instagram] Posting to user: ${userId}, Media Count: ${mediaList.length}, Is Carousel: ${isCarousel}, Is Reel: ${options?.isReel || false}`);
+  console.log(
+    `[Instagram] User: ${userId} | Media Count: ${mediaList.length} | Carousel: ${isCarousel}`
+  );
 
-    try {
-        let creationId: string;
+  try {
+    let creationId: string;
 
-        if (isCarousel) {
-            // CAROUSEL POSTING
-            // 1. Create Item Containers for each media
-            const itemIds: string[] = [];
+    // ============================================================
+    // CAROUSEL FLOW
+    // ============================================================
+    if (isCarousel) {
+      const childIds: string[] = [];
 
-            for (const mediaUrl of mediaList) {
-                const isVideo = isVideoUrl(mediaUrl) || options?.isVideo; // Naive check for individual items
-                const mediaType = isVideo ? 'VIDEO' : 'IMAGE';
+      for (const mediaUrl of mediaList) {
+        const isVideo = isVideoUrl(mediaUrl);
 
-                let itemUrl = `https://graph.facebook.com/v24.0/${userId}/media?is_carousel_item=true&access_token=${accessToken}`;
+        const params = new URLSearchParams({
+          access_token: accessToken,
+          is_carousel_item: "true",
+          media_type: isVideo ? "VIDEO" : "IMAGE",
+        });
 
-                if (isVideo) {
-                    itemUrl += `&media_type=VIDEO&video_url=${encodeURIComponent(mediaUrl)}`;
-                } else {
-                    itemUrl += `&media_type=IMAGE&image_url=${encodeURIComponent(mediaUrl)}`;
-                }
-
-                console.log(`[Instagram] Creating carousel item (${mediaType}): ${mediaUrl}`);
-                const itemRes = await fetch(itemUrl, { method: 'POST' });
-
-                if (!itemRes.ok) {
-                    const error = await itemRes.json();
-                    throw new Error(`Carousel Item creation failed: ${JSON.stringify(error)}`);
-                }
-
-                const itemData = await itemRes.json();
-                itemIds.push(itemData.id);
-
-                // Wait for media processing (important for both videos and images in carousels)
-                console.log(`[Instagram] Waiting for item ${itemData.id} to be ready...`);
-                await waitForInstagramMediaProcessing(itemData.id, accessToken);
-            }
-
-            // 2. Create Carousel Container
-            console.log(`[Instagram] Creating carousel container with items: ${itemIds.join(', ')}`);
-            let containerUrl = `https://graph.facebook.com/v24.0/${userId}/media?media_type=CAROUSEL&caption=${encodeURIComponent(caption)}&children=${itemIds.join(',')}&access_token=${accessToken}`;
-            if (options?.scheduledPublishTime) {
-                containerUrl += `&scheduled_publish_time=${options.scheduledPublishTime}`;
-            }
-
-            const containerRes = await fetch(containerUrl, { method: 'POST' });
-
-            if (!containerRes.ok) {
-                const error = await containerRes.json();
-                const errorStr = JSON.stringify(error);
-
-                // Add helpful context for common mixed-media carousel failures
-                let hint = '';
-                if (mediaList.length > 1 && mediaList.some(isVideoUrl) && mediaList.some(u => !isVideoUrl(u))) {
-                    hint = ' (Hint: Mixed Image/Video carousels often fail if items have different aspect ratios. Try ensuring all items are 1:1 or 4:5)';
-                }
-
-                throw new Error(`Carousel Container creation failed: ${errorStr}${hint}`);
-            }
-
-            const containerData = await containerRes.json();
-            creationId = containerData.id;
-
-            // Wait for Carousel Container to be READY (IMPORTANT)
-            // Even though items are ready, the container itself takes time to become FINISHED
-            await waitForInstagramMediaProcessing(creationId, accessToken);
-
+        if (isVideo) {
+          params.append("video_url", mediaUrl);
         } else {
-            // SINGLE POST OR REEL
-            const mediaUrl = mediaList[0];
-            const isVideo = options?.isReel || isVideoUrl(mediaUrl);
-            const mediaType = isVideo ? 'VIDEO' : 'IMAGE';
-
-            let containerUrl = `https://graph.facebook.com/v24.0/${userId}/media?caption=${encodeURIComponent(caption)}&access_token=${accessToken}`;
-
-            if (isVideo) {
-                containerUrl += `&media_type=${options?.isReel ? 'REELS' : 'VIDEO'}&video_url=${encodeURIComponent(mediaUrl)}`;
-                if (options?.shareToFeed) {
-                    // containerUrl += `&share_to_feed=true`; // Specific to REELS sometimes, but often automatic
-                }
-            } else {
-                containerUrl += `&media_type=IMAGE&image_url=${encodeURIComponent(mediaUrl)}`;
-            }
-
-            if (options?.scheduledPublishTime) {
-                containerUrl += `&scheduled_publish_time=${options.scheduledPublishTime}`;
-            }
-
-            console.log(`[Instagram] Creating single media container (${mediaType})`);
-            const containerResponse = await fetch(containerUrl, { method: 'POST' });
-
-            if (!containerResponse.ok) {
-                const error = await containerResponse.json();
-                throw new Error(`Media Container creation failed: ${JSON.stringify(error)}`);
-            }
-
-            const containerData = await containerResponse.json();
-            creationId = containerData.id;
-
-            // 2. Wait for Processing (if video)
-            if (isVideo) {
-                await waitForInstagramMediaProcessing(creationId, accessToken);
-            }
+          params.append("image_url", mediaUrl);
         }
 
-        // 3. Publish Media
-        console.log(`[Instagram] Publishing media: ${creationId}`);
-        const publishResponse = await fetch(
-            `https://graph.facebook.com/v24.0/${userId}/media_publish?creation_id=${creationId}&access_token=${accessToken}`,
-            { method: 'POST' }
+        const res = await fetch(
+          `https://graph.facebook.com/v24.0/${userId}/media`,
+          { method: "POST", body: params }
         );
 
-        if (!publishResponse.ok) {
-            const error = await publishResponse.json();
-            throw new Error(`Media Publish failed: ${JSON.stringify(error)}`);
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(
+            `Carousel child creation failed: ${JSON.stringify(err)}`
+          );
         }
 
-        const publishData = await publishResponse.json();
-        return { id: publishData.id };
+        const data = await res.json();
+        childIds.push(data.id);
 
-    } catch (error) {
-        console.error('Instagram posting error:', error);
-        throw error;
+        await waitForInstagramMediaProcessing(data.id, accessToken);
+      }
+
+      // Create carousel container
+      const containerParams = new URLSearchParams({
+        access_token: accessToken,
+        media_type: "CAROUSEL",
+        caption,
+        children: childIds.join(","),
+      });
+
+      if (options?.scheduledPublishTime) {
+        containerParams.append(
+          "scheduled_publish_time",
+          options.scheduledPublishTime.toString()
+        );
+      }
+
+      const containerRes = await fetch(
+        `https://graph.facebook.com/v24.0/${userId}/media`,
+        { method: "POST", body: containerParams }
+      );
+
+      if (!containerRes.ok) {
+        const err = await containerRes.json();
+        throw new Error(
+          `Carousel container creation failed: ${JSON.stringify(err)}`
+        );
+      }
+
+      const containerData = await containerRes.json();
+      creationId = containerData.id;
+
+      await waitForInstagramMediaProcessing(creationId, accessToken);
     }
+
+    // ============================================================
+    // SINGLE MEDIA FLOW
+    // ============================================================
+    else {
+      const mediaUrl = mediaList[0];
+      const isVideo = isVideoUrl(mediaUrl);
+
+      const params = new URLSearchParams({
+        access_token: accessToken,
+        caption,
+      });
+
+      if (isVideo) {
+        // 🔥 ALWAYS USE REELS FOR STANDALONE VIDEO
+        params.append("media_type", "REELS");
+        params.append("video_url", mediaUrl);
+
+        if (options?.shareToFeed) {
+          params.append("share_to_feed", "true");
+        }
+      } else {
+        params.append("media_type", "IMAGE");
+        params.append("image_url", mediaUrl);
+      }
+
+      if (options?.scheduledPublishTime) {
+        params.append(
+          "scheduled_publish_time",
+          options.scheduledPublishTime.toString()
+        );
+      }
+
+      const res = await fetch(
+        `https://graph.facebook.com/v24.0/${userId}/media`,
+        { method: "POST", body: params }
+      );
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(
+          `Media container creation failed: ${JSON.stringify(err)}`
+        );
+      }
+
+      const data = await res.json();
+      creationId = data.id;
+
+      if (isVideo) {
+        await waitForInstagramMediaProcessing(creationId, accessToken);
+      }
+    }
+
+    // ============================================================
+    // PUBLISH STEP
+    // ============================================================
+    console.log(`[Instagram] Publishing: ${creationId}`);
+
+    const publishRes = await fetch(
+      `https://graph.facebook.com/v24.0/${userId}/media_publish`,
+      {
+        method: "POST",
+        body: new URLSearchParams({
+          access_token: accessToken,
+          creation_id: creationId,
+        }),
+      }
+    );
+
+    if (!publishRes.ok) {
+      const err = await publishRes.json();
+      throw new Error(`Media publish failed: ${JSON.stringify(err)}`);
+    }
+
+    const publishData = await publishRes.json();
+
+    console.log(`[Instagram] Successfully published: ${publishData.id}`);
+
+    return { id: publishData.id };
+  } catch (error) {
+    console.error("[Instagram] Post failed:", error);
+    throw error;
+  }
 }
 async function waitForInstagramMediaProcessing(
     containerId: string,

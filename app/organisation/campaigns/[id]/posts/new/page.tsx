@@ -165,7 +165,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [leadForms, setLeadForms] = useState<any[]>([]);
     const [loadingLeadForms, setLoadingLeadForms] = useState(false);
     const [selectedLeadFormId, setSelectedLeadFormId] = useState<string>('');
-    const [isFreeTrial, setIsFreeTrial] = useState(false); // Track if user is on free trial
+    const [hasPaidPlan, setHasPaidPlan] = useState(false); // Default to false (Secure by default - no flash)
 
     // AI Assistant state
     const [showAIAssistant, setShowAIAssistant] = useState(false);
@@ -284,10 +284,12 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 const res = await fetch("/api/subscription/current");
                 if (res.ok) {
                     const data = await res.json();
-                    // Free trial = isTrial active AND no paid subscription
-                    const trialActive = data.trial?.isActive === true;
-                    const hasPaidPlan = !!data.subscription;
-                    setIsFreeTrial(trialActive && !hasPaidPlan);
+                    // Paid plan = has active or canceling subscription AND not on trial
+                    const paidStatuses = ['ACTIVE', 'active', 'CANCELING', 'COMPLETED'];
+                    const hasPaidPlan = !!data.subscription &&
+                        paidStatuses.includes(data.subscription.status) &&
+                        !data.trial?.isActive;
+                    setHasPaidPlan(hasPaidPlan);
                 }
             } catch (error) {
                 console.error("Failed to fetch subscription status", error);
@@ -1052,8 +1054,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                 // Check if assigned to organization
                                                 const isAssigned = organisationPlatforms.includes(platform);
 
-                                                // Free trial blocks SMS and WhatsApp
-                                                const isTrialBlocked = isFreeTrial && ['SMS', 'WHATSAPP'].includes(platform);
+                                                // Paid plan required for SMS and WhatsApp
+                                                const isLocked = !hasPaidPlan && ['SMS', 'WHATSAPP'].includes(platform);
 
                                                 // Check if user has connected account (or if it's an admin platform like EMAIL/SMS)
                                                 let isConnected = false;
@@ -1075,9 +1077,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                         <button
                                                             type="button"
                                                             onClick={() => {
-                                                                if (isTrialBlocked) {
-                                                                    toast('Free trial does not have access', {
-                                                                        description: 'SMS and WhatsApp are not available on the free trial. Please upgrade your plan.',
+                                                                if (isLocked) {
+                                                                    toast('Paid plan required', {
+                                                                        description: 'SMS and WhatsApp are only available on paid plans. Please upgrade your plan to unlock these platforms.',
                                                                         action: {
                                                                             label: 'Upgrade',
                                                                             onClick: () => router.push('/organisation/billing')
@@ -1097,27 +1099,27 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                 }
                                                                 togglePlatform(platform);
                                                             }}
-                                                            className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] ${isTrialBlocked
+                                                            className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] ${isLocked
                                                                 ? 'border-dashed border-muted-foreground/30 bg-muted/20 opacity-50 cursor-not-allowed'
                                                                 : isSelected
                                                                     ? 'border-primary bg-primary/10 shadow-sm'
                                                                     : 'border-border hover:border-primary/50 hover:bg-muted/50 cursor-pointer'
-                                                                } ${!isConnected && !isTrialBlocked ? 'opacity-50 grayscale' : ''}`}
+                                                                } ${!isConnected && !isLocked ? 'opacity-50 grayscale' : ''}`}
                                                         >
                                                             <Icon className={`size-6 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
                                                             <span className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
                                                                 {platform}
                                                             </span>
-                                                            {isTrialBlocked && (
+                                                            {isLocked && (
                                                                 <span className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 leading-tight text-center">
-                                                                    Trial locked
+                                                                    Paid only
                                                                 </span>
                                                             )}
                                                         </button>
-                                                        {/* Hover tooltip for trial-blocked platforms */}
-                                                        {isTrialBlocked && (
+                                                        {/* Hover tooltip for locked platforms */}
+                                                        {isLocked && (
                                                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-44 bg-popover text-popover-foreground text-xs rounded-md shadow-lg border px-3 py-2 hidden group-hover:block z-50 pointer-events-none text-center">
-                                                                Free trial does not have access to {platform}.
+                                                                SMS and WhatsApp require a paid plan.
                                                                 <br />
                                                                 <span className="text-primary font-medium">Upgrade your plan</span> to unlock.
                                                             </div>
