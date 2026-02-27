@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -63,11 +63,11 @@ interface Campaign {
     metadata?: any;
 }
 
-export default function CampaignPostsPage() {
+export default function CampaignPostsPage({ params }: { params: Promise<{ id: string }> }) {
     const router = useRouter();
-    const params = useParams();
+    const resolvedParams = React.use(params);
     const searchParams = useSearchParams();
-    const campaignId = params.id as string;
+    const campaignId = resolvedParams.id;
 
     // State
     const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -117,6 +117,7 @@ export default function CampaignPostsPage() {
     const [contactSearchQuery, setContactSearchQuery] = useState('');
     const [lastUsedAdAccountId, setLastUsedAdAccountId] = useState<string>('');
     const [boostDialogOptions, setBoostDialogOptions] = useState<MetaBoostOptions | null>(null);
+    const [hasPaidPlan, setHasPaidPlan] = useState(false); // Default to false (Secure by default - no flash)
 
     // Fetch organisation platforms
     useEffect(() => {
@@ -131,7 +132,24 @@ export default function CampaignPostsPage() {
             }
         };
 
+        const fetchSubscriptionStatus = async () => {
+            try {
+                const response = await fetch('/api/subscription/current');
+                if (response.ok) {
+                    const data = await response.json();
+                    const paidStatuses = ['ACTIVE', 'active', 'CANCELING', 'COMPLETED'];
+                    const hasPaid = !!data.subscription &&
+                        paidStatuses.includes(data.subscription.status) &&
+                        !data.trial?.isActive;
+                    setHasPaidPlan(hasPaid);
+                }
+            } catch (error) {
+                console.error('Error fetching subscription status:', error);
+            }
+        };
+
         fetchOrgPlatforms();
+        fetchSubscriptionStatus();
     }, []);
 
     // Fetch Meta Ads config
@@ -763,6 +781,17 @@ export default function CampaignPostsPage() {
                                                         size="sm"
                                                         variant="ghost"
                                                         onClick={() => {
+                                                            const isLocked = !hasPaidPlan && (post.type === 'SMS' || post.type === 'WHATSAPP');
+                                                            if (isLocked) {
+                                                                toast('Paid plan required', {
+                                                                    description: 'SMS and WhatsApp are only available on paid plans.',
+                                                                    action: {
+                                                                        label: 'Upgrade',
+                                                                        onClick: () => router.push('/organisation/billing')
+                                                                    }
+                                                                });
+                                                                return;
+                                                            }
                                                             setSharePost(post);
                                                             setSelectedContacts([]);
                                                         }}

@@ -39,7 +39,8 @@ async function getPostsHandler(
 
     const { id } = await context.params;
     const campaignId = parseInt(id);
-
+console.log("ORG ID:", effectiveOrganisationId);
+console.log("CAMPAIGN ID:", campaignId);
     // Verify campaign belongs to organisation
     const campaign = await prisma.campaign.findFirst({
         where: {
@@ -155,28 +156,25 @@ async function createPostHandler(
         return NextResponse.json({ error: 'Message, subject or media is required' }, { status: 400 });
     }
 
-    // Free trial restriction: block SMS and WhatsApp
-    if (['SMS', 'WHATSAPP'].includes(type)) {
-        const organisation = await prisma.organisation.findUnique({
+    // Platform restriction: SMS and WhatsApp require a paid subscription (ACTIVE or CANCELING) and NOT a trial
+    if (['SMS', 'WHATSAPP'].includes(type.toUpperCase())) {
+        const org = await prisma.organisation.findUnique({
             where: { id: effectiveOrganisationId },
-            select: { isTrial: true, trialEndDate: true },
+            select: { isTrial: true }
         });
+
         const hasPaidSubscription = await prisma.subscription.findFirst({
             where: {
                 organisationId: effectiveOrganisationId,
-                status: { in: ['ACTIVE', 'CANCELING'] },
+                status: { in: ['ACTIVE', 'active', 'CANCELING', 'COMPLETED'] },
             },
         });
-        const now = new Date();
-        const isFreeTrial =
-            organisation?.isTrial === true &&
-            organisation.trialEndDate != null &&
-            now < new Date(organisation.trialEndDate) &&
-            !hasPaidSubscription;
 
-        if (isFreeTrial) {
+        const isLocked = org?.isTrial || !hasPaidSubscription;
+
+        if (isLocked) {
             return NextResponse.json(
-                { error: `Free trial does not have access to ${type}. Please upgrade your plan to use this platform.` },
+                { error: `${type} is only available for organisations with an active paid subscription. Please upgrade your plan to use this platform.` },
                 { status: 403 }
             );
         }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -47,12 +47,12 @@ interface Post {
     metadata: any;
 }
 
-export default function EditPostPage() {
+export default function EditPostPage({ params }: { params: Promise<{ id: string, postId: string }> }) {
     const { user } = useUser();
     const router = useRouter();
-    const params = useParams();
-    const campaignId = params.id as string;
-    const postId = params.postId as string;
+    const resolvedParams = React.use(params);
+    const campaignId = resolvedParams.id;
+    const postId = resolvedParams.postId;
 
     // Form state
     const [subject, setSubject] = useState('');
@@ -109,6 +109,28 @@ export default function EditPostPage() {
     const [fbPageId, setFbPageId] = useState<string>('');
     const [fbPostId, setFbPostId] = useState<string>('');
     const [campaign, setCampaign] = useState<any>(null);
+    const [hasPaidPlan, setHasPaidPlan] = useState<boolean>(false); // Default to false (Secure by default - no flash)
+
+    // Fetch subscription status
+    useEffect(() => {
+        const fetchSubscriptionStatus = async () => {
+            try {
+                const response = await fetch('/api/subscription/current');
+                if (response.ok) {
+                    const data = await response.json();
+                    const paidStatuses = ['ACTIVE', 'active', 'CANCELING', 'COMPLETED'];
+                    const hasPaid = !!data.subscription &&
+                        paidStatuses.includes(data.subscription.status) &&
+                        !data.trial?.isActive;
+                    setHasPaidPlan(hasPaid);
+                }
+            } catch (error) {
+                console.error('Error fetching subscription status:', error);
+            }
+        };
+
+        fetchSubscriptionStatus();
+    }, []);
 
     const formatDateTimeLocal = (date: Date) => {
         const year = date.getFullYear();
@@ -780,22 +802,38 @@ export default function EditPostPage() {
                                             {organisationPlatforms.map((platform) => {
                                                 const isSelected = type === platform;
                                                 const Icon = getPlatformIcon(platform);
+                                                // Paid plan required for SMS and WhatsApp
+                                                const isLocked = !hasPaidPlan && ['SMS', 'WHATSAPP'].includes(platform);
 
                                                 return (
-                                                    <button
-                                                        key={platform}
-                                                        type="button"
-                                                        disabled={true}
-                                                        className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] ${isSelected
-                                                            ? 'border-primary bg-primary/10 shadow-sm'
-                                                            : 'border-border opacity-50 cursor-not-allowed'
-                                                            }`}
-                                                    >
-                                                        <Icon className={`size-6 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-                                                        <span className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
-                                                            {platform}
-                                                        </span>
-                                                    </button>
+                                                    <div key={platform} className="relative group">
+                                                        <button
+                                                            key={platform}
+                                                            type="button"
+                                                            disabled={true}
+                                                            className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] ${isLocked
+                                                                ? 'border-dashed border-muted-foreground/30 bg-muted/20 opacity-50 cursor-not-allowed'
+                                                                : isSelected
+                                                                    ? 'border-primary bg-primary/10 shadow-sm'
+                                                                    : 'border-border opacity-50 cursor-not-allowed'
+                                                                }`}
+                                                        >
+                                                            <Icon className={`size-6 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                                                            <span className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                                                                {platform}
+                                                                {isLocked && (
+                                                                    <span className="block text-[9px] font-semibold text-amber-600 dark:text-amber-400 leading-tight text-center mt-1">
+                                                                        Paid only
+                                                                    </span>
+                                                                )}
+                                                            </span>
+                                                        </button>
+                                                        {isLocked && (
+                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-44 bg-popover text-popover-foreground text-xs rounded-md shadow-lg border px-3 py-2 hidden group-hover:block z-50 pointer-events-none text-center">
+                                                                SMS and WhatsApp require a paid plan.
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 );
                                             })}
                                         </div>

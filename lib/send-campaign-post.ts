@@ -243,7 +243,7 @@ export async function sendCampaignPost(
                     mediaToUse,
                     {
                         isReel: isReel,
-                        scheduledPublishTime: (scheduledTime && scheduledTime.getTime() > Date.now() + 600000) ? Math.floor(scheduledTime.getTime() / 1000) : undefined
+                        scheduledPublishTime: (scheduledTime && scheduledTime.getTime() > Date.now() + 960000) ? Math.floor(scheduledTime.getTime() / 1000) : undefined
                     }
                 );
 
@@ -263,7 +263,7 @@ export async function sendCampaignPost(
                     console.warn('[Facebook] Failed to fetch final URLs:', e);
                 }
 
-                const isPlatformScheduled = !!(scheduledTime && (scheduledTime instanceof Date ? scheduledTime.getTime() : new Date(scheduledTime).getTime()) > Date.now() + 600000);
+                const isPlatformScheduled = !!(scheduledTime && (scheduledTime instanceof Date ? scheduledTime.getTime() : new Date(scheduledTime).getTime()) > Date.now() + 960000);
                 const fbIsScheduledTx = !!(options?.forceSchedule || (isPlatformScheduled && !options?.publishNow));
                 const fbScheduledTimeTx = options?.publishNow ? null : (scheduledTime || post.scheduledPostTime || null);
 
@@ -401,7 +401,7 @@ export async function sendCampaignPost(
                             isReel: (post.metadata as any)?.isReel,
                             shareToFeed: true,
                             isVideo: isVideoContent,
-                            scheduledPublishTime: (scheduledTime && scheduledTime.getTime() > Date.now() + 600000) ? Math.floor(scheduledTime.getTime() / 1000) : undefined
+                            scheduledPublishTime: (scheduledTime && scheduledTime.getTime() > Date.now() + 960000) ? Math.floor(scheduledTime.getTime() / 1000) : undefined
                         }
                     );
                 } catch (igError: any) {
@@ -437,7 +437,7 @@ export async function sendCampaignPost(
                     console.warn('[Instagram] Failed to fetch final URLs:', e);
                 }
 
-                const isIgPlatformScheduled = !!(scheduledTime && (scheduledTime instanceof Date ? scheduledTime.getTime() : new Date(scheduledTime).getTime()) > Date.now() + 600000);
+                const isIgPlatformScheduled = !!(scheduledTime && (scheduledTime instanceof Date ? scheduledTime.getTime() : new Date(scheduledTime).getTime()) > Date.now() + 960000);
                 const igIsScheduledTx = !!(options?.forceSchedule || (isIgPlatformScheduled && !options?.publishNow));
                 const igScheduledTimeTx = options?.publishNow ? null : (scheduledTime || post.scheduledPostTime || null);
 
