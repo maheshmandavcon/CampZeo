@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -61,6 +61,8 @@ import { AIContentAssistant } from '@/components/ai-content-assistant';
 import { upload } from '@vercel/blob/client';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { isVideoUrl } from '@/lib/media-utils';
+
 
 export default function NewPostPage({ params }: { params: Promise<{ id: string }> }) {
     const { user } = useUser();
@@ -154,7 +156,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         balance: ''
     });
     const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
-
+    const coverUploadRef = useRef<HTMLInputElement>(null);
     // New Board State
     const [isCreatingBoard, setIsCreatingBoard] = useState(false);
     const [newBoardName, setNewBoardName] = useState('');
@@ -301,7 +303,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         fetchSubscriptionStatus();
     }, []);
 
-    // Fetch Pinterest boards
+
     // Fetch Pinterest boards
     useEffect(() => {
         if (selectedPlatform === 'PINTEREST') {
@@ -470,25 +472,34 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 newUrls.push(newBlob.url);
             }
 
-            setMediaUrls(prev => [...prev, ...newUrls]);
+            const updatedMediaUrls = [...mediaUrls, ...newUrls];
+            setMediaUrls(updatedMediaUrls);
 
             // Auto-detect Content Type for Instagram/Facebook
             if (selectedPlatform === 'INSTAGRAM' || selectedPlatform === 'FACEBOOK') {
-                if (hasVideo) {
-                    setContentType('REEL');
-                    setIsReel(true);
-                    toast.success('Video detected: Switched to Reel/Video mode');
-                } else if (mediaUrls.length === 0 && !hasVideo) {
-                    // Only switch to POST if it's the first upload and it's an image
-                    setContentType('POST');
-                    setIsReel(false);
+                const totalMedia = updatedMediaUrls.length;
+                const videoCount = updatedMediaUrls.filter(url => isVideoUrl(url)).length;
+                const imageCount = totalMedia - videoCount;
+
+                if (videoCount === 1 && imageCount === 0) {
+                    // ✅ Only 1 video → Reel
+                    if (contentType !== 'REEL') {
+                        setContentType('REEL');
+                        setIsReel(true);
+                        // toast.success('Single video detected: Switched to Reel mode');
+                    }
+                } else {
+                    // ✅ Everything else → Standard Post
+                    if (contentType === 'REEL') {
+                        setContentType('POST');
+                        setIsReel(false);
+                        //toast.info('Switched back to Standard Post (Reels require a single video)');
+                    }
                 }
             }
-
-            toast.success('Files uploaded successfully');
         } catch (error) {
-            console.error('Error uploading file:', error);
-            toast.error(`Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            console.error('Error uploading media:', error);
+            toast.error('Failed to upload media');
         } finally {
             setUploadingMedia(false);
             setUploadProgress(0);
@@ -528,7 +539,29 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     };
 
     const removeMedia = (index: number) => {
-        setMediaUrls(prev => prev.filter((_, i) => i !== index));
+        const updatedUrls = mediaUrls.filter((_, i) => i !== index);
+        setMediaUrls(updatedUrls);
+
+        // Auto-detect Content Type for Instagram/Facebook
+        if (selectedPlatform === 'INSTAGRAM' || selectedPlatform === 'FACEBOOK') {
+            const totalMedia = updatedUrls.length;
+            const videoCount = updatedUrls.filter(url => isVideoUrl(url)).length;
+            const imageCount = totalMedia - videoCount;
+
+            if (videoCount === 1 && imageCount === 0) {
+                if (contentType !== 'REEL') {
+                    setContentType('REEL');
+                    setIsReel(true);
+                    //toast.success('Single video remaining: Switched to Reel mode');
+                }
+            } else {
+                if (contentType === 'REEL') {
+                    setContentType('POST');
+                    setIsReel(false);
+                    // toast.info('Switched back to Standard Post');
+                }
+            }
+        }
     };
 
     // Create new Pinterest board
@@ -2025,7 +2058,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                         >
                             Cancel
                         </Button>
-                        {['FACEBOOK', 'INSTAGRAM'].includes(selectedPlatform || '') && (
+                        {/* {['FACEBOOK', 'INSTAGRAM'].includes(selectedPlatform || '') && (
                             <Button
                                 className='cursor-pointer text-blue-600 border-blue-200 hover:bg-blue-50'
                                 type="button"
@@ -2040,7 +2073,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                 )}
                                 Boost Now
                             </Button>
-                        )}
+                        )} */}
                         <Button
                             className='cursor-pointer'
                             type="submit" disabled={saving || savingBoost || !selectedPlatform || uploadingMedia}>

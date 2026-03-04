@@ -1,10 +1,18 @@
-import { getSocialMediaUrl, validateMediaUrl, isVideoUrl } from './media-utils';
+// BUG 1 FIX: Removed unused `getSocialMediaUrl` import
+import { validateMediaUrl, isVideoUrl } from './media-utils';
 import { Buffer } from 'buffer';
 
-async function debugFacebookToken(accessToken: string, logPrefix: string = '[Facebook]'): Promise<void> {
+// BUG 3 FIX: debug_token now accepts an optional appToken param.
+// The second `access_token` param must be an App Access Token (not a Page/User token).
+// If no appToken is supplied we skip the debug call rather than misuse the page token.
+async function debugFacebookToken(accessToken: string, logPrefix: string = '[Facebook]', appToken?: string): Promise<void> {
+    if (!appToken) {
+        console.warn(`${logPrefix} Skipping token debug — App Access Token not provided. Pass appToken to enable.`);
+        return;
+    }
     try {
         console.log(`${logPrefix} Debugging Token permissions...`);
-        const response = await fetch(`https://graph.facebook.com/v24.0/debug_token?input_token=${accessToken}&access_token=${accessToken}`);
+        const response = await fetch(`https://graph.facebook.com/v24.0/debug_token?input_token=${accessToken}&access_token=${appToken}`);
 
         if (response.ok) {
             const data = await response.json();
@@ -24,17 +32,13 @@ interface FacebookCredentials {
     pageId: string;
 }
 
-interface FacebookPostOptions {
-    message: string;
-    mediaUrls?: string | string[] | null;
-    isReel?: boolean; // For Facebook Reels
-}
+// BUG 2 FIX: Removed unused interface FacebookPostOptions
 
 export async function postToFacebook(
     credentials: FacebookCredentials,
     message: string,
     mediaUrls?: string | string[] | null,
-    options?: { isReel?: boolean; scheduledPublishTime?: number }
+    options?: { isReel?: boolean; scheduledPublishTime?: number; coverUrl?: string }
 ) {
     const { accessToken, pageId } = credentials;
 
@@ -50,7 +54,9 @@ export async function postToFacebook(
     }
 
     try {
-        let postId: string;
+        // BUG 4 FIX: Initialize postId to empty string to avoid "used before assigned" in strict TS.
+        // Every code path below either sets it or returns/throws before reaching the final log.
+        let postId = '';
 
         if (mediaList.length === 0) {
             // Text-only post
@@ -111,7 +117,8 @@ export async function postToFacebook(
 
                 // Check if it's a Reel (short video)
                 if (options?.isReel && isVideo) {
-                    return await postFacebookReel(credentials, message, publicUrl);
+                    // Reel path: returns early, postId not needed
+                    return await postFacebookReel(credentials, message, publicUrl, options?.coverUrl);
                 } else {
                     // Regular photo or video post
                     const endpoint = isVideo ? 'videos' : 'photos';
@@ -172,14 +179,16 @@ export async function postToFacebook(
             }
 
         } else {
-            // Multiple media items (mix of photos and videos)
+            // BUG 6 FIX: Multi-media — collect upload failures and surface them rather than silently dropping.
             const mediaIds: string[] = [];
+            const uploadErrors: string[] = [];
 
             for (const mediaUrl of mediaList) {
                 const validation = validateMediaUrl(mediaUrl);
 
                 if (!validation.valid) {
                     console.warn(`[Facebook] Skipping invalid URL: ${mediaUrl}`);
+                    uploadErrors.push(`Invalid URL (${mediaUrl}): ${validation.message}`);
                     continue;
                 }
 
@@ -203,7 +212,9 @@ export async function postToFacebook(
 
                 if (!response.ok) {
                     const error = await response.json();
-                    console.error(`Failed to upload ${endpoint}: ${error}`);
+                    const errMsg = `Failed to upload ${endpoint} (${validation.url}): ${JSON.stringify(error)}`;
+                    console.error(`[Facebook] ${errMsg}`);
+                    uploadErrors.push(errMsg);
                     continue;
                 }
 
@@ -217,7 +228,12 @@ export async function postToFacebook(
             }
 
             if (mediaIds.length === 0) {
-                throw new Error('No valid media could be uploaded');
+                const detail = uploadErrors.length > 0 ? ` Errors: ${uploadErrors.join('; ')}` : '';
+                throw new Error(`No valid media could be uploaded.${detail}`);
+            }
+
+            if (uploadErrors.length > 0) {
+                console.warn(`[Facebook] ${uploadErrors.length} media item(s) failed to upload and were skipped: ${uploadErrors.join('; ')}`);
             }
 
             // Create post with all media (photos and videos)
@@ -266,7 +282,8 @@ export async function postToFacebook(
 async function postFacebookReel(
     credentials: FacebookCredentials,
     message: string,
-    videoUrl: string
+    videoUrl: string,
+    coverUrl?: string
 ) {
     const { accessToken, pageId } = credentials;
 
@@ -335,6 +352,16 @@ async function postFacebookReel(
     }
 
     console.log(`[Facebook] Reel published successfully: ${videoId}`);
+
+    if (coverUrl) {
+        try {
+            await setFacebookVideoThumbnail(accessToken, videoId, coverUrl);
+            console.log(`[Facebook] Reel cover set successfully`);
+        } catch (err) {
+            console.warn(`[Facebook] Failed to set reel cover (non-blocking):`, err);
+        }
+    }
+
     return { id: videoId };
 }
 
@@ -505,18 +532,20 @@ async function setFacebookVideoThumbnail(
             throw new Error(`Failed to fetch thumbnail: ${thumbnailResponse.statusText}`);
         }
 
-        const thumbnailBuffer = Buffer.from(await thumbnailResponse.arrayBuffer());
+        const thumbnailBuffer = await thumbnailResponse.arrayBuffer();
         const contentType = thumbnailResponse.headers.get('content-type') || 'image/jpeg';
 
-        // Upload thumbnail to Facebook
+        const formData = new FormData();
+        const blob = new Blob([thumbnailBuffer], { type: contentType });
+        formData.append('source', blob, 'thumbnail.jpg');
+        formData.append('is_preferred', 'true');
+
+        // Upload thumbnail to Facebook Using /thumbnails edge for videos
         const response = await fetch(
-            `https://graph.facebook.com/v24.0/${videoId}/picture?access_token=${accessToken}`,
+            `https://graph.facebook.com/v24.0/${videoId}/thumbnails?access_token=${accessToken}`,
             {
                 method: 'POST',
-                headers: {
-                    'Content-Type': contentType,
-                },
-                body: thumbnailBuffer,
+                body: formData,
             }
         );
 
@@ -802,7 +831,6 @@ export interface FacebookAudienceInsights {
     // New fields from user request
     fanAdds?: number;
     fanRemoves?: number;
-    _rawResponses?: any[];
 }
 
 export async function getFacebookPageAudience(
@@ -880,21 +908,25 @@ export async function getFacebookPageAudience(
         let fanReach = 0;
         let totalUniqueReach = 0;
 
+        // BUG 5 FIX: capture() already consumed a clone; call .json() directly on the original once.
+        // Also fixed operator-precedence issue in the original ternary (await reachSplitResponse.ok ? ...)
         if (reachSplitResponse.ok) {
-            const data = await reachSplitResponse.ok ? await reachSplitResponse.json() : { data: [] };
-            fanReach = data.data?.find((m: any) => m.name === 'page_posts_impressions_fan_unique')?.values[0]?.value || 0;
-            totalUniqueReach = data.data?.find((m: any) => m.name === 'page_posts_impressions_unique')?.values[0]?.value || 0;
+            const splitData = await reachSplitResponse.json();
+            fanReach = splitData.data?.find((m: any) => m.name === 'page_posts_impressions_fan_unique')?.values[0]?.value || 0;
+            totalUniqueReach = splitData.data?.find((m: any) => m.name === 'page_posts_impressions_unique')?.values[0]?.value || 0;
         }
 
-        // 4. Fetch Fan Adds/Removes (User requested metrics from separate URL logic)
+        // 4. Fetch Fan Adds/Removes
+        // BUG 8 FIX: page_fan_adds / page_fan_removes do NOT support period=lifetime.
+        // Supported periods are 'day' and 'week'. Using 'day' here to get the latest daily value.
         let fanAdds = 0;
         let fanRemoves = 0;
         try {
             const fanGrowthMetrics = 'page_fan_adds,page_fan_removes';
             const growthRes = await fetch(
-                `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${fanGrowthMetrics}&period=lifetime&access_token=${accessToken}`
+                `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${fanGrowthMetrics}&period=day&access_token=${accessToken}`
             );
-            await capture(growthRes, 'fan_growth_lifetime');
+            await capture(growthRes, 'fan_growth_day');
             if (growthRes.ok) {
                 const growthData = await growthRes.json();
                 fanAdds = growthData.data?.find((m: any) => m.name === 'page_fan_adds')?.values[0]?.value || 0;
@@ -916,7 +948,6 @@ export async function getFacebookPageAudience(
             nonFanReach: Math.max(0, totalUniqueReach - fanReach),
             fanAdds,
             fanRemoves,
-            _rawResponses
         };
 
     } catch (error) {
@@ -944,7 +975,6 @@ export interface FacebookAccountInsights {
     pageViews?: number;
     pageLikes?: number;
     engagedUsers?: number;
-    _rawResponses?: any[];
 }
 
 export async function getFacebookAccountInsights(
@@ -1019,7 +1049,6 @@ export async function getFacebookAccountInsights(
             pageViews,
             pageLikes,
             engagedUsers,
-            _rawResponses
         };
     } catch (error) {
         console.error('[Facebook] Error fetching account insights:', error);
@@ -1063,9 +1092,6 @@ export async function getFacebookLeadForms(
     }
 }
 
-
-
-
 export async function getFacebookLeadFormDetails(
     formId: string,
     accessToken: string
@@ -1090,7 +1116,6 @@ export async function getFacebookLeadFormDetails(
         throw error;
     }
 }
-
 
 export interface FormData {
     name: string;
@@ -1238,8 +1263,13 @@ export async function createFacebookLeadForm(
         if (formData.custom_disclaimer) {
             payload.custom_disclaimer = {
                 title: formData.custom_disclaimer.title || 'Terms and Conditions',
+                // BUG 7 FIX: formData.custom_disclaimer.body is an object {text, url_entities}.
+                // Must pass body.text (string) here, not the whole body object.
                 body: {
-                    text: formData.custom_disclaimer.body
+                    text: formData.custom_disclaimer.body.text,
+                    ...(formData.custom_disclaimer.body.url_entities
+                        ? { url_entities: formData.custom_disclaimer.body.url_entities }
+                        : {}),
                 },
                 checkboxes: formData.custom_disclaimer.checkboxes?.map((cb: any) => ({
                     key: cb.key || `checkbox_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
@@ -1258,7 +1288,15 @@ export async function createFacebookLeadForm(
         // - greeting (as standalone field)
         // - description_format (list vs paragraph - always saved as paragraph)
 
-        console.log('[Facebook] Debugging Lead Form Payload:', JSON.stringify(payload, null, 2));
+        // BUG 9 FIX: Removed console.log of full payload — it contained the access_token credential.
+        // Log a redacted summary instead.
+        console.log('[Facebook] Submitting lead form:', {
+            name: payload.name,
+            questionCount: payload.questions?.length ?? 0,
+            hasContextCard: !!payload.context_card,
+            hasThankYouPage: !!payload.thank_you_page,
+            hasCustomDisclaimer: !!payload.custom_disclaimer,
+        });
 
         const response = await fetch(
             `https://graph.facebook.com/v24.0/${pageId}/leadgen_forms`,
@@ -1304,7 +1342,6 @@ export async function createFacebookLeadForm(
 
             throw new Error(finalErrorMessage);
         }
-
 
         const data = await response.json();
         return data;

@@ -31,6 +31,7 @@ import { WYSIWYGPreview } from '../../_components/WYSIWYGPreview';
 import { useUser } from '@clerk/nextjs';
 import { upload } from '@vercel/blob/client';
 import { MetaBoostSection, MetaBoostOptions } from '../../_components/MetaBoostSection';
+import { isVideoUrl } from '@/lib/media-utils';
 
 
 
@@ -98,6 +99,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
     // AI Assistant state
     const [showAIAssistant, setShowAIAssistant] = useState(false);
     const [aiAssistantTab, setAiAssistantTab] = useState<'text' | 'image'>('text');
+    const coverUploadRef = React.useRef<HTMLInputElement>(null);
 
     // Pinterest Board Creation state
     const [isCreatingBoard, setIsCreatingBoard] = useState(false);
@@ -109,6 +111,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
     const [fbPageId, setFbPageId] = useState<string>('');
     const [fbPostId, setFbPostId] = useState<string>('');
     const [campaign, setCampaign] = useState<any>(null);
+    const [existingPost, setExistingPost] = useState<Post | null>(null);
     const [hasPaidPlan, setHasPaidPlan] = useState<boolean>(false); // Default to false (Secure by default - no flash)
 
     // Fetch subscription status
@@ -214,6 +217,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
 
                 const data = await response.json();
                 const post: Post = data.post;
+                setExistingPost(post);
 
                 if (post.isPostSent) {
                     toast.error('Cannot edit a sent post');
@@ -261,6 +265,10 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
 
                 if (metadata.metaBoost) {
                     setBoostOptions(metadata.metaBoost);
+                }
+
+                if (metadata.thumbnailUrl) {
+                    setThumbnailUrl(metadata.thumbnailUrl);
                 }
 
                 if (metadata.facebookPageId || metadata.platformPageId) {
@@ -496,18 +504,29 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                 newUrls.push(newBlob.url);
             }
 
-            setMediaUrls(prev => [...prev, ...newUrls]);
+            const updatedMediaUrls = [...mediaUrls, ...newUrls];
+            setMediaUrls(updatedMediaUrls);
 
             // Auto-detect Content Type for Instagram/Facebook
             if (type === 'INSTAGRAM' || type === 'FACEBOOK') {
-                if (hasVideo) {
-                    setContentType('REEL');
-                    setIsReel(true);
-                    toast.success('Video detected: Switched to Reel/Video mode');
-                } else if (mediaUrls.length === 0 && !hasVideo) {
-                    // Only switch to POST if it's the first upload and it's an image
-                    setContentType('POST');
-                    setIsReel(false);
+                const totalMedia = updatedMediaUrls.length;
+                const videoCount = updatedMediaUrls.filter(url => isVideoUrl(url)).length;
+                const imageCount = totalMedia - videoCount;
+
+                if (videoCount === 1 && imageCount === 0) {
+                    // ✅ Only 1 video → Reel
+                    if (contentType !== 'REEL') {
+                        setContentType('REEL');
+                        setIsReel(true);
+                        toast.success('Single video detected: Switched to Reel mode');
+                    }
+                } else {
+                    // ✅ Everything else → Standard Post
+                    if (contentType === 'REEL') {
+                        setContentType('POST');
+                        setIsReel(false);
+                        toast.info('Switched back to Standard Post (Reels require a single video)');
+                    }
                 }
             }
 
@@ -554,7 +573,29 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
     };
 
     const removeMedia = (index: number) => {
-        setMediaUrls(prev => prev.filter((_, i) => i !== index));
+        const updatedUrls = mediaUrls.filter((_, i) => i !== index);
+        setMediaUrls(updatedUrls);
+
+        // Auto-detect Content Type for Instagram/Facebook
+        if (type === 'INSTAGRAM' || type === 'FACEBOOK') {
+            const totalMedia = updatedUrls.length;
+            const videoCount = updatedUrls.filter(url => isVideoUrl(url)).length;
+            const imageCount = totalMedia - videoCount;
+
+            if (videoCount === 1 && imageCount === 0) {
+                if (contentType !== 'REEL') {
+                    setContentType('REEL');
+                    setIsReel(true);
+                    toast.success('Single video remaining: Switched to Reel mode');
+                }
+            } else {
+                if (contentType === 'REEL') {
+                    setContentType('POST');
+                    setIsReel(false);
+                    toast.info('Switched back to Standard Post');
+                }
+            }
+        }
     };
 
     // Handle form submit
@@ -615,24 +656,31 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
 
 
         // Prepare metadata
-        let metadata: any = {};
+        let metadata: any = { ...(existingPost?.metadata || {}) };
         if (type === 'YOUTUBE') {
             metadata = {
                 tags: youtubeTags ? youtubeTags.split(',').map(t => t.trim()) : [],
                 privacy: youtubePrivacy,
                 postType: youtubeContentType,
+                thumbnailUrl: thumbnailUrl,
                 playlistTitle: youtubeContentType === 'PLAYLIST' ? youtubePlaylistTitle : undefined
             };
         } else if (type === 'PINTEREST') {
-            metadata = { boardId: pinterestBoardId, link: pinterestLink };
+            metadata = {
+                boardId: pinterestBoardId,
+                link: pinterestLink,
+                thumbnailUrl: thumbnailUrl
+            };
         } else if (type === 'FACEBOOK' || type === 'INSTAGRAM') {
-            metadata = { isReel: !!isReel, postType: contentType };
+            metadata = {
+                isReel: !!isReel,
+                postType: contentType,
+                thumbnailUrl: thumbnailUrl
+            };
         } else if (type === 'LINKEDIN') {
-            metadata = { linkedInUrn: selectedLinkedInUrn };
-        }
-
-        if (boostOptions.enabled) {
-            metadata.metaBoost = boostOptions;
+            metadata = {
+                linkedInUrn: selectedLinkedInUrn
+            };
         }
 
         if (boostOptions.enabled) {
@@ -674,7 +722,6 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
 
     // Handle Quick Boost
     const handleQuickBoost = async () => {
-        debugger;
         if (!type || !['FACEBOOK', 'INSTAGRAM'].includes(type)) {
             toast.error("Quick Boost is only available for Facebook and Instagram.");
             return;
@@ -739,8 +786,6 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
         }
     };
 
-    // Check if a URL is a video
-    const isVideoUrl = (url: string) => url.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
 
     if (loading) {
         return (
@@ -1107,7 +1152,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                                                 <Button
                                                     type="button"
                                                     variant="outline"
-                                                    onClick={() => document.getElementById('reel-cover-upload')?.click()}
+                                                    onClick={() => coverUploadRef.current?.click()}
                                                     disabled={uploadingMedia}
                                                     className="gap-2 w-full cursor-pointer"
                                                 >
@@ -1115,6 +1160,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                                                     {uploadingMedia ? `Uploading... ${uploadProgress}%` : "Upload Cover"}
                                                 </Button>
                                                 <input
+                                                    ref={coverUploadRef}
                                                     id="reel-cover-upload"
                                                     type="file"
                                                     accept="image/*"

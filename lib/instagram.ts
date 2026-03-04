@@ -1,5 +1,4 @@
-import { prisma } from "@/lib/prisma";
-import { Buffer } from 'buffer';
+// BUG 1 FIX: Removed unused `prisma` import — it was imported but never used in this file.
 import { validateMediaUrl, isVideoUrl } from './media-utils';
 
 interface InstagramCredentials {
@@ -14,6 +13,9 @@ export async function postToInstagram(
   options?: {
     shareToFeed?: boolean;
     scheduledPublishTime?: number;
+    isReel?: boolean;
+    isVideo?: boolean;
+    coverUrl?: string;
   }
 ) {
   const { accessToken, userId } = credentials;
@@ -26,7 +28,10 @@ export async function postToInstagram(
   );
 
   try {
-    let creationId: string;
+    // BUG 2 FIX: Initialize creationId to '' so TypeScript doesn't flag
+    // "used before assigned" if the control flow analysis misses a branch.
+    // Every live code path sets it before the publish step or returns/throws early.
+    let creationId = '';
 
     // ============================================================
     // CAROUSEL FLOW
@@ -76,6 +81,7 @@ export async function postToInstagram(
       });
 
       if (options?.scheduledPublishTime) {
+        containerParams.append("publish", "false");
         containerParams.append(
           "scheduled_publish_time",
           options.scheduledPublishTime.toString()
@@ -113,9 +119,16 @@ export async function postToInstagram(
       });
 
       if (isVideo) {
-        // 🔥 ALWAYS USE REELS FOR STANDALONE VIDEO
-        params.append("media_type", "REELS");
+        if (options?.isReel) {
+          params.append("media_type", "REELS");
+        } else {
+          params.append("media_type", "VIDEO");
+        }
         params.append("video_url", mediaUrl);
+        
+        if (options?.coverUrl) {
+          params.append("cover_url", options.coverUrl);
+        }
 
         if (options?.shareToFeed) {
           params.append("share_to_feed", "true");
@@ -126,6 +139,7 @@ export async function postToInstagram(
       }
 
       if (options?.scheduledPublishTime) {
+        params.append("publish", "false");
         params.append(
           "scheduled_publish_time",
           options.scheduledPublishTime.toString()
@@ -154,7 +168,15 @@ export async function postToInstagram(
 
     // ============================================================
     // PUBLISH STEP
+    // BUG 3 FIX: Skip the publish call when scheduledPublishTime is set.
+    // The container was already created with publish=false and a scheduled_publish_time.
+    // Calling media_publish immediately would override that and publish right now.
     // ============================================================
+    if (options?.scheduledPublishTime) {
+      console.log(`[Instagram] Post scheduled (container: ${creationId}). Skipping immediate publish.`);
+      return { id: creationId };
+    }
+
     console.log(`[Instagram] Publishing: ${creationId}`);
 
     const publishRes = await fetch(
@@ -183,6 +205,7 @@ export async function postToInstagram(
     throw error;
   }
 }
+
 async function waitForInstagramMediaProcessing(
     containerId: string,
     accessToken: string,
@@ -248,126 +271,138 @@ export async function getInstagramPostInsights(
     mediaId: string,
     accessToken: string
 ): Promise<InstagramPostInsights> {
+    // BUG 7 FIX: Re-throw genuine API errors rather than swallowing them as zero-engagement results.
+    // Only the "deleted/not found" case should return zero data — everything else should propagate.
+    const mediaFields = 'like_count,comments_count,media_type,caption,media_url,permalink';
+    const mediaResponse = await fetch(
+        `https://graph.facebook.com/v24.0/${mediaId}?fields=${mediaFields}&access_token=${accessToken}`
+    );
+
+    if (!mediaResponse.ok) {
+        const error = await mediaResponse.json();
+        const errorCode = error.error?.code;
+        const errorSubcode = error.error?.error_subcode;
+        const errorMessage = error.error?.message || "";
+
+        const isDefinitelyDeleted =
+            (errorCode === 100 && (errorSubcode === 33 || errorMessage.includes('does not exist'))) ||
+            errorCode === 210;
+
+        if (isDefinitelyDeleted) {
+            return {
+                likes: 0, comments: 0, impressions: 0, reach: 0, saved: 0,
+                shares: 0, video_views: 0, engagement: 0, engagementRate: 0, isDeleted: true
+            };
+        }
+        // Genuine API error — throw so callers know something went wrong
+        throw new Error(`Failed to fetch media details for ${mediaId}: ${JSON.stringify(error)}`);
+    }
+
+    const mediaData = await mediaResponse.json();
+    const likes = mediaData.like_count || 0;
+    const comments = mediaData.comments_count || 0;
+
+    let impressions = 0;
+    let reach = 0;
+    let saved = 0;
+    let video_views = 0;
+    let totalInteractions = likes + comments;
+
     try {
-        const fields = 'like_count,comments_count,media_type,caption,media_url,permalink';
-        const mediaResponse = await fetch(
-            `https://graph.facebook.com/v24.0/${mediaId}?fields=${fields}&access_token=${accessToken}`
+        const isVideo = mediaData.media_type === 'VIDEO';
+
+        const metricsArr = ['impressions', 'reach', 'saved', 'engagement'];
+        if (isVideo) {
+            metricsArr.push('plays');
+            metricsArr.push('total_interactions');
+        }
+
+        const metrics = metricsArr.join(',');
+
+        const insightsResponse = await fetch(
+            `https://graph.facebook.com/v24.0/${mediaId}/insights?metric=${metrics}&access_token=${accessToken}`
         );
 
-        if (!mediaResponse.ok) {
-            const error = await mediaResponse.json();
-            const errorCode = error.error?.code;
-            const errorSubcode = error.error?.error_subcode;
-            const errorMessage = error.error?.message || "";
+        if (insightsResponse.ok) {
+            const insightsData = await insightsResponse.json();
+            const data = insightsData.data || [];
 
-            const isDefinitelyDeleted =
-                (errorCode === 100 && (errorSubcode === 33 || errorMessage.includes('does not exist'))) ||
-                errorCode === 210;
+            // BUG 5 FIX: v24 media insights returns `total_value.value` (not `values[0]?.value`)
+            // when no period param is provided. Use total_value.value with a fallback to values[0].value
+            // for backwards compatibility with any period-scoped responses.
+            const extractValue = (metric: any): number => {
+                if (!metric) return 0;
+                if (metric.total_value?.value !== undefined) return metric.total_value.value;
+                return metric.values?.[0]?.value || 0;
+            };
 
-            if (isDefinitelyDeleted) {
-                return {
-                    likes: 0, comments: 0, impressions: 0, reach: 0, saved: 0, shares: 0, video_views: 0, engagement: 0, engagementRate: 0, isDeleted: true
-                };
-            }
-            throw new Error(`Failed to fetch media details: ${JSON.stringify(error)}`);
-        }
+            const reachMetric = data.find((m: any) => m.name === 'reach');
+            const savedMetric = data.find((m: any) => m.name === 'saved');
+            const impressionsMetric = data.find((m: any) => m.name === 'impressions');
+            const playsMetric = data.find((m: any) => m.name === 'plays');
+            const interactionsMetric = data.find((m: any) => m.name === 'total_interactions');
+            const engagementMetric = data.find((m: any) => m.name === 'engagement');
 
-        const mediaData = await mediaResponse.json();
-        const likes = mediaData.like_count || 0;
-        const comments = mediaData.comments_count || 0;
+            reach = extractValue(reachMetric);
+            saved = extractValue(savedMetric);
+            impressions = extractValue(impressionsMetric);
+            video_views = extractValue(playsMetric);
 
-        let impressions = 0;
-        let reach = 0;
-        let saved = 0;
-        let shares = 0;
-        let video_views = 0;
-        let totalInteractions = likes + comments;
-
-        try {
-            const isVideo = mediaData.media_type === 'VIDEO';
-
-            // User requested metrics: impressions, reach, saves, video_views, engagement
-            const metricsArr = ['impressions', 'reach', 'saved', 'engagement'];
-            if (isVideo) {
-                metricsArr.push('plays'); // maps to video_views for Reels
-                metricsArr.push('total_interactions');
+            if (interactionsMetric) {
+                totalInteractions = extractValue(interactionsMetric) || totalInteractions;
+                if (impressions === 0) impressions = video_views;
+            } else if (engagementMetric) {
+                totalInteractions = extractValue(engagementMetric) || totalInteractions;
             }
 
-            const metrics = metricsArr.join(',');
-
-            const insightsResponse = await fetch(
-                `https://graph.facebook.com/v24.0/${mediaId}/insights?metric=${metrics}&access_token=${accessToken}`
+        } else {
+            const fallbackResponse = await fetch(
+                `https://graph.facebook.com/v24.0/${mediaId}/insights?metric=impressions,reach,saved&access_token=${accessToken}`
             );
+            if (fallbackResponse.ok) {
+                const fallbackData = await fallbackResponse.json();
+                const fData = fallbackData.data || [];
 
-            if (insightsResponse.ok) {
-                const insightsData = await insightsResponse.json();
-                const data = insightsData.data || [];
+                const extractValue = (metric: any): number => {
+                    if (!metric) return 0;
+                    if (metric.total_value?.value !== undefined) return metric.total_value.value;
+                    return metric.values?.[0]?.value || 0;
+                };
 
-                const reachMetric = data.find((m: any) => m.name === 'reach');
-                const savedMetric = data.find((m: any) => m.name === 'saved');
-                const impressionsMetric = data.find((m: any) => m.name === 'impressions');
-                const playsMetric = data.find((m: any) => m.name === 'plays');
-                const interactionsMetric = data.find((m: any) => m.name === 'total_interactions');
-                const engagementMetric = data.find((m: any) => m.name === 'engagement');
-
-                if (reachMetric) reach = reachMetric.values[0]?.value || 0;
-                if (savedMetric) saved = savedMetric.values[0]?.value || 0;
-                if (impressionsMetric) impressions = impressionsMetric.values[0]?.value || 0;
-                if (playsMetric) video_views = playsMetric.values[0]?.value || 0;
-
-                if (interactionsMetric) {
-                    totalInteractions = interactionsMetric.values[0]?.value || totalInteractions;
-                    if (impressions === 0) impressions = video_views;
-                } else if (engagementMetric) {
-                    totalInteractions = engagementMetric.values[0]?.value || totalInteractions;
-                }
-
-                shares = Math.max(0, totalInteractions - (likes + comments + saved));
-
-            } else {
-                const fallbackResponse = await fetch(
-                    `https://graph.facebook.com/v24.0/${mediaId}/insights?metric=impressions,reach,saved&access_token=${accessToken}`
-                );
-                if (fallbackResponse.ok) {
-                    const fallbackData = await fallbackResponse.json();
-                    const fData = fallbackData.data || [];
-                    const impMetric = fData.find((m: any) => m.name === 'impressions');
-                    const rMetric = fData.find((m: any) => m.name === 'reach');
-                    const sMetric = fData.find((m: any) => m.name === 'saved');
-                    if (impMetric) impressions = impMetric.values[0]?.value || 0;
-                    if (rMetric) reach = rMetric.values[0]?.value || 0;
-                    if (sMetric) saved = sMetric.values[0]?.value || 0;
-                }
+                impressions = extractValue(fData.find((m: any) => m.name === 'impressions'));
+                reach = extractValue(fData.find((m: any) => m.name === 'reach'));
+                saved = extractValue(fData.find((m: any) => m.name === 'saved'));
             }
-        } catch (insightError) {
-            console.warn(`[Instagram] Could not fetch insights for media ${mediaId}`, insightError);
         }
-
-        const base = reach > 0 ? reach : impressions;
-        const engagementRate = base > 0 ? (totalInteractions / base) * 100 : 0;
-
-        return {
-            likes,
-            comments,
-            impressions,
-            reach,
-            saved,
-            shares,
-            video_views,
-            engagement: totalInteractions,
-            engagementRate,
-            isDeleted: false,
-            caption: mediaData.caption,
-            media_url: mediaData.media_url,
-            permalink: mediaData.permalink
-        };
-
-    } catch (error) {
-        console.error(`[Instagram] Error fetching insights for ${mediaId}:`, error);
-        return {
-            likes: 0, comments: 0, impressions: 0, reach: 0, saved: 0, shares: 0, video_views: 0, engagement: 0, engagementRate: 0, isDeleted: false
-        };
+    } catch (insightError) {
+        console.warn(`[Instagram] Could not fetch insights for media ${mediaId}`, insightError);
     }
+
+    // BUG 4 FIX: The previous `shares = totalInteractions - (likes + comments + saved)` formula
+    // was unreliable because Meta's total_interactions includes profile visits, story replies,
+    // and other actions — not just shares. This produced wildly incorrect share counts.
+    // Instagram's Graph API does not expose a standalone `shares` metric for feed posts.
+    // We default to 0 rather than report a meaningless number.
+    const shares = 0;
+
+    const base = reach > 0 ? reach : impressions;
+    const engagementRate = base > 0 ? (totalInteractions / base) * 100 : 0;
+
+    return {
+        likes,
+        comments,
+        impressions,
+        reach,
+        saved,
+        shares,
+        video_views,
+        engagement: totalInteractions,
+        engagementRate,
+        isDeleted: false,
+        caption: mediaData.caption,
+        media_url: mediaData.media_url,
+        permalink: mediaData.permalink
+    };
 }
 
 export interface InstagramMedia {
@@ -399,26 +434,26 @@ export async function getInstagramUserMedia(
     }
 }
 
+// BUG 6 FIX: Removed _rawResponses from public interface types.
+// Internal debug state should not be part of the production return contract.
 export interface InstagramAudienceInsights {
     audienceCity: Record<string, number>;
     audienceCountry: Record<string, number>;
     audienceGenderAge: Record<string, number>;
     audienceLocale: Record<string, number>;
     totalFollowers: number;
-    // New fields for detailed reports
     followerCity: Record<string, number>;
     followerCountry: Record<string, number>;
     followerGender: Record<string, number>;
     followerAge: Record<string, number>;
     followerReach: number;
     nonFollowerReach: number;
-    _rawResponses?: any[];
 }
 
 export async function getInstagramAudienceInsights(
     credentials: InstagramCredentials
 ): Promise<InstagramAudienceInsights> {
-    const _rawResponses: any[] = [];
+    const _rawResponses: any[] = []; // Internal only — not returned
     const capture = async (res: Response, label: string) => {
         try {
             const clone = res.clone();
@@ -449,14 +484,12 @@ export async function getInstagramAudienceInsights(
         const breakdowns = ['city', 'country', 'gender', 'age'];
         for (const breakdown of breakdowns) {
             try {
-                // v24 strict demographics: one breakdown per request, ensure metric_type is included as requested
                 const url = `https://graph.facebook.com/v24.0/${userId}/insights?metric=follower_demographics&period=lifetime&metric_type=total_value&breakdown=${breakdown}&access_token=${accessToken}`;
                 const res = await fetch(url);
                 await capture(res, `follower_demographics_${breakdown}`);
 
                 if (res.ok) {
                     const data = await res.json();
-                    // Structure: data.data[0].total_value.breakdowns[0].results
                     const results = data.data?.[0]?.total_value?.breakdowns?.[0]?.results || [];
 
                     results.forEach((item: any) => {
@@ -477,10 +510,10 @@ export async function getInstagramAudienceInsights(
         // Audience demographics (legacy/mapped from followers for UI stability)
         const audienceCity = followerCity;
         const audienceCountry = followerCountry;
-        const audienceGenderAge = { ...followerGender, ...followerAge }; // Legacy mix if needed, but we rely on new fields
+        const audienceGenderAge = { ...followerGender, ...followerAge };
         const audienceLocale: Record<string, number> = {};
 
-        // 2. Reach Breakdown (Not supported for IG accounts)
+        // Reach breakdown not supported for IG accounts
         const followerReach = 0;
         const nonFollowerReach = 0;
 
@@ -496,7 +529,6 @@ export async function getInstagramAudienceInsights(
             followerAge,
             followerReach,
             nonFollowerReach,
-            _rawResponses
         };
     } catch (error) {
         console.error('[Instagram] Error fetching audience insights:', error);
@@ -516,13 +548,13 @@ export async function getInstagramAudienceInsights(
     }
 }
 
+// BUG 6 FIX: Removed _rawResponses from public interface
 export interface InstagramAccountInsights {
     reach: number;
     impressions: number;
     profileViews: number;
     websiteClicks: number;
     followerCount: number;
-    _rawResponses?: any[];
 }
 
 export async function getInstagramAccountInsights(
@@ -530,7 +562,7 @@ export async function getInstagramAccountInsights(
 ): Promise<InstagramAccountInsights> {
     const { accessToken, userId } = credentials;
     try {
-        const _rawResponses: any[] = [];
+        const _rawResponses: any[] = []; // Internal only — not returned
         const capture = async (res: Response, label: string) => {
             try {
                 const clone = res.clone();
@@ -555,8 +587,7 @@ export async function getInstagramAccountInsights(
             followerCount = profileData.followers_count || 0;
         }
 
-        // 2. Fetch Daily Metrics (Reach, Profile Views, Website Clicks) manually aggregate over ~30 days.
-        // v24 Working URL for Reach/Views/Clicks: metric=reach,profile_views,website_clicks&period=day&metric_type=total_value
+        // 2. Fetch Daily Metrics (Reach, Profile Views, Website Clicks)
         const until = Math.floor(Date.now() / 1000);
         const since = until - (30 * 24 * 60 * 60);
 
@@ -587,7 +618,6 @@ export async function getInstagramAccountInsights(
         const growthUrl = `https://graph.facebook.com/v24.0/${userId}/insights?metric=follows_and_unfollows&period=day&metric_type=total_value&since=${since}&until=${until}&access_token=${accessToken}`;
         const growthRes = await fetch(growthUrl);
         await capture(growthRes, 'account_insights_daily_growth');
-        // (Just capturing for debug/raw data for now)
 
         return {
             reach,
@@ -595,7 +625,6 @@ export async function getInstagramAccountInsights(
             profileViews,
             websiteClicks,
             followerCount,
-            _rawResponses
         };
     } catch (error) {
         console.error('[Instagram] Error fetching account insights:', error);

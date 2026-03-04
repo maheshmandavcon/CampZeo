@@ -243,6 +243,7 @@ export async function sendCampaignPost(
                     mediaToUse,
                     {
                         isReel: isReel,
+                        coverUrl: metadata?.thumbnailUrl,
                         scheduledPublishTime: (scheduledTime && scheduledTime.getTime() > Date.now() + 960000) ? Math.floor(scheduledTime.getTime() / 1000) : undefined
                     }
                 );
@@ -399,6 +400,7 @@ export async function sendCampaignPost(
                         mediaToUse, // Pass the full array or string
                         {
                             isReel: (post.metadata as any)?.isReel,
+                            coverUrl: (post.metadata as any)?.thumbnailUrl,
                             shareToFeed: true,
                             isVideo: isVideoContent,
                             scheduledPublishTime: (scheduledTime && scheduledTime.getTime() > Date.now() + 960000) ? Math.floor(scheduledTime.getTime() / 1000) : undefined

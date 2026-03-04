@@ -150,7 +150,8 @@ async function updatePostHandler(
     } = body;
 
     // Construct metadata
-    let metadata: any = incomingMetadata || existingPost.metadata || {};
+    const existingMetadata = (existingPost.metadata as any) || {};
+    let metadata: any = { ...existingMetadata, ...(incomingMetadata || {}) };
 
     if (type === 'PINTEREST') {
         metadata = {
