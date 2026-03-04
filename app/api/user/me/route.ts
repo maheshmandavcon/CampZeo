@@ -58,6 +58,15 @@ async function getHandler() {
             }
         }
 
+        if (effectiveOrganisation) {
+            const hasPaidSubscription = effectiveOrganisation.subscriptions?.some(
+                sub => sub.status === "ACTIVE" && !sub.isTrial
+            );
+            if (hasPaidSubscription) {
+                effectiveOrganisation.isTrial = false;
+            }
+        }
+
         return NextResponse.json({
             id: dbUser.id,
             clerkId: dbUser.clerkId,

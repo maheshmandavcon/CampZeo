@@ -119,6 +119,12 @@ async function postHandler(req: Request) {
                             trialEndDate: null
                         }
                     });
+
+                    // Update organisation isTrial flag
+                    await prisma.organisation.update({
+                        where: { id: dbUser.organisationId! },
+                        data: { isTrial: false }
+                    });
                 } else {
                     // Immediate: Reset dates to today
                     updatedSubscription = await prisma.subscription.update({
@@ -133,6 +139,12 @@ async function postHandler(req: Request) {
                             trialEndDate: null
                         }
                     });
+
+                    // Update organisation isTrial flag
+                    await prisma.organisation.update({
+                        where: { id: dbUser.organisationId! },
+                        data: { isTrial: false }
+                    });
                 }
             } else {
                 // Create new subscription if none exists
@@ -146,6 +158,12 @@ async function postHandler(req: Request) {
                         renewalDate: nextBillingDate,
                         autoRenew: true
                     }
+                });
+
+                // Set organisation.isTrial to false when a paid subscription is created
+                await prisma.organisation.update({
+                    where: { id: dbUser.organisationId! },
+                    data: { isTrial: false }
                 });
             }
 

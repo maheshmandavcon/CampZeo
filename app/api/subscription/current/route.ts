@@ -57,7 +57,11 @@ async function getHandler() {
 
         // Calculate trial information
         let trialInfo = null;
-        if (organisation.isTrial && organisation.trialStartDate && organisation.trialEndDate) {
+        // Trial info should only be shown if organisation.isTrial is true 
+        // AND (no subscription exists OR the current subscription is marked as a trial)
+        const isActualTrial = organisation.isTrial && (!subscription || subscription.isTrial);
+        
+        if (isActualTrial && organisation.trialStartDate && organisation.trialEndDate) {
             const now = new Date();
             const trialEnd = new Date(organisation.trialEndDate);
             const trialStart = new Date(organisation.trialStartDate);
