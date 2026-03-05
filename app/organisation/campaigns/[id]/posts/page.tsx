@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,32 +32,10 @@ import {
     DialogFooter,
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-    ArrowLeft,
-    Loader2,
-    Plus,
-    Trash2,
-    Edit,
-    Calendar,
-    Send,
-    Mail,
-    MessageSquare,
-    Phone,
-    Copy,
-    Filter,
-    Facebook,
-    Instagram,
-    Linkedin,
-    Youtube,
-    Eye,
-    Share2,
-    Check,
-    Paperclip,
-    Globe,
-    Search,
-    Download
-} from 'lucide-react';
-import { useRouter, useParams } from 'next/navigation';
+import { MetaBoostSection, MetaBoostOptions } from './_components/MetaBoostSection';
+import { Rocket, Edit, Trash2, ExternalLink, Share2, Facebook, Instagram, Linkedin, Youtube, Pin, MoreVertical, Search, Filter, Calendar, CheckCircle2, AlertCircle, Clock, Sparkles, Send, ArrowLeft, Loader2, Plus, Mail, MessageSquare, Phone, Copy, Eye, Check, Paperclip, Globe, Download, Save, Users } from 'lucide-react';
+import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
 interface Post {
@@ -71,19 +49,25 @@ interface Post {
     senderEmail: string | null;
     videoUrl: string | null;
     mediaUrls: string[];
+    metadata?: any;
+    liveLink?: string | null;
 }
 
 interface Campaign {
     id: number;
     name: string;
     description: string | null;
+    startDate: string;
+    endDate: string;
     contacts?: any[];
+    metadata?: any;
 }
 
-export default function CampaignPostsPage() {
+export default function CampaignPostsPage({ params }: { params: Promise<{ id: string }> }) {
     const router = useRouter();
-    const params = useParams();
-    const campaignId = params.id as string;
+    const resolvedParams = React.use(params);
+    const searchParams = useSearchParams();
+    const campaignId = resolvedParams.id;
 
     // State
     const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -91,6 +75,9 @@ export default function CampaignPostsPage() {
     const [loading, setLoading] = useState(true);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [deletePostId, setDeletePostId] = useState<number | null>(null);
+    const [boostPost, setBoostPost] = useState<Post | null>(null);
+    const [savingBoost, setSavingBoost] = useState(false);
+    const [facebookAppId, setFacebookAppId] = useState<string | null>(null);
 
     // Filter State
     const [activeTab, setActiveTab] = useState('all');
@@ -128,6 +115,9 @@ export default function CampaignPostsPage() {
     const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
     const [sendingShare, setSendingShare] = useState(false);
     const [contactSearchQuery, setContactSearchQuery] = useState('');
+    const [lastUsedAdAccountId, setLastUsedAdAccountId] = useState<string>('');
+    const [boostDialogOptions, setBoostDialogOptions] = useState<MetaBoostOptions | null>(null);
+    const [hasPaidPlan, setHasPaidPlan] = useState(false); // Default to false (Secure by default - no flash)
 
     // Fetch organisation platforms
     useEffect(() => {
@@ -142,8 +132,121 @@ export default function CampaignPostsPage() {
             }
         };
 
+        const fetchSubscriptionStatus = async () => {
+            try {
+                const response = await fetch('/api/subscription/current');
+                if (response.ok) {
+                    const data = await response.json();
+                    const paidStatuses = ['ACTIVE', 'active', 'CANCELING', 'COMPLETED'];
+                    const hasPaid = !!data.subscription &&
+                        paidStatuses.includes(data.subscription.status) &&
+                        !data.trial?.isActive;
+                    setHasPaidPlan(hasPaid);
+                }
+            } catch (error) {
+                console.error('Error fetching subscription status:', error);
+            }
+        };
+
         fetchOrgPlatforms();
+        fetchSubscriptionStatus();
     }, []);
+
+    // Fetch Meta Ads config
+    useEffect(() => {
+        const fetchConfig = async () => {
+            try {
+                const res = await fetch("/api/socialmedia/meta-ads/config");
+                if (res.ok) {
+                    const data = await res.json();
+                    setFacebookAppId(data.facebookAppId);
+                }
+            } catch (e) {
+                console.error("Failed to fetch Meta Ads config", e);
+            }
+        };
+        fetchConfig();
+
+        // Load last used ad account from local storage
+        const stored = localStorage.getItem('last_meta_ad_account_id');
+        if (stored) setLastUsedAdAccountId(stored);
+    }, []);
+
+    const handleDirectBoost = (post: any) => {
+        const adAccountId = post.metadata?.metaBoost?.adAccountId || lastUsedAdAccountId;
+        const pageId = post.metadata?.facebookPageId || campaign?.metadata?.facebookPageId;
+        const fbPostId = post.metadata?.facebookPostId || post.metadata?.platformPostId || post.liveLink;
+
+        if (post.type === 'INSTAGRAM') {
+            // Facebook Ad Center natively rejects Instagram Media IDs and throws a "can't be promoted" error.
+            // We MUST use CampZeo's internal dialog for Instagram to perform the API auto-boost.
+            const existingBoost = post.metadata?.metaBoost;
+            const initialOptions: MetaBoostOptions = {
+                enabled: true,
+                adAccountId: existingBoost?.adAccountId || lastUsedAdAccountId || '',
+                budget: existingBoost?.budget || 5,
+                duration: existingBoost?.duration || 7,
+                objective: existingBoost?.objective || 'OUTCOME_ENGAGEMENT',
+                balance: existingBoost?.balance || '0'
+            };
+            setBoostDialogOptions(initialOptions);
+            setBoostPost(post);
+        } else if (post.isPostSent && adAccountId && pageId && fbPostId) {
+            openNativeBoostPopup(adAccountId, pageId, fbPostId);
+            toast.info("Opening Native Meta Boost Centre...");
+        } else {
+            // Open dialog and allow user to configure boost options
+            const existingBoost = post.metadata?.metaBoost;
+            const initialOptions: MetaBoostOptions = {
+                enabled: true,
+                adAccountId: existingBoost?.adAccountId || lastUsedAdAccountId || '',
+                budget: existingBoost?.budget || 5,
+                duration: existingBoost?.duration || 7,
+                objective: existingBoost?.objective || 'OUTCOME_ENGAGEMENT',
+                balance: existingBoost?.balance || '0'
+            };
+            setBoostDialogOptions(initialOptions);
+            setBoostPost(post);
+        }
+    };
+
+    const handleSaveBoostSettings = async () => {
+        if (!boostPost || !boostDialogOptions) return;
+
+        try {
+            setSavingBoost(true);
+            const response = await fetch(`/api/campaigns/${campaignId}/posts/${boostPost.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...boostPost,
+                    metadata: {
+                        ...(boostPost.metadata || {}),
+                        metaBoost: boostDialogOptions
+                    }
+                }),
+            });
+
+            if (!response.ok) throw new Error('Failed to save boost settings');
+
+            toast.success('Boost settings saved! They will be applied when the post is published.');
+
+            // Update local state
+            setPosts(prev => prev.map(p =>
+                p.id === boostPost.id
+                    ? { ...p, metadata: { ...(p.metadata || {}), metaBoost: boostDialogOptions } }
+                    : p
+            ));
+
+            setBoostPost(null);
+            setBoostDialogOptions(null);
+        } catch (error) {
+            console.error('Error saving boost settings:', error);
+            toast.error('Failed to save boost settings');
+        } finally {
+            setSavingBoost(false);
+        }
+    };
 
     // Fetch campaign and posts
     useEffect(() => {
@@ -164,9 +267,6 @@ export default function CampaignPostsPage() {
                 setPosts(postsData.posts);
             } catch (error) {
                 console.error('Error fetching data:', error);
-
-                console.error('Error fetching data:', error);
-
                 toast.error('Failed to load campaign posts');
                 router.push('/organisation/campaigns');
             } finally {
@@ -176,6 +276,25 @@ export default function CampaignPostsPage() {
 
         fetchData();
     }, [campaignId, router]);
+
+    // Auto-open share dialog when returning from edit page after adding contacts
+    useEffect(() => {
+        const returnTo = searchParams.get('returnTo');
+        const sharePostId = searchParams.get('postId');
+
+        if (returnTo === 'share' && sharePostId && posts.length > 0 && !loading) {
+            const postToShare = posts.find(p => p.id === parseInt(sharePostId));
+            if (postToShare) {
+                setSharePost(postToShare);
+                setSelectedContacts([]);
+            }
+            // Clean up URL params without reloading
+            const url = new URL(window.location.href);
+            url.searchParams.delete('returnTo');
+            url.searchParams.delete('postId');
+            window.history.replaceState({}, '', url.toString());
+        }
+    }, [posts, loading, searchParams]);
 
     // Reset page on filter change
     useEffect(() => {
@@ -264,12 +383,13 @@ export default function CampaignPostsPage() {
 
         try {
             setSendingShare(true);
+            const response = await fetch(`/api/campaigns/${campaignId}/posts/${sharePost.id}/send`,
 
-            const response = await fetch(`/api/campaigns/${campaignId}/posts/${sharePost.id}/send`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contactIds: selectedContacts })
-            });
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contactIds: selectedContacts })
+                });
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -278,7 +398,18 @@ export default function CampaignPostsPage() {
 
             const data = await response.json();
 
-            toast.success(isSocialPlatform ? 'Post published successfully!' : `Post shared successfully! Sent: ${data.sent}, Failed: ${data.failed}`);
+            if (isSocialPlatform) {
+                toast.success('Post published successfully!');
+            } else {
+                if (!data.success && data.sent === 0) {
+                    const firstError = data.errors?.[0]?.split(': ')[1] || data.error || 'Failed to send post';
+                    toast.error(`Failed: ${firstError}`);
+                } else if (data.failed > 0) {
+                    toast.warning(`Sent: ${data.sent}, Failed: ${data.failed}`);
+                } else {
+                    toast.success('Post shared successfully!');
+                }
+            }
             setSharePost(null);
             setSelectedContacts([]);
 
@@ -447,6 +578,20 @@ export default function CampaignPostsPage() {
         return content;
     };
 
+    // Get campaign status
+    const getCampaignStatus = (campaign: Campaign | null) => {
+        if (!campaign) return null;
+        const now = new Date();
+        const start = new Date(campaign.startDate);
+        const end = new Date(campaign.endDate);
+
+        if (now < start) return { label: 'Scheduled', variant: 'secondary' as const };
+        if (now > end) return { label: 'Completed', variant: 'outline' as const };
+        return { label: 'Active', variant: 'default' as const };
+    };
+
+    const campaignStatus = getCampaignStatus(campaign);
+
     if (loading) {
         return (
             <div className="min-h-screen bg-background">
@@ -494,7 +639,11 @@ export default function CampaignPostsPage() {
                                     {campaign?.description || 'Manage posts for this campaign'}
                                 </p>
                             </div>
-                            <Button className='cursor-pointer shrink-0' onClick={() => router.push(`/organisation/campaigns/${campaignId}/posts/new`)}>
+                            <Button
+                                className='cursor-pointer shrink-0'
+                                onClick={() => router.push(`/organisation/campaigns/${campaignId}/posts/new`)}
+                                disabled={campaignStatus?.label === 'Completed'}
+                            >
                                 <Plus className="size-4 mr-2" />
                                 <span className="hidden sm:inline">Add Post</span>
                                 <span className="sm:hidden">Add</span>
@@ -632,11 +781,22 @@ export default function CampaignPostsPage() {
                                                         size="sm"
                                                         variant="ghost"
                                                         onClick={() => {
+                                                            const isLocked = !hasPaidPlan && (post.type === 'SMS' || post.type === 'WHATSAPP');
+                                                            if (isLocked) {
+                                                                toast('Paid plan required', {
+                                                                    description: 'SMS and WhatsApp are only available on paid plans.',
+                                                                    action: {
+                                                                        label: 'Upgrade',
+                                                                        onClick: () => router.push('/organisation/billing')
+                                                                    }
+                                                                });
+                                                                return;
+                                                            }
                                                             setSharePost(post);
                                                             setSelectedContacts([]);
                                                         }}
                                                         title={isSocialPlatform ? "Publish Now" : "Share to Contacts"}
-                                                        disabled={post.isPostSent}
+                                                        disabled={post.isPostSent || campaignStatus?.label === 'Completed'}
                                                     >
                                                         {isSocialPlatform ? <Send className="size-4" /> : <Share2 className="size-4" />}
                                                     </Button>
@@ -651,6 +811,18 @@ export default function CampaignPostsPage() {
                                                     >
                                                         <Edit className="size-4" />
                                                     </Button>
+                                                    {(post.type === 'FACEBOOK' || post.type === 'INSTAGRAM') && (
+                                                        <Button
+                                                            className={`cursor-pointer ${post.isPostSent ? 'text-blue-600 border-blue-600 hover:bg-blue-50' : 'text-primary border-primary hover:bg-primary/5'}`}
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => handleDirectBoost(post)}
+                                                            title="Boost Post"
+                                                        >
+                                                            <Rocket className="size-4 mr-1" />
+                                                            <span className="hidden lg:inline">{post.isPostSent ? 'Boost' : 'Set Boost'}</span>
+                                                        </Button>
+                                                    )}
                                                     <Button
                                                         className='cursor-pointer'
                                                         size="sm"
@@ -821,6 +993,71 @@ export default function CampaignPostsPage() {
                 </DialogContent>
             </Dialog>
 
+            {/* Meta Boost Dialog */}
+            <Dialog
+                open={!!boostPost}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setBoostPost(null);
+                        setBoostDialogOptions(null);
+                    }
+                }}
+            >
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Rocket className="w-5 h-5 text-primary" />
+                            Boost Existing Post
+                        </DialogTitle>
+                        <DialogDescription>
+                            Configure budget and targeting to reach more people with this post.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {boostPost && (
+                        <div className="space-y-4">
+                            <MetaBoostSection
+                                platform={boostPost.type}
+                                facebookAppId={facebookAppId}
+                                fbPostId={boostPost.metadata?.facebookPostId || boostPost.metadata?.platformPostId || boostPost.liveLink}
+                                fbPageId={boostPost.metadata?.facebookPageId || campaign?.metadata?.facebookPageId}
+                                options={
+                                    boostDialogOptions || {
+                                        enabled: true,
+                                        adAccountId: boostPost.metadata?.metaBoost?.adAccountId || '',
+                                        budget: boostPost.metadata?.metaBoost?.budget || 5,
+                                        duration: boostPost.metadata?.metaBoost?.duration || 7,
+                                        objective: boostPost.metadata?.metaBoost?.objective || 'OUTCOME_ENGAGEMENT',
+                                        balance: boostPost.metadata?.metaBoost?.balance || '0'
+                                    }
+                                }
+                                onChange={(newOptions) => {
+                                    console.log("Boost Options Updated:", newOptions);
+                                    setBoostDialogOptions(newOptions);
+                                    if (newOptions.adAccountId) {
+                                        setLastUsedAdAccountId(newOptions.adAccountId);
+                                        localStorage.setItem('last_meta_ad_account_id', newOptions.adAccountId);
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => {
+                            setBoostPost(null);
+                            setBoostDialogOptions(null);
+                        }} disabled={savingBoost}>Cancel</Button>
+                        <Button
+                            className="bg-primary text-white"
+                            onClick={handleSaveBoostSettings}
+                            disabled={savingBoost || !boostDialogOptions?.adAccountId}
+                        >
+                            {savingBoost ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                            Save Boost Settings
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             {/* Share/Send Dialog */}
             <Dialog open={!!sharePost} onOpenChange={(open) => {
                 if (!open) {
@@ -882,8 +1119,27 @@ export default function CampaignPostsPage() {
                                                 </div>
                                             ))
                                         ) : (
-                                            <div className="p-4 text-center text-muted-foreground text-sm">
-                                                {contactSearchQuery ? 'No contacts found matching your search' : 'No contacts found in this campaign'}
+                                            <div className="p-8 text-center space-y-4">
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <Users className="size-8 text-muted-foreground/50" />
+                                                    <p className="text-muted-foreground text-sm">
+                                                        {contactSearchQuery ? 'No contacts found matching your search' : 'No contacts found in this campaign'}
+                                                    </p>
+                                                </div>
+                                                {!contactSearchQuery && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="cursor-pointer"
+                                                        onClick={() => {
+                                                            setSharePost(null);
+                                                            router.push(`/organisation/campaigns/${campaignId}/edit?returnTo=share&postId=${sharePost?.id}`);
+                                                        }}
+                                                    >
+                                                        <Plus className="size-4 mr-2" />
+                                                        Add Contacts to Campaign
+                                                    </Button>
+                                                )}
                                             </div>
                                         )}
                                     </div>

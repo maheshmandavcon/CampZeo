@@ -150,7 +150,8 @@ async function updatePostHandler(
     } = body;
 
     // Construct metadata
-    let metadata: any = incomingMetadata || existingPost.metadata || {};
+    const existingMetadata = (existingPost.metadata as any) || {};
+    let metadata: any = { ...existingMetadata, ...(incomingMetadata || {}) };
 
     if (type === 'PINTEREST') {
         metadata = {
@@ -299,6 +300,11 @@ async function deletePostHandler(
     if (existingPost.isPostSent) {
         return NextResponse.json({ error: 'Cannot delete a sent post' }, { status: 400 });
     }
+
+    // Delete related PostAudit records first (no cascade delete in schema)
+    await prisma.postAudit.deleteMany({
+        where: { postId: postIdNum },
+    });
 
     // Delete post
     await prisma.campaignPost.delete({

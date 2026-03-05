@@ -115,7 +115,10 @@ async function getHandler() {
             }
 
             if (fbStatus) {
-                status.facebook = fbStatus;
+                status.facebook = {
+                    ...fbStatus,
+                    pageId: dbUser.facebookPageId
+                };
                 // If it's a session expired error, override name for UI clarity
                 if (fbStatus.error === "Session Expired") {
                     status.facebook.name = "Session Expired (Re-connect)";
@@ -214,7 +217,7 @@ async function getHandler() {
             try {
                 let name = "Connected";
                 let followerCount: number | null = null;
-                const urn = dbUser.linkedInAuthUrn;
+                let urn = dbUser.linkedInAuthUrn;
                 const token = dbUser.linkedInAccessToken;
 
                 if (urn && urn.startsWith("urn:li:organization:")) {
@@ -255,6 +258,23 @@ async function getHandler() {
                         const firstName = data.localizedFirstName;
                         const lastName = data.localizedLastName;
                         name = `${firstName} ${lastName}`;
+
+                        // Auto-fix URN if missing/incorrect
+                        if (data.id) {
+                            const correctUrn = `urn:li:person:${data.id}`;
+                            if (urn !== correctUrn) {
+                                try {
+                                    await prisma.user.update({
+                                        where: { id: dbUser.id },
+                                        data: { linkedInAuthUrn: correctUrn }
+                                    });
+                                    urn = correctUrn; // Update local variable so response is correct
+                                    console.log(`[Social Status] Auto-fixed LinkedIn URN for user ${dbUser.id} to ${correctUrn}`);
+                                } catch (updateErr) {
+                                    console.error("[Social Status] Failed to auto-fix LinkedIn URN", updateErr);
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -301,7 +321,8 @@ async function getHandler() {
                     name,
                     followerCount,
                     hasOrganizations: organizations.length > 0,
-                    organizations: organizations
+                    organizations: organizations,
+                    urn: urn
                 };
             } catch (e) {
                 status.linkedin = { connected: true, name: "Connected" };

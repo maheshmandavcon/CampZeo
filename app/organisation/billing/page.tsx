@@ -80,7 +80,7 @@ interface UsageData {
     campaigns: UsageMetric;
     contacts: UsageMetric;
     users: UsageMetric;
-    platforms: UsageMetric;
+    platforms: UsageMetric & { connectedNames?: string[] };
     postsThisMonth: UsageMetric;
   };
 }
@@ -499,6 +499,8 @@ export default function BillingPage() {
           open={showComparisonModal}
           onOpenChange={setShowComparisonModal}
           currentPlanId={currentPlan?.id.toString()}
+          currentPlanName={currentPlan?.name}
+          planStatus={subscriptionData?.subscription?.status?.toUpperCase()}
           onSelectPlan={handleSelectPlan}
         />
 

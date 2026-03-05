@@ -1,10 +1,18 @@
-import { getSocialMediaUrl, validateMediaUrl, isVideoUrl } from './media-utils';
+// BUG 1 FIX: Removed unused `getSocialMediaUrl` import
+import { validateMediaUrl, isVideoUrl } from './media-utils';
 import { Buffer } from 'buffer';
 
-async function debugFacebookToken(accessToken: string, logPrefix: string = '[Facebook]'): Promise<void> {
+// BUG 3 FIX: debug_token now accepts an optional appToken param.
+// The second `access_token` param must be an App Access Token (not a Page/User token).
+// If no appToken is supplied we skip the debug call rather than misuse the page token.
+async function debugFacebookToken(accessToken: string, logPrefix: string = '[Facebook]', appToken?: string): Promise<void> {
+    if (!appToken) {
+        console.warn(`${logPrefix} Skipping token debug — App Access Token not provided. Pass appToken to enable.`);
+        return;
+    }
     try {
         console.log(`${logPrefix} Debugging Token permissions...`);
-        const response = await fetch(`https://graph.facebook.com/v24.0/debug_token?input_token=${accessToken}&access_token=${accessToken}`);
+        const response = await fetch(`https://graph.facebook.com/v24.0/debug_token?input_token=${accessToken}&access_token=${appToken}`);
 
         if (response.ok) {
             const data = await response.json();
@@ -24,17 +32,13 @@ interface FacebookCredentials {
     pageId: string;
 }
 
-interface FacebookPostOptions {
-    message: string;
-    mediaUrls?: string | string[] | null;
-    isReel?: boolean; // For Facebook Reels
-}
+// BUG 2 FIX: Removed unused interface FacebookPostOptions
 
 export async function postToFacebook(
     credentials: FacebookCredentials,
     message: string,
     mediaUrls?: string | string[] | null,
-    options?: { isReel?: boolean }
+    options?: { isReel?: boolean; scheduledPublishTime?: number; coverUrl?: string }
 ) {
     const { accessToken, pageId } = credentials;
 
@@ -50,7 +54,9 @@ export async function postToFacebook(
     }
 
     try {
-        let postId: string;
+        // BUG 4 FIX: Initialize postId to empty string to avoid "used before assigned" in strict TS.
+        // Every code path below either sets it or returns/throws before reaching the final log.
+        let postId = '';
 
         if (mediaList.length === 0) {
             // Text-only post
@@ -62,8 +68,9 @@ export async function postToFacebook(
                 body: JSON.stringify({
                     message,
                     access_token: accessToken,
-                    privacy: { value: 'EVERYONE' }, // Ensure post is public
-                    published: true
+                    // Note: 'privacy' is often not supported for Page posts and can cause (#3) errors
+                    published: options?.scheduledPublishTime ? false : true,
+                    scheduled_publish_time: options?.scheduledPublishTime
                 }),
             });
 
@@ -93,7 +100,6 @@ export async function postToFacebook(
                     body: JSON.stringify({
                         message: message + '\n\n(Media not posted: URL not publicly accessible)',
                         access_token: accessToken,
-                        privacy: { value: 'EVERYONE' },
                         published: true
                     }),
                 });
@@ -111,7 +117,8 @@ export async function postToFacebook(
 
                 // Check if it's a Reel (short video)
                 if (options?.isReel && isVideo) {
-                    return await postFacebookReel(credentials, message, publicUrl);
+                    // Reel path: returns early, postId not needed
+                    return await postFacebookReel(credentials, message, publicUrl, options?.coverUrl);
                 } else {
                     // Regular photo or video post
                     const endpoint = isVideo ? 'videos' : 'photos';
@@ -125,11 +132,11 @@ export async function postToFacebook(
                                 'Content-Type': 'application/json',
                             },
                             body: JSON.stringify({
-                                message,
+                                description: message, // Use description for videos
                                 file_url: publicUrl,
                                 access_token: accessToken,
-                                privacy: { value: 'EVERYONE' },
-                                published: true
+                                published: options?.scheduledPublishTime ? false : true,
+                                scheduled_publish_time: options?.scheduledPublishTime
                             }),
                         });
 
@@ -155,8 +162,8 @@ export async function postToFacebook(
                                 message,
                                 url: publicUrl,
                                 access_token: accessToken,
-                                privacy: { value: 'EVERYONE' },
-                                published: true
+                                published: options?.scheduledPublishTime ? false : true,
+                                scheduled_publish_time: options?.scheduledPublishTime
                             }),
                         });
 
@@ -172,14 +179,16 @@ export async function postToFacebook(
             }
 
         } else {
-            // Multiple media items (mix of photos and videos)
+            // BUG 6 FIX: Multi-media — collect upload failures and surface them rather than silently dropping.
             const mediaIds: string[] = [];
+            const uploadErrors: string[] = [];
 
             for (const mediaUrl of mediaList) {
                 const validation = validateMediaUrl(mediaUrl);
 
                 if (!validation.valid) {
                     console.warn(`[Facebook] Skipping invalid URL: ${mediaUrl}`);
+                    uploadErrors.push(`Invalid URL (${mediaUrl}): ${validation.message}`);
                     continue;
                 }
 
@@ -203,16 +212,28 @@ export async function postToFacebook(
 
                 if (!response.ok) {
                     const error = await response.json();
-                    console.error(`Failed to upload ${endpoint}: ${error}`);
+                    const errMsg = `Failed to upload ${endpoint} (${validation.url}): ${JSON.stringify(error)}`;
+                    console.error(`[Facebook] ${errMsg}`);
+                    uploadErrors.push(errMsg);
                     continue;
                 }
 
                 const data = await response.json();
                 mediaIds.push(data.id);
+
+                // Wait for processing if it's a video (important for multi-media posts)
+                if (isVideo) {
+                    await waitForFacebookVideoProcessing(data.id, accessToken);
+                }
             }
 
             if (mediaIds.length === 0) {
-                throw new Error('No valid media could be uploaded');
+                const detail = uploadErrors.length > 0 ? ` Errors: ${uploadErrors.join('; ')}` : '';
+                throw new Error(`No valid media could be uploaded.${detail}`);
+            }
+
+            if (uploadErrors.length > 0) {
+                console.warn(`[Facebook] ${uploadErrors.length} media item(s) failed to upload and were skipped: ${uploadErrors.join('; ')}`);
             }
 
             // Create post with all media (photos and videos)
@@ -225,14 +246,20 @@ export async function postToFacebook(
                     message,
                     attached_media: mediaIds.map(id => ({ media_fbid: id })),
                     access_token: accessToken,
-                    privacy: { value: 'EVERYONE' },
-                    published: true
+                    published: options?.scheduledPublishTime ? false : true,
+                    scheduled_publish_time: options?.scheduledPublishTime
                 }),
             });
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(`Facebook API error: ${JSON.stringify(error)}`);
+                const errorMsg = JSON.stringify(error);
+                
+                if (errorMsg.includes('(#3)') || errorMsg.includes('whitelist')) {
+                    throw new Error(`Facebook API error: Multi-item posting is restricted for this Page or App. ${errorMsg}. Hint: Try posting photos and videos separately, or ensure your app is in Live mode.`);
+                }
+                
+                throw new Error(`Facebook API error: ${errorMsg}`);
             }
 
             const data = await response.json();
@@ -255,7 +282,8 @@ export async function postToFacebook(
 async function postFacebookReel(
     credentials: FacebookCredentials,
     message: string,
-    videoUrl: string
+    videoUrl: string,
+    coverUrl?: string
 ) {
     const { accessToken, pageId } = credentials;
 
@@ -324,6 +352,16 @@ async function postFacebookReel(
     }
 
     console.log(`[Facebook] Reel published successfully: ${videoId}`);
+
+    if (coverUrl) {
+        try {
+            await setFacebookVideoThumbnail(accessToken, videoId, coverUrl);
+            console.log(`[Facebook] Reel cover set successfully`);
+        } catch (err) {
+            console.warn(`[Facebook] Failed to set reel cover (non-blocking):`, err);
+        }
+    }
+
     return { id: videoId };
 }
 
@@ -333,7 +371,7 @@ async function postFacebookReel(
 async function waitForFacebookVideoProcessing(
     videoId: string,
     accessToken: string,
-    timeout: number = 60000 // 60 second timeout
+    timeout: number = 300000 // 5 minute timeout for video processing
 ): Promise<void> {
     const startTime = Date.now();
     const pollInterval = 3000; // Check every 3 seconds
@@ -362,13 +400,13 @@ async function waitForFacebookVideoProcessing(
             } else {
                 console.warn(`[Facebook] Status check failed for ${videoId}: ${statusResponse.status}`);
             }
-        } catch (e) {
-            console.error(`[Facebook] Error checking status for ${videoId}`, e);
-            // Don't swallow the specific error thrown above
-            if (e instanceof Error && e.message.includes('Video processing failed')) {
+        } catch (e: any) {
+            // Re-throw processing failures immediately to stop the polling loop
+            if (e.message?.includes('Video processing failed')) {
                 await debugFacebookToken(accessToken);
                 throw e;
             }
+            console.error(`[Facebook] Error checking status for ${videoId}`, e);
         }
 
         await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -494,18 +532,20 @@ async function setFacebookVideoThumbnail(
             throw new Error(`Failed to fetch thumbnail: ${thumbnailResponse.statusText}`);
         }
 
-        const thumbnailBuffer = Buffer.from(await thumbnailResponse.arrayBuffer());
+        const thumbnailBuffer = await thumbnailResponse.arrayBuffer();
         const contentType = thumbnailResponse.headers.get('content-type') || 'image/jpeg';
 
-        // Upload thumbnail to Facebook
+        const formData = new FormData();
+        const blob = new Blob([thumbnailBuffer], { type: contentType });
+        formData.append('source', blob, 'thumbnail.jpg');
+        formData.append('is_preferred', 'true');
+
+        // Upload thumbnail to Facebook Using /thumbnails edge for videos
         const response = await fetch(
-            `https://graph.facebook.com/v24.0/${videoId}/picture?access_token=${accessToken}`,
+            `https://graph.facebook.com/v24.0/${videoId}/thumbnails?access_token=${accessToken}`,
             {
                 method: 'POST',
-                headers: {
-                    'Content-Type': contentType,
-                },
-                body: thumbnailBuffer,
+                body: formData,
             }
         );
 
@@ -609,13 +649,28 @@ export async function getFacebookPostInsights(
             const error = await postResponse.json();
             const errorMessage = error.error?.message || "";
 
-            // If the error is specifically about the 'shares' or 'engagement' field (common on Photo nodes), retry without them
-            if (errorMessage.includes('nonexisting field') && (errorMessage.includes('shares') || errorMessage.includes('engagement'))) {
+            // If the error is specifically about non-existing fields (common on Photo/Video nodes), retry without them
+            if (errorMessage.includes('nonexisting field')) {
                 console.log(`[Facebook] Retrying insights for ${postId} without incompatible fields...`);
-                fields = 'likes.summary(true),reactions.summary(true),comments.summary(true),message,full_picture,permalink_url';
-                postResponse = await fetch(
-                    `https://graph.facebook.com/v24.0/${postId}?fields=${fields}&access_token=${accessToken}`
-                );
+
+                // Identify which field caused the error and remove it
+                let currentFields = fields.split(',');
+                let newFieldsArr = currentFields;
+
+                if (errorMessage.includes('(shares)')) newFieldsArr = newFieldsArr.filter(f => f !== 'shares');
+                if (errorMessage.includes('(engagement)')) newFieldsArr = newFieldsArr.filter(f => f !== 'engagement');
+                if (errorMessage.includes('(message)')) {
+                    newFieldsArr = newFieldsArr.filter(f => f !== 'message');
+                    // For Photos, 'name' is often the caption field
+                    if (!newFieldsArr.includes('name')) newFieldsArr.push('name');
+                }
+
+                const newFields = newFieldsArr.join(',');
+                if (newFields !== fields) {
+                    postResponse = await fetch(
+                        `https://graph.facebook.com/v24.0/${postId}?fields=${newFields}&access_token=${accessToken}`
+                    );
+                }
             }
         }
 
@@ -751,7 +806,7 @@ export async function getFacebookPostInsights(
             engagement: totalEngagements,
             engagementRate,
             isDeleted: false,
-            message: postData.message,
+            message: postData.message || postData.name,
             full_picture: postData.full_picture,
             permalink_url: postData.permalink_url
         };
@@ -776,7 +831,6 @@ export interface FacebookAudienceInsights {
     // New fields from user request
     fanAdds?: number;
     fanRemoves?: number;
-    _rawResponses?: any[];
 }
 
 export async function getFacebookPageAudience(
@@ -854,21 +908,25 @@ export async function getFacebookPageAudience(
         let fanReach = 0;
         let totalUniqueReach = 0;
 
+        // BUG 5 FIX: capture() already consumed a clone; call .json() directly on the original once.
+        // Also fixed operator-precedence issue in the original ternary (await reachSplitResponse.ok ? ...)
         if (reachSplitResponse.ok) {
-            const data = await reachSplitResponse.ok ? await reachSplitResponse.json() : { data: [] };
-            fanReach = data.data?.find((m: any) => m.name === 'page_posts_impressions_fan_unique')?.values[0]?.value || 0;
-            totalUniqueReach = data.data?.find((m: any) => m.name === 'page_posts_impressions_unique')?.values[0]?.value || 0;
+            const splitData = await reachSplitResponse.json();
+            fanReach = splitData.data?.find((m: any) => m.name === 'page_posts_impressions_fan_unique')?.values[0]?.value || 0;
+            totalUniqueReach = splitData.data?.find((m: any) => m.name === 'page_posts_impressions_unique')?.values[0]?.value || 0;
         }
 
-        // 4. Fetch Fan Adds/Removes (User requested metrics from separate URL logic)
+        // 4. Fetch Fan Adds/Removes
+        // BUG 8 FIX: page_fan_adds / page_fan_removes do NOT support period=lifetime.
+        // Supported periods are 'day' and 'week'. Using 'day' here to get the latest daily value.
         let fanAdds = 0;
         let fanRemoves = 0;
         try {
             const fanGrowthMetrics = 'page_fan_adds,page_fan_removes';
             const growthRes = await fetch(
-                `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${fanGrowthMetrics}&period=lifetime&access_token=${accessToken}`
+                `https://graph.facebook.com/v24.0/${pageId}/insights?metric=${fanGrowthMetrics}&period=day&access_token=${accessToken}`
             );
-            await capture(growthRes, 'fan_growth_lifetime');
+            await capture(growthRes, 'fan_growth_day');
             if (growthRes.ok) {
                 const growthData = await growthRes.json();
                 fanAdds = growthData.data?.find((m: any) => m.name === 'page_fan_adds')?.values[0]?.value || 0;
@@ -890,7 +948,6 @@ export async function getFacebookPageAudience(
             nonFanReach: Math.max(0, totalUniqueReach - fanReach),
             fanAdds,
             fanRemoves,
-            _rawResponses
         };
 
     } catch (error) {
@@ -918,7 +975,6 @@ export interface FacebookAccountInsights {
     pageViews?: number;
     pageLikes?: number;
     engagedUsers?: number;
-    _rawResponses?: any[];
 }
 
 export async function getFacebookAccountInsights(
@@ -993,10 +1049,382 @@ export async function getFacebookAccountInsights(
             pageViews,
             pageLikes,
             engagedUsers,
-            _rawResponses
         };
     } catch (error) {
         console.error('[Facebook] Error fetching account insights:', error);
         return { reach: 0, impressions: 0, engagement: 0, followerCount: 0, pageViews: 0, pageLikes: 0, engagedUsers: 0 };
+    }
+}
+
+export interface FacebookLeadForm {
+    id: string;
+    name: string;
+    status: string;
+    leadgen_export_csv_url?: string;
+    questions?: any[];
+    privacy_policy_url?: string;
+    created_time?: string;
+}
+
+/**
+ * Fetch lead forms for a Facebook Page
+ */
+export async function getFacebookLeadForms(
+    pageId: string,
+    accessToken: string
+): Promise<FacebookLeadForm[]> {
+    try {
+        const fields = 'id,name,status,privacy_policy_url,questions,created_time';
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/${pageId}/leadgen_forms?fields=${fields}&access_token=${accessToken}`
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(`Failed to fetch lead forms: ${JSON.stringify(error)}`);
+        }
+
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('[Facebook] Error fetching lead forms:', error);
+        throw error;
+    }
+}
+
+export async function getFacebookLeadFormDetails(
+    formId: string,
+    accessToken: string
+): Promise<any> {
+    try {
+        // Fetch only the fields that are actually supported by Facebook API for individual forms
+        // Note: Many fields like custom_disclaimer, context_card, thank_you_page are not available when fetching individual forms
+        const fields = 'id,name,status,privacy_policy_url,questions,created_time';
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/${formId}?fields=${fields}&access_token=${accessToken}`
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(`Failed to fetch lead form details: ${JSON.stringify(error)}`);
+        }
+
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('[Facebook] Error fetching lead form details:', error);
+        throw error;
+    }
+}
+
+export interface FormData {
+    name: string;
+    privacy_policy_url: string;
+    privacy_policy_link_text?: string;
+    questions?: Array<{
+        type: string;
+        key?: string;
+        label?: string;
+        options?: string[];
+    }>;
+    questions_description?: string; // New field
+    greeting?: string;
+    intro_description?: string;
+    context_card_style?: 'PARAGRAPH_STYLE' | 'LIST_STYLE';
+    context_card_content?: string[];
+    thank_you_headline?: string;
+    thank_you_description?: string;
+    follow_up_action_url?: string;
+    custom_disclaimer?: {
+        title: string;
+        body: {
+            text: string;
+            url_entities?: Array<{
+                offset: number;
+                length: number;
+                url: string;
+            }>;
+        };
+        checkboxes: Array<{
+            key: string;
+            text: string;
+            is_required: boolean;
+            is_checked_by_default: boolean;
+        }>;
+    };
+}
+
+export async function createFacebookLeadForm(
+    pageId: string,
+    accessToken: string,
+    formData: FormData
+) {
+    try {
+        // Validation
+        if (!pageId || !accessToken) {
+            throw new Error('Missing page ID or access token');
+        }
+        if (!formData.name) {
+            throw new Error('Form name is required');
+        }
+        if (!formData.privacy_policy_url) {
+            throw new Error('Privacy policy URL is required');
+        }
+
+        // Validate questions
+        const validQuestionTypes = [
+            'FULL_NAME', 'EMAIL', 'PHONE', 'CITY', 'STATE', 'COUNTRY', 'ZIP',
+            'job_title', 'work_email', 'work_phone_number', 'company_name',
+            'CUSTOM'
+        ];
+
+        const labels = new Set<string>();
+
+        if (formData.questions) {
+            for (const q of formData.questions) {
+                if (!validQuestionTypes.includes(q.type) && q.type !== 'CUSTOM') {
+                    // It might be a valid standard field that we haven't explicitly listed here, 
+                    // but standard fields usually don't cause issues unless malformed.
+                    // We'll trust the input type is valid or standard field name.
+                }
+
+                // For custom questions, we check the label. 
+                // For standard questions, they usually have a default label if not provided.
+                // Meta API error was: "Cannot have two questions sharing the same label"
+                const label = (q.label || q.type || '').toString().trim().toLowerCase();
+                if (!label) continue;
+
+                if (labels.has(label)) {
+                    throw new Error(`Duplicate question label detected: "${q.label || q.type}". All question labels must be unique.`);
+                }
+                labels.add(label);
+            }
+        }
+
+        // Structured payload for Meta API - only include supported fields
+        const payload: any = {
+            name: formData.name,
+            questions: formData.questions?.map((q: any) => {
+                // Ensure options is only present if it has values
+                const { id, ...rest } = q;
+                return rest;
+            }),
+            question_page_custom_headline: formData.questions_description, // Map to API field
+            privacy_policy: {
+                url: formData.privacy_policy_url,
+                link_text: formData.privacy_policy_link_text || 'Privacy Policy'
+            },
+            access_token: accessToken,
+        };
+
+        // Add optional fields that Meta API supports
+        if (formData.follow_up_action_url) {
+            payload.follow_up_action_url = formData.follow_up_action_url;
+        }
+
+        // Context card (intro description)
+        // Meta supports PARAGRAPH_STYLE (string content) and LIST_STYLE (array of strings content)
+        if (formData.greeting) {
+            const style = formData.context_card_style || 'PARAGRAPH_STYLE';
+
+            // Validate content based on style
+            let content: string | string[] | undefined;
+
+            if (style === 'LIST_STYLE') {
+                if (Array.isArray(formData.context_card_content) && formData.context_card_content.length > 0) {
+                    content = formData.context_card_content;
+                }
+            } else {
+                // PARAGRAPH_STYLE
+                content = formData.intro_description;
+            }
+
+            if (content) {
+                payload.context_card = {
+                    title: formData.greeting, // Required by Meta API
+                    content: content,
+                    style: style // Required by Meta API
+                };
+            }
+        }
+
+        // Thank you page - Fully supported
+        if (formData.thank_you_headline || formData.thank_you_description) {
+            payload.thank_you_page = {
+                title: formData.thank_you_headline,
+                body: formData.thank_you_description,
+                button_type: 'VIEW_WEBSITE', // Required by Meta API
+                button_text: 'Continue', // Required by Meta API
+                website_url: formData.privacy_policy_url // Required when button_type is VIEW_WEBSITE
+            };
+        }
+
+        // Custom Disclaimer - Fully supported
+        if (formData.custom_disclaimer) {
+            payload.custom_disclaimer = {
+                title: formData.custom_disclaimer.title || 'Terms and Conditions',
+                // BUG 7 FIX: formData.custom_disclaimer.body is an object {text, url_entities}.
+                // Must pass body.text (string) here, not the whole body object.
+                body: {
+                    text: formData.custom_disclaimer.body.text,
+                    ...(formData.custom_disclaimer.body.url_entities
+                        ? { url_entities: formData.custom_disclaimer.body.url_entities }
+                        : {}),
+                },
+                checkboxes: formData.custom_disclaimer.checkboxes?.map((cb: any) => ({
+                    key: cb.key || `checkbox_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                    text: cb.text,
+                    is_required: cb.is_required !== false, // Default to true
+                    is_checked_by_default: cb.is_checked_by_default || false
+                }))
+            };
+        }
+
+        // Note: The following fields are NOT supported by Meta's Lead Ads API and are not included:
+        // - form_type (MORE_VOLUME, HIGHER_INTENT, RICH_CREATIVE)
+        // - require_phone_verification
+        // - contact_description
+        // - custom_notices (legal_content)
+        // - greeting (as standalone field)
+        // - description_format (list vs paragraph - always saved as paragraph)
+
+        // BUG 9 FIX: Removed console.log of full payload — it contained the access_token credential.
+        // Log a redacted summary instead.
+        console.log('[Facebook] Submitting lead form:', {
+            name: payload.name,
+            questionCount: payload.questions?.length ?? 0,
+            hasContextCard: !!payload.context_card,
+            hasThankYouPage: !!payload.thank_you_page,
+            hasCustomDisclaimer: !!payload.custom_disclaimer,
+        });
+
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/${pageId}/leadgen_forms`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            console.error('[Facebook] Lead form creation failed:', JSON.stringify(error, null, 2));
+
+            // Prioritize user-friendly error messages from Facebook
+            const userFriendlyMessage = error.error?.error_user_msg;
+            const userTitle = error.error?.error_user_title;
+            const genericMessage = error.error?.message;
+
+            // Log which fields might not be supported
+            const errorMessage = genericMessage || '';
+            const unsupportedFields: string[] = [];
+
+            if (errorMessage.includes('greeting')) unsupportedFields.push('greeting');
+            if (errorMessage.includes('legal_content')) unsupportedFields.push('custom notices');
+
+            if (unsupportedFields.length > 0) {
+                console.warn(`[Facebook] The following fields are not supported by Meta's API: ${unsupportedFields.join(', ')}`);
+                throw new Error(`Meta API does not support: ${unsupportedFields.join(', ')}. ${genericMessage || response.statusText}`);
+            }
+
+            // Use the most user-friendly error message available
+            let finalErrorMessage = genericMessage || `Meta API error: ${response.statusText}`;
+
+            if (userFriendlyMessage) {
+                // If we have a user-friendly message, use it (optionally with title)
+                finalErrorMessage = userTitle
+                    ? `${userTitle}: ${userFriendlyMessage}`
+                    : userFriendlyMessage;
+            }
+
+            throw new Error(finalErrorMessage);
+        }
+
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('[Facebook] Error creating lead form:', error);
+        throw error;
+    }
+}
+
+export interface FacebookLead {
+    id: string;
+    created_time: string;
+    ad_id?: string;
+    ad_name?: string;
+    adset_id?: string;
+    adset_name?: string;
+    campaign_id?: string;
+    campaign_name?: string;
+    form_id: string;
+    field_data: {
+        name: string;
+        values: string[];
+    }[];
+}
+
+/**
+ * Fetch leads for a specific Facebook Ad or Form
+ */
+export async function getFacebookLeads(
+    objectId: string, // Ad ID or Form ID
+    accessToken: string,
+    limit: number = 100
+): Promise<FacebookLead[]> {
+    try {
+        const fields = 'id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,field_data';
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/${objectId}/leads?fields=${fields}&limit=${limit}&access_token=${accessToken}`
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(`Failed to fetch leads for ${objectId}: ${JSON.stringify(error)}`);
+        }
+
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('[Facebook] Error fetching leads:', error);
+        throw error;
+    }
+}
+
+export interface FacebookAd {
+    id: string;
+    name: string;
+    status: string;
+    adset?: { id: string, name: string };
+    campaign?: { id: string, name: string };
+}
+
+/**
+ * Fetch Ads for a Facebook Page (boosted posts appear here)
+ */
+export async function getFacebookAds(
+    pageId: string,
+    accessToken: string
+): Promise<FacebookAd[]> {
+    try {
+        const fields = 'id,name,status,adset{id,name},campaign{id,name}';
+        const response = await fetch(
+            `https://graph.facebook.com/v24.0/${pageId}/ads?fields=${fields}&access_token=${accessToken}`
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            console.warn(`[Facebook] Failed to fetch ads for page ${pageId}:`, error);
+            return [];
+        }
+
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('[Facebook] Error fetching ads:', error);
+        return [];
     }
 }

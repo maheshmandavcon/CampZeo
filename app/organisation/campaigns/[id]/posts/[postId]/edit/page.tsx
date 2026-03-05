@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,8 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 
-import { ArrowLeft, Loader2, Save, Upload, X, Youtube, Eye, Video, Trash2, FileText, Sparkles, Mail, MessageSquare, Phone, Facebook, Instagram, Linkedin, Send, Plus, Wand2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Upload, X, Youtube, Eye, Video, Trash2, FileText, Sparkles, Mail, MessageSquare, Phone, Facebook, Instagram, Linkedin, Send, Plus, Wand2, Rocket } from 'lucide-react';
+import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import Image from 'next/image';
@@ -29,6 +30,8 @@ import { AIContentAssistant } from '@/components/ai-content-assistant';
 import { WYSIWYGPreview } from '../../_components/WYSIWYGPreview';
 import { useUser } from '@clerk/nextjs';
 import { upload } from '@vercel/blob/client';
+import { MetaBoostSection, MetaBoostOptions } from '../../_components/MetaBoostSection';
+import { isVideoUrl } from '@/lib/media-utils';
 
 
 
@@ -45,12 +48,12 @@ interface Post {
     metadata: any;
 }
 
-export default function EditPostPage() {
+export default function EditPostPage({ params }: { params: Promise<{ id: string, postId: string }> }) {
     const { user } = useUser();
     const router = useRouter();
-    const params = useParams();
-    const campaignId = params.id as string;
-    const postId = params.postId as string;
+    const resolvedParams = React.use(params);
+    const campaignId = resolvedParams.id;
+    const postId = resolvedParams.postId;
 
     // Form state
     const [subject, setSubject] = useState('');
@@ -73,7 +76,16 @@ export default function EditPostPage() {
     // Pinterest Boards
     const [pinterestBoards, setPinterestBoards] = useState<any[]>([]);
     const [loadingPinterestBoards, setLoadingPinterestBoards] = useState(false);
+    const [boostOptions, setBoostOptions] = useState<MetaBoostOptions>({
+        enabled: false,
+        adAccountId: '',
+        budget: 5,
+        duration: 7,
+        objective: 'OUTCOME_ENGAGEMENT',
+        balance: ''
+    });
     const [loading, setLoading] = useState(true);
+    const [savingBoost, setSavingBoost] = useState(false);
     const [saving, setSaving] = useState(false);
 
     // Preview state
@@ -87,6 +99,7 @@ export default function EditPostPage() {
     // AI Assistant state
     const [showAIAssistant, setShowAIAssistant] = useState(false);
     const [aiAssistantTab, setAiAssistantTab] = useState<'text' | 'image'>('text');
+    const coverUploadRef = React.useRef<HTMLInputElement>(null);
 
     // Pinterest Board Creation state
     const [isCreatingBoard, setIsCreatingBoard] = useState(false);
@@ -95,6 +108,41 @@ export default function EditPostPage() {
     const [creatingBoard, setCreatingBoard] = useState(false);
     const [socialStatus, setSocialStatus] = useState<any>(null);
     const [selectedLinkedInUrn, setSelectedLinkedInUrn] = useState<string>('');
+    const [fbPageId, setFbPageId] = useState<string>('');
+    const [fbPostId, setFbPostId] = useState<string>('');
+    const [campaign, setCampaign] = useState<any>(null);
+    const [existingPost, setExistingPost] = useState<Post | null>(null);
+    const [hasPaidPlan, setHasPaidPlan] = useState<boolean>(false); // Default to false (Secure by default - no flash)
+
+    // Fetch subscription status
+    useEffect(() => {
+        const fetchSubscriptionStatus = async () => {
+            try {
+                const response = await fetch('/api/subscription/current');
+                if (response.ok) {
+                    const data = await response.json();
+                    const paidStatuses = ['ACTIVE', 'active', 'CANCELING', 'COMPLETED'];
+                    const hasPaid = !!data.subscription &&
+                        paidStatuses.includes(data.subscription.status) &&
+                        !data.trial?.isActive;
+                    setHasPaidPlan(hasPaid);
+                }
+            } catch (error) {
+                console.error('Error fetching subscription status:', error);
+            }
+        };
+
+        fetchSubscriptionStatus();
+    }, []);
+
+    const formatDateTimeLocal = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
 
     const [organisationPlatforms, setOrganisationPlatforms] = useState<string[]>([]);
     const [loadingPlatforms, setLoadingPlatforms] = useState(true);
@@ -162,10 +210,14 @@ export default function EditPostPage() {
             try {
                 setLoading(true);
                 const response = await fetch(`/api/campaigns/${campaignId}/posts/${postId}`);
-                if (!response.ok) throw new Error('Failed to fetch post');
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `Failed to fetch post (${response.status})`);
+                }
 
                 const data = await response.json();
                 const post: Post = data.post;
+                setExistingPost(post);
 
                 if (post.isPostSent) {
                     toast.error('Cannot edit a sent post');
@@ -211,6 +263,22 @@ export default function EditPostPage() {
                     setSelectedLinkedInUrn(metadata.linkedInUrn);
                 }
 
+                if (metadata.metaBoost) {
+                    setBoostOptions(metadata.metaBoost);
+                }
+
+                if (metadata.thumbnailUrl) {
+                    setThumbnailUrl(metadata.thumbnailUrl);
+                }
+
+                if (metadata.facebookPageId || metadata.platformPageId) {
+                    setFbPageId(metadata.facebookPageId || metadata.platformPageId);
+                }
+
+                if (metadata.facebookPostId || metadata.platformPostId) {
+                    setFbPostId(metadata.facebookPostId || metadata.platformPostId);
+                }
+
                 if (post.scheduledPostTime) {
                     const date = new Date(post.scheduledPostTime);
                     const year = date.getFullYear();
@@ -220,6 +288,14 @@ export default function EditPostPage() {
                     const minutes = String(date.getMinutes()).padStart(2, '0');
                     setScheduledPostTime(`${year}-${month}-${day}T${hours}:${minutes}`);
                 }
+
+                // Fetch campaign dates
+                const campaignResponse = await fetch(`/api/campaigns/${campaignId}`);
+                if (campaignResponse.ok) {
+                    const campaignData = await campaignResponse.json();
+                    setCampaign(campaignData.campaign);
+                }
+
             } catch (error) {
                 console.error('Error fetching post:', error);
                 toast.error('Failed to load post');
@@ -428,18 +504,29 @@ export default function EditPostPage() {
                 newUrls.push(newBlob.url);
             }
 
-            setMediaUrls(prev => [...prev, ...newUrls]);
+            const updatedMediaUrls = [...mediaUrls, ...newUrls];
+            setMediaUrls(updatedMediaUrls);
 
             // Auto-detect Content Type for Instagram/Facebook
             if (type === 'INSTAGRAM' || type === 'FACEBOOK') {
-                if (hasVideo) {
-                    setContentType('REEL');
-                    setIsReel(true);
-                    toast.success('Video detected: Switched to Reel/Video mode');
-                } else if (mediaUrls.length === 0 && !hasVideo) {
-                    // Only switch to POST if it's the first upload and it's an image
-                    setContentType('POST');
-                    setIsReel(false);
+                const totalMedia = updatedMediaUrls.length;
+                const videoCount = updatedMediaUrls.filter(url => isVideoUrl(url)).length;
+                const imageCount = totalMedia - videoCount;
+
+                if (videoCount === 1 && imageCount === 0) {
+                    // ✅ Only 1 video → Reel
+                    if (contentType !== 'REEL') {
+                        setContentType('REEL');
+                        setIsReel(true);
+                        toast.success('Single video detected: Switched to Reel mode');
+                    }
+                } else {
+                    // ✅ Everything else → Standard Post
+                    if (contentType === 'REEL') {
+                        setContentType('POST');
+                        setIsReel(false);
+                        toast.info('Switched back to Standard Post (Reels require a single video)');
+                    }
                 }
             }
 
@@ -486,7 +573,29 @@ export default function EditPostPage() {
     };
 
     const removeMedia = (index: number) => {
-        setMediaUrls(prev => prev.filter((_, i) => i !== index));
+        const updatedUrls = mediaUrls.filter((_, i) => i !== index);
+        setMediaUrls(updatedUrls);
+
+        // Auto-detect Content Type for Instagram/Facebook
+        if (type === 'INSTAGRAM' || type === 'FACEBOOK') {
+            const totalMedia = updatedUrls.length;
+            const videoCount = updatedUrls.filter(url => isVideoUrl(url)).length;
+            const imageCount = totalMedia - videoCount;
+
+            if (videoCount === 1 && imageCount === 0) {
+                if (contentType !== 'REEL') {
+                    setContentType('REEL');
+                    setIsReel(true);
+                    toast.success('Single video remaining: Switched to Reel mode');
+                }
+            } else {
+                if (contentType === 'REEL') {
+                    setContentType('POST');
+                    setIsReel(false);
+                    toast.info('Switched back to Standard Post');
+                }
+            }
+        }
     };
 
     // Handle form submit
@@ -502,6 +611,30 @@ export default function EditPostPage() {
         if (!message && !subject) {
             toast.error('Please enter a message or subject');
             return;
+        }
+
+        if (scheduledPostTime && campaign) {
+            const scheduledDate = new Date(scheduledPostTime);
+            const now = new Date();
+            const campaignStart = new Date(campaign.startDate);
+            const campaignEnd = new Date(campaign.endDate);
+
+            // User's logic: must be within campaign and not in the past
+            const effectiveStart = campaignStart > now ? campaignStart : now;
+
+            if (scheduledDate < effectiveStart) {
+                if (scheduledDate < now) {
+                    toast.error('Scheduled time cannot be in the past');
+                } else {
+                    toast.error(`Scheduled time must be after campaign start (${campaignStart.toLocaleString()})`);
+                }
+                return;
+            }
+
+            if (scheduledDate > campaignEnd) {
+                toast.error(`Scheduled time must be before campaign end (${campaignEnd.toLocaleString()})`);
+                return;
+            }
         }
 
         if (type === 'EMAIL' && !senderEmail) {
@@ -520,21 +653,38 @@ export default function EditPostPage() {
             return;
         }
 
+
+
         // Prepare metadata
-        let metadata: any = {};
+        let metadata: any = { ...(existingPost?.metadata || {}) };
         if (type === 'YOUTUBE') {
             metadata = {
                 tags: youtubeTags ? youtubeTags.split(',').map(t => t.trim()) : [],
                 privacy: youtubePrivacy,
                 postType: youtubeContentType,
+                thumbnailUrl: thumbnailUrl,
                 playlistTitle: youtubeContentType === 'PLAYLIST' ? youtubePlaylistTitle : undefined
             };
         } else if (type === 'PINTEREST') {
-            metadata = { boardId: pinterestBoardId, link: pinterestLink };
+            metadata = {
+                boardId: pinterestBoardId,
+                link: pinterestLink,
+                thumbnailUrl: thumbnailUrl
+            };
         } else if (type === 'FACEBOOK' || type === 'INSTAGRAM') {
-            metadata = { isReel: !!isReel, postType: contentType };
+            metadata = {
+                isReel: !!isReel,
+                postType: contentType,
+                thumbnailUrl: thumbnailUrl
+            };
         } else if (type === 'LINKEDIN') {
-            metadata = { linkedInUrn: selectedLinkedInUrn };
+            metadata = {
+                linkedInUrn: selectedLinkedInUrn
+            };
+        }
+
+        if (boostOptions.enabled) {
+            metadata.metaBoost = boostOptions;
         }
 
         try {
@@ -570,8 +720,72 @@ export default function EditPostPage() {
         }
     };
 
-    // Check if a URL is a video
-    const isVideoUrl = (url: string) => url.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
+    // Handle Quick Boost
+    const handleQuickBoost = async () => {
+        if (!type || !['FACEBOOK', 'INSTAGRAM'].includes(type)) {
+            toast.error("Quick Boost is only available for Facebook and Instagram.");
+            return;
+        }
+
+        if (!message && !subject) {
+            toast.error('Please enter a message or title');
+            return;
+        }
+
+        try {
+            setSavingBoost(true);
+            const response = await fetch(`/api/campaigns/${campaignId}/posts/quick-boost`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    postId: parseInt(postId),
+                    subject: subject || null,
+                    message: message || null,
+                    type: type,
+                    mediaUrls: mediaUrls,
+                    isReel,
+                    contentType,
+                    metadata: {
+                        isReel: !!isReel,
+                        postType: contentType,
+                        metaBoost: boostOptions.enabled ? boostOptions : undefined,
+                    }
+                }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to prepare boost');
+            }
+
+            const data = await response.json();
+            const post = data.post;
+
+            // Use utility to open popup
+            const adAccountId = post.metadata?.metaBoost?.adAccountId || localStorage.getItem('last_meta_ad_account_id') || '';
+            const pageId = post.metadata?.facebookPageId || post.metadata?.platformPageId;
+            const fbPostId = post.metadata?.facebookPostId || post.metadata?.platformPostId || post.liveLink;
+
+            if (fbPostId && type !== 'INSTAGRAM') {
+                openNativeBoostPopup(adAccountId, pageId || '', fbPostId);
+                toast.success('Post updated and Boost Centre opened!');
+                router.push(`/organisation/campaigns/${campaignId}/posts`);
+            } else if (fbPostId && type === 'INSTAGRAM') {
+                // Facebook doesn't support IG boosting in the popup, guide them to lists.
+                toast.success("Post updated! To boost Instagram posts, click the Boost button on the posts list.");
+                router.push(`/organisation/campaigns/${campaignId}/posts`);
+            } else {
+                toast.error("Post updated but failed to retrieve IDs for boosting.");
+                router.push(`/organisation/campaigns/${campaignId}/posts`);
+            }
+        } catch (error) {
+            console.error('Error in Quick Boost:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to prepare boost');
+        } finally {
+            setSavingBoost(false);
+        }
+    };
+
 
     if (loading) {
         return (
@@ -633,22 +847,38 @@ export default function EditPostPage() {
                                             {organisationPlatforms.map((platform) => {
                                                 const isSelected = type === platform;
                                                 const Icon = getPlatformIcon(platform);
+                                                // Paid plan required for SMS and WhatsApp
+                                                const isLocked = !hasPaidPlan && ['SMS', 'WHATSAPP'].includes(platform);
 
                                                 return (
-                                                    <button
-                                                        key={platform}
-                                                        type="button"
-                                                        disabled={true}
-                                                        className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] ${isSelected
-                                                            ? 'border-primary bg-primary/10 shadow-sm'
-                                                            : 'border-border opacity-50 cursor-not-allowed'
-                                                            }`}
-                                                    >
-                                                        <Icon className={`size-6 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-                                                        <span className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
-                                                            {platform}
-                                                        </span>
-                                                    </button>
+                                                    <div key={platform} className="relative group">
+                                                        <button
+                                                            key={platform}
+                                                            type="button"
+                                                            disabled={true}
+                                                            className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] ${isLocked
+                                                                ? 'border-dashed border-muted-foreground/30 bg-muted/20 opacity-50 cursor-not-allowed'
+                                                                : isSelected
+                                                                    ? 'border-primary bg-primary/10 shadow-sm'
+                                                                    : 'border-border opacity-50 cursor-not-allowed'
+                                                                }`}
+                                                        >
+                                                            <Icon className={`size-6 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                                                            <span className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                                                                {platform}
+                                                                {isLocked && (
+                                                                    <span className="block text-[9px] font-semibold text-amber-600 dark:text-amber-400 leading-tight text-center mt-1">
+                                                                        Paid only
+                                                                    </span>
+                                                                )}
+                                                            </span>
+                                                        </button>
+                                                        {isLocked && (
+                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-44 bg-popover text-popover-foreground text-xs rounded-md shadow-lg border px-3 py-2 hidden group-hover:block z-50 pointer-events-none text-center">
+                                                                SMS and WhatsApp require a paid plan.
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 );
                                             })}
                                         </div>
@@ -922,7 +1152,7 @@ export default function EditPostPage() {
                                                 <Button
                                                     type="button"
                                                     variant="outline"
-                                                    onClick={() => document.getElementById('reel-cover-upload')?.click()}
+                                                    onClick={() => coverUploadRef.current?.click()}
                                                     disabled={uploadingMedia}
                                                     className="gap-2 w-full cursor-pointer"
                                                 >
@@ -930,6 +1160,7 @@ export default function EditPostPage() {
                                                     {uploadingMedia ? `Uploading... ${uploadProgress}%` : "Upload Cover"}
                                                 </Button>
                                                 <input
+                                                    ref={coverUploadRef}
                                                     id="reel-cover-upload"
                                                     type="file"
                                                     accept="image/*"
@@ -1032,6 +1263,16 @@ export default function EditPostPage() {
                                 </div>
                             )}
 
+                            {/* Meta Boost Section */}
+                            <MetaBoostSection
+                                platform={type || ''}
+                                options={boostOptions}
+                                onChange={setBoostOptions}
+                                fbPageId={fbPageId}
+                                fbPostId={fbPostId}
+                                facebookAppId={process.env.NEXT_PUBLIC_FACEBOOK_APP_ID}
+                            />
+
                             <div className="space-y-2">
                                 <Label htmlFor="scheduledPostTime">Schedule Post (Optional)</Label>
                                 <Input
@@ -1039,7 +1280,13 @@ export default function EditPostPage() {
                                     type="datetime-local"
                                     value={scheduledPostTime}
                                     onChange={(e) => setScheduledPostTime(e.target.value)}
-                                    min={new Date().toISOString().slice(0, 16)}
+                                    min={(() => {
+                                        const now = new Date();
+                                        const start = campaign?.startDate ? new Date(campaign.startDate) : now;
+                                        const minDate = start > now ? start : now;
+                                        return formatDateTimeLocal(minDate);
+                                    })()}
+                                    max={campaign?.endDate ? formatDateTimeLocal(new Date(campaign.endDate)) : undefined}
                                 />
                                 <p className="text-xs text-muted-foreground">
                                     Leave empty to send immediately
@@ -1173,7 +1420,22 @@ export default function EditPostPage() {
                         >
                             Cancel
                         </Button>
-                        <Button className='cursor-pointer' type="submit" disabled={saving}>
+                        {/* <Button
+                            className='cursor-pointer text-blue-600 border-blue-200 hover:bg-blue-50'
+                            type="button"
+                            variant="outline"
+                            onClick={handleQuickBoost}
+                            disabled={saving || savingBoost || !['FACEBOOK', 'INSTAGRAM'].includes(type)}
+                        >
+                            {savingBoost ? (
+                                <Loader2 className="size-4 mr-2 animate-spin" />
+                            ) : (
+                                <Rocket className="size-4 mr-2" />
+                            )}
+                            Boost Now
+                        </Button> */}
+
+                        <Button className='cursor-pointer' type="submit" disabled={saving || savingBoost}>
                             {saving ? (
                                 <>
                                     <Loader2 className="size-4 mr-2 animate-spin" />
@@ -1188,10 +1450,10 @@ export default function EditPostPage() {
                         </Button>
                     </div>
                 </form>
-            </div>
+            </div >
 
             {/* Preview Dialog */}
-            <Dialog open={showPreview} onOpenChange={setShowPreview}>
+            < Dialog open={showPreview} onOpenChange={setShowPreview} >
                 <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Post Preview - {type}</DialogTitle>
@@ -1277,17 +1539,18 @@ export default function EditPostPage() {
                         )}
                     </div>
                 </DialogContent>
-            </Dialog>
+            </Dialog >
 
             {/* AI Content Assistant */}
-            <AIContentAssistant
+            < AIContentAssistant
                 open={showAIAssistant}
                 onOpenChange={setShowAIAssistant}
                 initialTab={aiAssistantTab}
                 onInsertContent={(content, subject) => {
                     setMessage(content);
                     if (subject) setSubject(subject);
-                }}
+                }
+                }
                 onInsertImage={(url) => {
                     setMediaUrls(prev => [...prev, url]);
                     toast.success('AI image added to post!');

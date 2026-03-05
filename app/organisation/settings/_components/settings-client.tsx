@@ -39,6 +39,8 @@ interface SettingsClientProps {
     mobile: string | null;
     email: string;
     facebookConnected: boolean;
+    facebookPageId: string | null;
+    facebookPageAccessToken: string | null;
     instagramConnected: boolean;
     linkedInConnected: boolean;
     linkedInAuthUrn: string | null;
@@ -63,6 +65,11 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
   const [showFacebookPostsDialog, setShowFacebookPostsDialog] = useState(false);
   const [facebookPosts, setFacebookPosts] = useState<any[]>([]);
   const [loadingFacebookPosts, setLoadingFacebookPosts] = useState(false);
+  const [adAccounts, setAdAccounts] = useState<any[]>([]);
+  const [isLoadingAdAccounts, setIsLoadingAdAccounts] = useState(false);
+  const [showFacebookPageDialog, setShowFacebookPageDialog] = useState(false);
+  const [facebookPages, setFacebookPages] = useState<any[]>([]);
+  const [loadingFacebookPages, setLoadingFacebookPages] = useState(false);
 
   const handleViewFacebookPosts = async () => {
     setShowFacebookPostsDialog(true);
@@ -237,6 +244,44 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
     }
   };
 
+  const handleConfigureFacebookPages = async () => {
+    setShowFacebookPageDialog(true);
+    setLoadingFacebookPages(true);
+    try {
+      const res = await fetch("/api/socialmedia/facebook/pages");
+      if (res.ok) {
+        const data = await res.json();
+        setFacebookPages(data.pages || []);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to fetch Facebook pages");
+    } finally {
+      setLoadingFacebookPages(false);
+    }
+  };
+
+  const handleSelectFacebookPage = async (pageId: string, pageAccessToken: string) => {
+    try {
+      const res = await fetch("/api/socialmedia/facebook/save-page", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageId, pageAccessToken })
+      });
+
+      if (res.ok) {
+        toast.success("Facebook page linked");
+        setShowFacebookPageDialog(false);
+        window.location.reload();
+      } else {
+        toast.error("Failed to link page");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to link page");
+    }
+  };
+
   const [socialStatus, setSocialStatus] = useState<any>(null);
 
   useEffect(() => {
@@ -256,6 +301,26 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
     };
     fetchSocialStatus();
   }, []);
+
+  useEffect(() => {
+    if (userData.facebookConnected) {
+      const fetchAdAccounts = async () => {
+        setIsLoadingAdAccounts(true);
+        try {
+          const res = await fetch("/api/socialmedia/meta-ads/accounts");
+          if (res.ok) {
+            const data = await res.json();
+            setAdAccounts(data.accounts || []);
+          }
+        } catch (error) {
+          console.error("Failed to fetch ad accounts", error);
+        } finally {
+          setIsLoadingAdAccounts(false);
+        }
+      };
+      fetchAdAccounts();
+    }
+  }, [userData.facebookConnected]);
 
   const platforms = [
     {
@@ -479,6 +544,27 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                                   </div>
                                 </div>
                               )} */}
+                              {platform.id === 'FACEBOOK' && platform.connected && (
+                                <div className="mt-2 pt-1 border-t border-muted/50">
+                                  {userData.facebookPageId ? (
+                                    <p className="text-xs text-green-600 font-medium">
+                                      Linked Page: {socialStatus?.facebook?.name || userData.facebookPageId}
+                                    </p>
+                                  ) : (
+                                    <p className="text-xs text-red-500 font-medium flex items-center gap-1">
+                                      <XCircle className="h-3 w-3" /> No Facebook Page linked.
+                                    </p>
+                                  )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2 h-7 text-xs"
+                                    onClick={handleConfigureFacebookPages}
+                                  >
+                                    {userData.facebookPageId ? 'Change Linked Page' : 'Link Facebook Page'}
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -523,6 +609,64 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
               </div>
             </CardContent>
           </Card>
+
+          {userData.facebookConnected && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Facebook className="h-5 w-5 text-blue-600" />
+                  Meta Ad Accounts
+                </CardTitle>
+                <CardDescription>
+                  Monitor your ad account status and balance for boosting posts and running lead ads.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoadingAdAccounts ? (
+                  <div className="flex justify-center p-4">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : adAccounts.length > 0 ? (
+                  <div className="space-y-4">
+                    {adAccounts.map((account) => (
+                      <div key={account.id} className="flex items-center justify-between p-4 border rounded-lg bg-muted/20">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium">{account.name}</h4>
+                            <Badge
+                              variant={account.account_status === 1 ? 'default' : 'destructive'}
+                              className="text-[10px] h-4 px-1"
+                            >
+                              {account.account_status === 1 ? 'ACTIVE' : 'DISABLED'}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">ID: {account.id}</p>
+                        </div>
+                        <div className="text-right space-y-1">
+                          <p className="text-sm font-semibold">
+                            Balance: {(account.balance / 100).toFixed(2)} {account.currency}
+                          </p>
+                          <Button variant="outline" size="sm" asChild className="h-7 text-xs">
+                            <a
+                              href={`https://business.facebook.com/billing_settings?ad_account_id=${account.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              Manage Billing
+                            </a>
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-muted-foreground border-2 border-dashed rounded-lg">
+                    No accessible ad accounts found. Make sure your Meta account has an active ad account.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 
@@ -680,6 +824,50 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
           <div className="bg-muted p-3 rounded-lg">
             <p className="text-xs text-muted-foreground">
               <strong>Note:</strong> To post content and use Reels, you need an Instagram Business or Creator account connected via Facebook.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Facebook Page Selection Dialog */}
+      <Dialog open={showFacebookPageDialog} onOpenChange={setShowFacebookPageDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Link Facebook Page</DialogTitle>
+            <DialogDescription>
+              Select the Facebook Page you want to use for Unified Messaging and analytics.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-[300px] overflow-y-auto py-4">
+            {loadingFacebookPages ? (
+              <div className="flex justify-center p-4">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            ) : facebookPages.length > 0 ? (
+              facebookPages.map((page) => (
+                <div
+                  key={page.id}
+                  className={`flex items-center justify-between p-3 border rounded-lg hover:bg-muted cursor-pointer ${userData.facebookPageId === page.id ? 'bg-muted border-primary' : ''}`}
+                  onClick={() => handleSelectFacebookPage(page.id, page.access_token)}
+                >
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">{page.name}</p>
+                    <p className="text-xs text-muted-foreground">{page.category}</p>
+                  </div>
+                  {userData.facebookPageId === page.id && (
+                    <CheckCircle2 className="h-4 w-4 text-green-600 ml-2" />
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-sm text-muted-foreground">No pages found. Make sure you have admin access to at least one Facebook Page.</p>
+              </div>
+            )}
+          </div>
+          <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
+            <p className="text-[10px] text-amber-800 leading-tight">
+              <strong>Important:</strong> Linking a page is required to fetch conversations and messages for the unified inbox.
             </p>
           </div>
         </DialogContent>

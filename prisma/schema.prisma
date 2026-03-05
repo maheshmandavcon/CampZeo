@@ -65,6 +65,7 @@ model Organisation {
   campaigns             Campaign[]
   chatHistories         ChatHistory[]
   contacts              Contact[]
+  leads                 Lead[]
   messageTemplates      MessageTemplate[]
   MessageUsage          MessageUsage[]
   notifications         Notification[]
@@ -106,6 +107,7 @@ model Campaign {
   updatedAt      DateTime       @updatedAt
   organisation   Organisation   @relation(fields: [organisationId], references: [id])
   posts          CampaignPost[]
+  Lead           Lead[]
   notifications  Notification[]
   contacts       Contact[]      @relation("CampaignToContact")
 }
@@ -243,6 +245,23 @@ model Enquiry {
   password         String?
 }
 
+model Lead {
+  id             Int          @id @default(autoincrement())
+  metaLeadId     String       @unique
+  formId         String?
+  organisationId Int
+  data           Json
+  status         String       @default("NEW")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  campaignId     Int?
+  Campaign       Campaign?    @relation(fields: [campaignId], references: [id])
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+
+  @@index([organisationId])
+  @@index([metaLeadId])
+}
+
 model Notification {
   id             Int           @id @default(autoincrement())
   message        String
@@ -301,23 +320,32 @@ model PostInsight {
 }
 
 model PostTransaction {
-  id                Int       @id @default(autoincrement())
-  refId             Int
-  platform          String
-  postId            String
-  accountId         String
-  message           String
-  mediaUrls         String?
-  postType          String
-  accessToken       String
-  isScheduled       Boolean   @default(false)
-  scheduledTime     DateTime?
-  published         Boolean   @default(false)
-  publishedAt       DateTime?
-  insightsFetched   Boolean   @default(false)
-  lastInsightsCheck DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                 Int       @id @default(autoincrement())
+  refId              Int
+  platform           String
+  postId             String
+  accountId          String
+  message            String
+  mediaUrls          String?
+  postType           String
+  accessToken        String
+  isScheduled        Boolean   @default(false)
+  scheduledTime      DateTime?
+  published          Boolean   @default(false)
+  publishedAt        DateTime?
+  insightsFetched    Boolean   @default(false)
+  lastInsightsCheck  DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  boostBudgetDaily   Int?
+  boostDurationDays  Int?
+  boostFailed        Boolean?  @default(false)
+  boostFailureReason String?
+  boostTargeting     Json?
+  metaAdId           String?
+  metaAdSetId        String?
+  metaCampaignId     String?
+  metaPostId         String?
 }
 
 model LogEvents {
@@ -426,6 +454,16 @@ model SocialMetricHistory {
   @@index([metricName, recordedAt])
 }
 
+model SystemNotificationLog {
+  id        Int      @id @default(autoincrement())
+  subject   String
+  recipient String
+  status    String
+  error     String?
+  createdAt DateTime @default(now())
+  metadata  Json?
+}
+
 enum PostStatus {
   DRAFT
   SCHEDULED
@@ -459,14 +497,4 @@ enum PlatformType {
 enum MessageChannel {
   SMS
   WHATSAPP
-}
-
-model SystemNotificationLog {
-  id          Int      @id @default(autoincrement())
-  subject     String
-  recipient   String
-  status      String   // SUCCESS, FAILED
-  error       String?
-  createdAt   DateTime @default(now())
-  metadata    Json?
 }

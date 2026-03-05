@@ -193,7 +193,15 @@ export default function NewCampaignPage() {
     const allOnPageSelected = contacts.length > 0 && contacts.every((c) => selectedContacts.includes(c.id));
     const someOnPageSelected = contacts.some((c) => selectedContacts.includes(c.id)) && !allOnPageSelected;
 
-    const minDate = new Date().toISOString().slice(0, 16);
+    const now = new Date();
+    const minDate = (() => {
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    })();
 
     return (
         <div className="p-6">

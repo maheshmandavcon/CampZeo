@@ -131,17 +131,16 @@ export async function generateImage(
 
         const enhancedPrompt = style ? `${prompt} ${style} style` : prompt;
 
-        // Construct the URL using the new Pollinations.ai endpoint
-        let imageUrl = `https://pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?`;
+        // Construct the URL using the correct Pollinations.ai image API endpoint
+        let imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?`;
 
         const params = new URLSearchParams();
         params.append('model', model);
         params.append('width', width.toString());
         params.append('height', height.toString());
         params.append('seed', seed.toString());
-        if (enhance) params.append('enhance', 'true');
-        if (nologo) params.append('nologo', 'true');
-
+        params.append('nologo', 'true');
+        params.append('enhance', 'false'); 
         imageUrl += params.toString();
 
         return {

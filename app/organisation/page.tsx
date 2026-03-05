@@ -31,6 +31,7 @@ interface User {
     isTrial: boolean;
     trialEndDate: string | null;
     subscriptions?: {
+      isTrial?: boolean;
       plan?: {
         name: string;
         usageLimits?: string;
@@ -207,7 +208,10 @@ export default function OrganisationDashboard() {
   const orgName = user?.organisation?.name || "Your Organisation";
   const latestSubscription = user?.organisation?.subscriptions?.[0];
   const planName = latestSubscription?.plan?.name || "Free";
-  const isTrial = user?.organisation?.isTrial || false;
+
+  // Robust trial check: Organisation says it's trial AND either no subscription exists 
+  // OR the current subscription is actually a trial subscription
+  const isTrial = user?.organisation?.isTrial && (!latestSubscription || latestSubscription.isTrial === true);
 
   return (
     <div className="p-6">

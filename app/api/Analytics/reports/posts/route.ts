@@ -223,4 +223,4 @@ async function getHandler(req: NextRequest) {
     
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/Analytics/reports/posts");
+export const GET = withErrorHandling(getHandler, "GET /api/analytics/reports/posts");

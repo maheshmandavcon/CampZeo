@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,8 +15,8 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Loader2, Save, Search, Users } from 'lucide-react';
-import { useRouter, useParams } from 'next/navigation';
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Loader2, Save, Search, Users, Info } from 'lucide-react';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { useDebounce } from '@/hooks/use-debounce';
 
@@ -34,18 +34,27 @@ interface Campaign {
     startDate: string;
     endDate: string;
     contacts: { id: number }[];
+    _count?: { posts: number; contacts: number };
 }
 
-export default function EditCampaignPage() {
+export default function EditCampaignPage({ params }: { params: Promise<{ id: string }> }) {
     const router = useRouter();
-    const params = useParams();
-    const campaignId = params.id as string;
+    const resolvedParams = React.use(params);
+    const searchParams = useSearchParams();
+    const campaignId = resolvedParams.id;
+
+    // Check for return-to-share params
+    const returnTo = searchParams.get('returnTo');
+    const returnPostId = searchParams.get('postId');
+    const isContactsOnlyMode = returnTo === 'share' && !!returnPostId;
 
     // Form state
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [originalStartDate, setOriginalStartDate] = useState('');
+    const [originalEndDate, setOriginalEndDate] = useState('');
     const [selectedContacts, setSelectedContacts] = useState<number[]>([]);
 
     // Contacts state
@@ -62,6 +71,7 @@ export default function EditCampaignPage() {
 
     const [saving, setSaving] = useState(false);
     const [selectingAll, setSelectingAll] = useState(false);
+    const [hasScheduledPosts, setHasScheduledPosts] = useState(false);
 
     // Fetch campaign data
     useEffect(() => {
@@ -77,6 +87,13 @@ export default function EditCampaignPage() {
                 setName(campaign.name);
                 setDescription(campaign.description || '');
                 setSelectedContacts(campaign.contacts.map((c) => c.id));
+
+                // Store original ISO dates for contacts-only mode
+                setOriginalStartDate(campaign.startDate);
+                setOriginalEndDate(campaign.endDate);
+
+                // Check if campaign has posts (scheduled or otherwise)
+                setHasScheduledPosts((campaign._count?.posts || 0) > 0);
             } catch (error) {
                 console.error('Error fetching campaign:', error);
                 toast.error('Failed to load campaign');
@@ -212,21 +229,36 @@ export default function EditCampaignPage() {
             return;
         }
 
-        if (!startDate || !endDate) {
-            toast.error('Please select start and end dates');
-            return;
-        }
+        // Skip date validation in contacts-only mode
+        if (!isContactsOnlyMode) {
+            if (!endDate) {
+                toast.error('Please select an end date');
+                return;
+            }
 
-        const now = new Date();
+            // Only validate start date if it's editable (no scheduled posts)
+            if (!hasScheduledPosts && !startDate) {
+                toast.error('Please select a start date');
+                return;
+            }
 
-        if (new Date(endDate) < now) {
-            toast.error('End date cannot be in the past');
-            return;
-        }
+            const now = new Date();
 
-        if (new Date(startDate) > new Date(endDate)) {
-            toast.error('End date must be after start date');
-            return;
+            if (new Date(endDate) < now) {
+                toast.error('End date cannot be in the past');
+                return;
+            }
+
+            if (!hasScheduledPosts && new Date(startDate) < now) {
+                toast.error('Start date cannot be in the past');
+                return;
+            }
+
+            const effectiveStartDate = hasScheduledPosts ? originalStartDate : startDate;
+            if (new Date(effectiveStartDate) > new Date(endDate)) {
+                toast.error('End date must be after start date');
+                return;
+            }
         }
 
         try {
@@ -238,8 +270,8 @@ export default function EditCampaignPage() {
                 body: JSON.stringify({
                     name,
                     description: description || null,
-                    startDate: new Date(startDate).toISOString(),
-                    endDate: new Date(endDate).toISOString(),
+                    startDate: (isContactsOnlyMode || hasScheduledPosts) ? originalStartDate : new Date(startDate).toISOString(),
+                    endDate: isContactsOnlyMode ? originalEndDate : new Date(endDate).toISOString(),
                     contactIds: selectedContacts,
                 }),
             });
@@ -250,7 +282,13 @@ export default function EditCampaignPage() {
             }
 
             toast.success('Campaign updated successfully');
-            router.push('/organisation/campaigns');
+
+            // If returning to share dialog, redirect back with params
+            if (returnTo === 'share' && returnPostId) {
+                router.push(`/organisation/campaigns/${campaignId}/posts?returnTo=share&postId=${returnPostId}`);
+            } else {
+                router.push('/organisation/campaigns');
+            }
         } catch (error) {
             console.error('Error updating campaign:', error);
             toast.error(error instanceof Error ? error.message : 'Failed to update campaign');
@@ -262,7 +300,7 @@ export default function EditCampaignPage() {
     const allOnPageSelected = contacts.length > 0 && contacts.every((c) => selectedContacts.includes(c.id));
     const someOnPageSelected = contacts.some((c) => selectedContacts.includes(c.id)) && !allOnPageSelected;
 
-    const minDate = new Date().toISOString().slice(0, 16);
+    const minDate = formatDateTimeLocal(new Date());
 
     if (loadingCampaign) {
         return (
@@ -307,6 +345,15 @@ export default function EditCampaignPage() {
                         </div>
 
                         <form onSubmit={handleSubmit} className="space-y-6">
+                            {/* Info banner for contacts-only mode */}
+                            {isContactsOnlyMode && (
+                                <div className="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                                    <Info className="size-5 text-blue-600 dark:text-blue-400 shrink-0" />
+                                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                                        Select contacts below and save to continue sharing your post.
+                                    </p>
+                                </div>
+                            )}
                             {/* Campaign Details */}
                             <Card>
                                 <CardHeader>
@@ -346,8 +393,16 @@ export default function EditCampaignPage() {
                                                 type="datetime-local"
                                                 value={startDate}
                                                 onChange={(e) => setStartDate(e.target.value)}
-                                                required
+                                                min={minDate}
+                                                required={!isContactsOnlyMode && !hasScheduledPosts}
+                                                disabled={isContactsOnlyMode || hasScheduledPosts}
+                                                className={(isContactsOnlyMode || hasScheduledPosts) ? 'opacity-60 cursor-not-allowed' : ''}
                                             />
+                                            {hasScheduledPosts && !isContactsOnlyMode && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Start date is locked because this campaign has scheduled posts.
+                                                </p>
+                                            )}
                                         </div>
 
                                         <div className="space-y-2">
@@ -358,7 +413,9 @@ export default function EditCampaignPage() {
                                                 value={endDate}
                                                 onChange={(e) => setEndDate(e.target.value)}
                                                 min={startDate || minDate}
-                                                required
+                                                required={!isContactsOnlyMode}
+                                                disabled={isContactsOnlyMode}
+                                                className={isContactsOnlyMode ? 'opacity-60 cursor-not-allowed' : ''}
                                             />
                                         </div>
                                     </div>

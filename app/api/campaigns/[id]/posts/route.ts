@@ -39,7 +39,8 @@ async function getPostsHandler(
 
     const { id } = await context.params;
     const campaignId = parseInt(id);
-
+console.log("ORG ID:", effectiveOrganisationId);
+console.log("CAMPAIGN ID:", campaignId);
     // Verify campaign belongs to organisation
     const campaign = await prisma.campaign.findFirst({
         where: {
@@ -121,29 +122,30 @@ async function createPostHandler(
         return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
-    const body = await request.json();
-    const {
-        subject,
-        message,
-        type,
-        scheduledPostTime,
-        senderEmail,
-        mediaUrls,
-        youtubeTags,
-        youtubePrivacy,
-        youtubeContentType,
-        youtubePlaylistTitle,
-        youtubePlaylistId,
-        pinterestBoardId,
-        pinterestLink,
-        isReel,
-        contentType,
-        thumbnailUrl,
-        facebookPageId,
-        facebookPageAccessToken,
-        instagramBusinessId,
-        linkedInUrn
-    } = body;
+        const body = await request.json();
+        const {
+            subject,
+            message,
+            type,
+            scheduledPostTime,
+            senderEmail,
+            mediaUrls,
+            youtubeTags,
+            youtubePrivacy,
+            youtubeContentType,
+            youtubePlaylistTitle,
+            youtubePlaylistId,
+            pinterestBoardId,
+            pinterestLink,
+            isReel,
+            contentType,
+            thumbnailUrl,
+            facebookPageId,
+            facebookPageAccessToken,
+            instagramBusinessId,
+            linkedInUrn,
+            metaBoost
+        } = body;
 
     // Validation
     if (!type) {
@@ -154,33 +156,72 @@ async function createPostHandler(
         return NextResponse.json({ error: 'Message, subject or media is required' }, { status: 400 });
     }
 
-    // Prepare metadata
-    let metadata: any = {};
-    if (type === 'YOUTUBE') {
-        metadata = {
-            tags: youtubeTags,
-            privacy: youtubePrivacy,
-            thumbnailUrl,
-            postType: youtubeContentType,
-            playlistTitle: youtubePlaylistTitle,
-            playlistId: youtubePlaylistId
-        };
-    } else if (type === 'PINTEREST') {
-        metadata = { boardId: pinterestBoardId, link: pinterestLink };
-    } else if (type === 'FACEBOOK' || type === 'INSTAGRAM') {
-        metadata = {
-            isReel: !!isReel,
-            thumbnailUrl,
-            postType: contentType,
-            facebookPageId,
-            facebookPageAccessToken,
-            instagramBusinessId
-        };
-    } else if (type === 'LINKEDIN') {
-        metadata = {
-            linkedInUrn
-        };
+    // Platform restriction: SMS and WhatsApp require a paid subscription (ACTIVE or CANCELING) and NOT a trial
+    if (['SMS', 'WHATSAPP'].includes(type.toUpperCase())) {
+        const org = await prisma.organisation.findUnique({
+            where: { id: effectiveOrganisationId },
+            select: { isTrial: true }
+        });
+
+        const hasPaidSubscription = await prisma.subscription.findFirst({
+            where: {
+                organisationId: effectiveOrganisationId,
+                status: { in: ['ACTIVE', 'active', 'CANCELING', 'COMPLETED'] },
+            },
+        });
+
+        const isLocked = org?.isTrial || !hasPaidSubscription;
+
+        if (isLocked) {
+            return NextResponse.json(
+                { error: `${type} is only available for organisations with an active paid subscription. Please upgrade your plan to use this platform.` },
+                { status: 403 }
+            );
+        }
     }
+
+    if (type === 'FACEBOOK' && isReel && !mediaUrls?.length) {
+        return NextResponse.json(
+            { error: 'Media is required for Facebook Reels. Please upload a video.' },
+            { status: 400 }
+        );
+    }
+
+    if (type === 'INSTAGRAM' && !mediaUrls?.length) {
+        return NextResponse.json(
+            { error: 'Media is required for Instagram posts. Please upload an image or video.' },
+            { status: 400 }
+        );
+    }
+
+        // Prepare metadata
+        let metadata: any = {};
+        if (type === 'YOUTUBE') {
+            metadata = {
+                tags: youtubeTags,
+                privacy: youtubePrivacy,
+                thumbnailUrl,
+                postType: youtubeContentType,
+                playlistTitle: youtubePlaylistTitle,
+                playlistId: youtubePlaylistId
+            };
+        } else if (type === 'PINTEREST') {
+            metadata = { boardId: pinterestBoardId, link: pinterestLink, thumbnailUrl };
+        } else if (type === 'FACEBOOK' || type === 'INSTAGRAM') {
+            metadata = {
+                isReel: !!isReel,
+                thumbnailUrl,
+                postType: contentType,
+                facebookPageId,
+                facebookPageAccessToken,
+                instagramBusinessId,
+                metaBoost: metaBoost || undefined
+            };
+        } else if (type === 'LINKEDIN') {
+            metadata = {
+                linkedInUrn
+            };
+        }
 
     if (scheduledPostTime) {
         const scheduledDate = new Date(scheduledPostTime);
@@ -190,6 +231,8 @@ async function createPostHandler(
             }, { status: 400 });
         }
     }
+    // If it's a social post and not scheduled, send it immediately
+    const isSocialPlatform = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(type);
 
     // Create post
     const post = await prisma.campaignPost.create({
@@ -199,7 +242,7 @@ async function createPostHandler(
             message,
             type,
             senderEmail: type === 'EMAIL' ? senderEmail : null,
-            scheduledPostTime: scheduledPostTime ? new Date(scheduledPostTime) : null,
+            scheduledPostTime: scheduledPostTime ? new Date(scheduledPostTime) : (!isSocialPlatform ? new Date() : null),
             isAttachedToCampaign: true,
             videoUrl: mediaUrls && mediaUrls.length > 0 ? mediaUrls[0] : null, // Legacy support
             mediaUrls: mediaUrls || [],
@@ -214,9 +257,7 @@ async function createPostHandler(
         }
     });
 
-    // If it's a social post and not scheduled, send it immediately
-    const isSocialPlatform = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(type);
-
+    
     if (isSocialPlatform && !scheduledPostTime) {
         const result = await sendCampaignPost(post);
         if (!result.success) {

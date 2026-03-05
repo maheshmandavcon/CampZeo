@@ -4,7 +4,7 @@ import * as path from 'path';
 const data = [
     ["Feature", "Implementation Item", "Technical Approach", "Verification Step"],
     ["Global Report Settings", "Pagination Limit Update", "Change default limit from 5 to 50 in API and Frontend", "Ensure 50 records display per page"],
-    ["Backend API", "Advanced Sorting", "Add `sortField` and `sortOrder` to `/api/Analytics/reports/posts` query params", "Verify SQL orderBy updates correctly"],
+    ["Backend API", "Advanced Sorting", "Add `sortField` and `sortOrder` to `/api/analytics/reports/posts` query params", "Verify SQL orderBy updates correctly"],
     ["Backend API", "Date Filtering", "Add `startDate` and `endDate` to API to filter `postTransaction` by `publishedAt`", "Verify posts are within date range"],
     ["Frontend - Performance Tab", "Campaign Overview Section", "High-level summary (Best vs Least) using aggregated engagement data", "Check 'Best' campaign matches highest engagement"],
     ["Frontend - Performance Tab", "Dynamic Post Table", "Add clickable headers for sorting and a 'Jump to Page' input", "Test sorting by likes/reach and page jumping"],

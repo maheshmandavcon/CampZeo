@@ -85,7 +85,7 @@ export default function PostDetailsPage({ params }: { params: Promise<{ id: stri
                 const platform = searchParams.get('platform');
                 const platformPostId = searchParams.get('postId');
 
-                let url = `/api/Analytics/post-details/${postId}?fresh=true`;
+                let url = `/api/analytics/post-details/${postId}?fresh=true`;
                 if (platform) url += `&platform=${platform}`;
                 if (platformPostId) url += `&postId=${platformPostId}`;
 
@@ -115,7 +115,7 @@ export default function PostDetailsPage({ params }: { params: Promise<{ id: stri
             const platform = searchParams.get('platform');
             const platformPostId = searchParams.get('postId');
 
-            let url = `/api/Analytics/post-details/${postId}?fresh=true`;
+            let url = `/api/analytics/post-details/${postId}?fresh=true`;
             if (platform) url += `&platform=${platform}`;
             if (platformPostId) url += `&postId=${platformPostId}`;
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+const META_API_VERSION = 'v24.0';
 
 export async function GET(request: NextRequest) {
     try {
@@ -89,7 +90,7 @@ export async function GET(request: NextRequest) {
 
         // Exchange code for token
         if (platform === "FACEBOOK" || platform === "INSTAGRAM") {
-            const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${clientSecretConfig.value}&code=${code}`;
+            const tokenUrl = `https://graph.facebook.com/${META_API_VERSION}/oauth/access_token?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${clientSecretConfig.value}&code=${code}`;
             const res = await fetch(tokenUrl);
             const data = await res.json();
             if (data.error) throw new Error(data.error.message);
@@ -182,8 +183,8 @@ export async function GET(request: NextRequest) {
 
             // Fetch Facebook Pages and Page Access Token
             try {
-                // First, get user's pages
-                const pagesRes = await fetch(`https://graph.facebook.com/me/accounts?access_token=${accessToken}`);
+                // First, get user's pages with instagram_business_account
+                const pagesRes = await fetch(`https://graph.facebook.com/${META_API_VERSION}/me/accounts?fields=id,name,access_token,instagram_business_account{id,username}&access_token=${accessToken}`);
                 const pagesData = await pagesRes.json();
 
                 console.log("🔵 Facebook Pages Response:", pagesData);
@@ -195,6 +196,14 @@ export async function GET(request: NextRequest) {
                     updateData.facebookPageId = firstPage.id;
                     updateData.facebookPageAccessToken = firstPage.access_token; // Page-specific token
                     updateData.facebookUserId = firstPage.id; // Store page ID here too
+
+                    if (firstPage.instagram_business_account) {
+                        updateData.instagramUserId = firstPage.instagram_business_account.id;
+                        updateData.instagramAccessToken = firstPage.access_token;
+                        updateData.instagramTokenCreatedAt = new Date();
+                        updateData.instagramTokenExpiresIn = expiresIn;
+                        console.log("✅ Instagram Business Account linked automatically via Facebook connection:", firstPage.instagram_business_account.id);
+                    }
 
                     console.log("✅ Facebook Page Connected:", {
                         pageId: firstPage.id,
@@ -217,7 +226,7 @@ export async function GET(request: NextRequest) {
                 // Fetch user's pages with connected Instagram accounts
                 // Handle pagination to ensure we check ALL pages
                 let allPages: any[] = [];
-                let nextUrl = `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,name,profile_picture_url}&access_token=${accessToken}&limit=100`;
+                let nextUrl = `https://graph.facebook.com/${META_API_VERSION}/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,name,profile_picture_url}&access_token=${accessToken}&limit=100`;
 
                 while (nextUrl) {
                     const pagesRes = await fetch(nextUrl);
@@ -241,8 +250,9 @@ export async function GET(request: NextRequest) {
                             updateData.instagramUserId = page.instagram_business_account.id;
                             updateData.instagramAccessToken = page.access_token; // Use Page Token for existing/legacy logic
 
-                            // Important: Use the Long-Lived User Token or Page Token? 
-                            // Usually Page Token is best for managing the specific page/instagram account.
+                            // Also set Facebook Page fields so the unified inbox can find the connection
+                            updateData.facebookPageId = page.id;
+                            updateData.facebookPageAccessToken = page.access_token;
 
                             updateData.instagramTokenExpiresIn = expiresIn;
                             updateData.instagramTokenCreatedAt = new Date();
@@ -268,7 +278,7 @@ export async function GET(request: NextRequest) {
                         for (const page of allPages) {
                             try {
                                 const igRes = await fetch(
-                                    `https://graph.facebook.com/v18.0/${page.id}?fields=instagram_business_account{id,username}&access_token=${page.access_token}`
+                                    `https://graph.facebook.com/${META_API_VERSION}/${page.id}?fields=instagram_business_account{id,username}&access_token=${page.access_token}`
                                 );
                                 const igData = await igRes.json();
 
