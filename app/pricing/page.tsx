@@ -112,8 +112,16 @@ export default function PricingPage() {
                                                         planPrice: plan.price,
                                                         isTrial: false
                                                     }}
-                                                ></SignUpButton>
-                                                // <Button
+                                                >
+                                                    <Button
+                                                        className="w-full hover:bg-accent hover:text-red-600 transition-colors"
+                                                        variant="outline"
+                                                        size="lg"
+                                                    >
+                                                        Sign Up
+                                                    </Button>
+                                                </SignUpButton>
+                                                // // <Button
                                                 //     className="w-full"
                                                 //     variant={isPopular ? "default" : "outline"}
                                                 //     size="lg"
@@ -154,7 +162,7 @@ export default function PricingPage() {
                 </div>
             </main>
 
-            <footer className="py-12 px-4 sm:px-6 lg:px-8 border-t bg-muted/20">
+            <footer className="py-8 px-4 sm:px-6 lg:px-8 border-t bg-muted/20">
                 <div className="max-w-7xl mx-auto text-center text-muted-foreground">
                     <p>© 2025 Campzeo. All rights reserved.</p>
                 </div>
