@@ -1399,7 +1399,7 @@ export default function AdminDashboard() {
                             city: "",
                             state: "",
                             country: "",
-                            platforms: [],
+                            platforms: ["email", "facebook", "instagram", "linkedin", "youtube", "pinterest"],
                             isFreeTrial: false
                           });
                           setIsAddingOrg(true);

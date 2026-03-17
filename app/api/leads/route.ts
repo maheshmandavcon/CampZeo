@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
         const leads = await prisma.lead.findMany({
             where: { organisationId: orgId },
             include: {
-                campaign: {
+                Campaign: {
                     select: { name: true }
                 }
             },

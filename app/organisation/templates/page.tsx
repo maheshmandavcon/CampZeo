@@ -62,6 +62,9 @@ interface MessageTemplate {
   createdAt: string;
   updatedAt: string;
   mediaUrls?: string[];
+  metadata?: {
+    thumbnailUrl?: string;
+  };
 }
 
 const platformIcons: Record<string, any> = {
@@ -218,25 +221,25 @@ export default function TemplatesPage() {
                   className="pl-9"
                 />
               </div>
-<div className="w-[200px] ms-auto  rounded-md">
-              <Select value={platformFilter} onValueChange={setPlatformFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by platform" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All Platforms</SelectItem>
-                  <SelectItem value="EMAIL">Email</SelectItem>
-                  <SelectItem value="SMS">SMS</SelectItem>
-                  <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
-                  <SelectItem value="FACEBOOK">Facebook</SelectItem>
-                  <SelectItem value="INSTAGRAM">Instagram</SelectItem>
-                  <SelectItem value="LINKEDIN">LinkedIn</SelectItem>
-                  <SelectItem value="YOUTUBE">YouTube</SelectItem>
-                  <SelectItem value="PINTEREST">Pinterest</SelectItem>
-                </SelectContent>
-              </Select>
-</div>
-{/* <div className=" rounded-md">
+              <div className="w-[200px] ms-auto  rounded-md">
+                <Select value={platformFilter} onValueChange={setPlatformFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filter by platform" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Platforms</SelectItem>
+                    <SelectItem value="EMAIL">Email</SelectItem>
+                    <SelectItem value="SMS">SMS</SelectItem>
+                    <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                    <SelectItem value="FACEBOOK">Facebook</SelectItem>
+                    <SelectItem value="INSTAGRAM">Instagram</SelectItem>
+                    <SelectItem value="LINKEDIN">LinkedIn</SelectItem>
+                    <SelectItem value="YOUTUBE">YouTube</SelectItem>
+                    <SelectItem value="PINTEREST">Pinterest</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* <div className=" rounded-md">
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="Filter by category" />
@@ -303,6 +306,7 @@ export default function TemplatesPage() {
                     content={template.content}
                     subject={template.subject}
                     mediaUrls={template.mediaUrls}
+                    metadata={template.metadata}
                     isCompact={true}
                   />
                 </div>

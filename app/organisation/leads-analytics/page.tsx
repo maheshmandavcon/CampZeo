@@ -386,7 +386,9 @@ export default function LeadsAnalyticsPage() {
                                                         </span>
                                                     </TableCell>
                                                     <TableCell className="text-sm text-muted-foreground">
-                                                        {format(new Date(), 'MMM d, yyyy')}
+                                                        {form.created_time
+                                                            ? format(new Date(form.created_time), 'MMM d, yyyy')
+                                                            : 'N/A'}
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         <div className="flex items-center justify-end gap-2">
