@@ -51,7 +51,7 @@ export async function POST(
 
         let post;
         if (postId) {
-            // Update existing post
+            // Update explicitly specified post
             post = await prisma.campaignPost.update({
                 where: { id: postId },
                 data: {
@@ -66,20 +66,49 @@ export async function POST(
                 include: { campaign: true }
             });
         } else {
-            // Create new post
-            post = await prisma.campaignPost.create({
-                data: {
-                    subject,
-                    message,
-                    type,
-                    mediaUrls,
-                    metadata: combinedMetadata,
+            // No postId provided - check for existing DRAFT/FAILED post to avoid duplicates
+            const existingPost = await prisma.campaignPost.findFirst({
+                where: {
                     campaignId,
+                    type,
+                    isDeleted: false,
                     status: 'DRAFT',
-                    ...otherData
-                },
-                include: { campaign: true }
+                    isPostSent: false,
+                }
             });
+
+            if (existingPost) {
+                // Reuse the existing post
+                post = await prisma.campaignPost.update({
+                    where: { id: existingPost.id },
+                    data: {
+                        subject,
+                        message,
+                        type,
+                        mediaUrls,
+                        metadata: combinedMetadata,
+                        status: 'DRAFT',
+                        failureReason: null,
+                        ...otherData
+                    },
+                    include: { campaign: true }
+                });
+            } else {
+                // Create new post
+                post = await prisma.campaignPost.create({
+                    data: {
+                        subject,
+                        message,
+                        type,
+                        mediaUrls,
+                        metadata: combinedMetadata,
+                        campaignId,
+                        status: 'DRAFT',
+                        ...otherData
+                    },
+                    include: { campaign: true }
+                });
+            }
         }
 
         // Trigger send with forceSchedule: true

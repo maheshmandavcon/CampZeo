@@ -154,6 +154,16 @@ async function postHandler(req: Request) {
                 isTrial: true,
                 trialStartDate: trialStartDate,
                 trialEndDate: trialEndDate,
+                organisationPlatforms: {
+                    create: [
+                        { platform: 'EMAIL' },
+                        { platform: 'FACEBOOK' },
+                        { platform: 'INSTAGRAM' },
+                        { platform: 'LINKEDIN' },
+                        { platform: 'YOUTUBE' },
+                        { platform: 'PINTEREST' },
+                    ]
+                }
             }
         });
 

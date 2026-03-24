@@ -162,8 +162,12 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
             });
         } else {
             // Fallback to direct link
-            window.open(`https://adsmanager.facebook.com/billing_hub/payment_settings?act=${accountId}`, '_blank');
-            toast.info("Opening payment settings in a new tab...");
+            const width = 1000, height = 800;
+            const left = (window.innerWidth - width) / 2;
+            const top = (window.innerHeight - height) / 2;
+            const billingUrl = `https://business.facebook.com/billing_hub/accounts/details?asset_id=${accountId}&placement=standalone`;
+            window.open(billingUrl, 'fbPayment', `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`);
+            toast.info("Opening Facebook Payment Settings...");
         }
     };
 
@@ -403,8 +407,12 @@ export const MetaBoostSection: React.FC<MetaBoostSectionProps> = ({ platform, op
                                                             // Otherwise, open Ads Manager billing page directly
                                                             else if (selectedAccount) {
                                                                 const cleanAccountId = selectedAccount.id.replace('act_', '');
-                                                                window.open(`https://adsmanager.facebook.com/billing_hub/?act=${cleanAccountId}`, '_blank');
-                                                                toast.info("Opening Facebook Ads Manager to add funds...");
+                                                                const width = 1000, height = 800;
+                                                                const left = (window.innerWidth - width) / 2;
+                                                                const top = (window.innerHeight - height) / 2;
+                                                                const billingUrl = `https://business.facebook.com/billing_hub/accounts/details?asset_id=${cleanAccountId}&placement=standalone`;
+                                                                window.open(billingUrl, 'fbAddFunds', `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`);
+                                                                toast.info("Opening Facebook Add Funds...");
                                                             } else {
                                                                 toast.error("Please select an ad account first.");
                                                             }
