@@ -33,14 +33,22 @@ async function postHandler(req: Request) {
             return NextResponse.json({ error: "Free trial doesn't require payment" }, { status: 400 });
         }
 
-        // Get user from database
-        const dbUser = await prisma.user.findUnique({
+        // Get or create user from database
+        const dbUser = await prisma.user.upsert({
             where: { clerkId: user.id },
+            update: {}, // No update needed if user exists
+            create: {
+                clerkId: user.id,
+                email: user.emailAddresses[0]?.emailAddress || `no-email-${user.id}@campzeo.com`,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: 'ORGANISATION_USER',
+            },
             include: { organisation: true },
         });
 
         if (!dbUser) {
-            return NextResponse.json({ error: "User not found" }, { status: 404 });
+            return NextResponse.json({ error: "Failed to create user record" }, { status: 500 });
         }
 
         // Handle signup flow (no organisation yet) vs upgrade flow (organisation exists)
