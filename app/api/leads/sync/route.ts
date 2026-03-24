@@ -55,7 +55,8 @@ export async function POST(request: NextRequest) {
                                 where: { metaLeadId: leadData.id },
                                 update: {
                                     data: normalizedData,
-                                    updatedAt: new Date()
+                                    updatedAt: new Date(),
+                                    createdAt: new Date(leadData.created_time)
                                 },
                                 create: {
                                     organisationId: orgId,

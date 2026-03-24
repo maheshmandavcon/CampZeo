@@ -10,6 +10,7 @@ interface CSVRow {
     contactMobile?: string;
     contactWhatsApp?: string;
     campaigns?: string; // Comma-separated campaign names or IDs
+    createdAt?: string;
 }
 
 interface ValidationError {
@@ -65,6 +66,8 @@ function parseCSV(csvText: string): CSVRow[] {
                 row.contactWhatsApp = value;
             } else if (header.includes('campaign')) {
                 row.campaigns = value;
+            } else if (header.includes('createdat') || header.includes('date')) {
+                row.createdAt = value;
             }
         });
 
@@ -133,6 +136,7 @@ async function postHandler(request: NextRequest) {
             contactMobile: string | null;
             contactWhatsApp: string | null;
             organisationId: number;
+            createdAt?: Date;
         }> = [];
 
         for (let i = 0; i < rows.length; i++) {
@@ -212,7 +216,8 @@ async function postHandler(request: NextRequest) {
                 contactEmail: row.contactEmail || null,
                 contactMobile: row.contactMobile || null,
                 contactWhatsApp: row.contactWhatsApp || null,
-                organisationId: dbUser.organisationId
+                organisationId: dbUser.organisationId,
+                ...(row.createdAt && { createdAt: new Date(row.createdAt) })
             });
         }
 

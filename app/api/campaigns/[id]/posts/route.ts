@@ -234,28 +234,65 @@ async function createPostHandler(
     // If it's a social post and not scheduled, send it immediately
     const isSocialPlatform = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(type);
 
-    // Create post
-    const post = await prisma.campaignPost.create({
-        data: {
+    // Before creating a new post, check for existing DRAFT/FAILED post
+    const existingPost = await prisma.campaignPost.findFirst({
+        where: {
             campaignId,
-            subject,
-            message,
             type,
-            senderEmail: type === 'EMAIL' ? senderEmail : null,
-            scheduledPostTime: scheduledPostTime ? new Date(scheduledPostTime) : (!isSocialPlatform ? new Date() : null),
-            isAttachedToCampaign: true,
-            videoUrl: mediaUrls && mediaUrls.length > 0 ? mediaUrls[0] : null, // Legacy support
-            mediaUrls: mediaUrls || [],
-            metadata,
-        },
-        include: {
-            campaign: {
-                include: {
-                    organisation: true,
-                }
-            }
+            isDeleted: false,
+            status: 'DRAFT',
+            isPostSent: false,
         }
     });
+
+    let post;
+    if (existingPost) {
+        // Reuse the existing post — update it with new data
+        post = await prisma.campaignPost.update({
+            where: { id: existingPost.id },
+            data: {
+                subject,
+                message,
+                senderEmail: type === 'EMAIL' ? senderEmail : null,
+                scheduledPostTime: scheduledPostTime ? new Date(scheduledPostTime) : (!isSocialPlatform ? new Date() : null),
+                videoUrl: mediaUrls && mediaUrls.length > 0 ? mediaUrls[0] : null,
+                mediaUrls: mediaUrls || [],
+                metadata,
+                failureReason: null, // clear previous failure reason
+                status: 'DRAFT',
+            },
+            include: {
+                campaign: {
+                    include: {
+                        organisation: true,
+                    }
+                }
+            }
+        });
+    } else {
+        // Create new post
+        post = await prisma.campaignPost.create({
+            data: {
+                campaignId,
+                subject,
+                message,
+                type,
+                senderEmail: type === 'EMAIL' ? senderEmail : null,
+                scheduledPostTime: scheduledPostTime ? new Date(scheduledPostTime) : (!isSocialPlatform ? new Date() : null),
+                isAttachedToCampaign: true,
+                videoUrl: mediaUrls && mediaUrls.length > 0 ? mediaUrls[0] : null, // Legacy support
+                mediaUrls: mediaUrls || [],
+                metadata,
+            },
+            include: {
+                campaign: {
+                    include: {
+                        organisation: true,
+                    }
+                }
+            }
+        });
+    }
 
     
     if (isSocialPlatform && !scheduledPostTime) {

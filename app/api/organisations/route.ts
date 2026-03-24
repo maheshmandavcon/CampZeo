@@ -55,6 +55,7 @@ async function postHandler(req: Request) {
 
         let organisation: any;
         let subscription: any;
+        let invoice: any = null;
         let isUpdating = false;
 
         // If user already has an organisation (e.g., created by admin), update it
@@ -79,11 +80,12 @@ async function postHandler(req: Request) {
                 }
             });
         } else {
+            console.log("Creating new organisation:", organizationName);
             // Create new organisation
             organisation = await prisma.organisation.create({
                 data: {
                     name: organizationName,
-                    ownerName: `${user.firstName} ${user.lastName}`.trim(),
+                    ownerName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Owner',
                     email: email || user.emailAddresses[0]?.emailAddress,
                     phone,
                     address,
@@ -116,6 +118,7 @@ async function postHandler(req: Request) {
             }
         }
 
+        console.log(`Fetching plan: ${plan}`);
         // Fetch Plan from DB
         const dbPlan = await prisma.plan.findFirst({
             where: { name: plan }
@@ -124,6 +127,7 @@ async function postHandler(req: Request) {
         let selectedPlan = dbPlan;
         if (!selectedPlan) {
             if (plan === 'FREE_TRIAL') {
+                console.log("Creating default FREE_TRIAL plan");
                 selectedPlan = await prisma.plan.create({
                     data: {
                         name: 'FREE_TRIAL',
@@ -134,6 +138,7 @@ async function postHandler(req: Request) {
                     }
                 });
             } else {
+                console.error(`Invalid plan selected: ${plan}`);
                 return NextResponse.json({ error: "Invalid plan selected" }, { status: 400 });
             }
         }
@@ -147,6 +152,7 @@ async function postHandler(req: Request) {
         });
 
         if (!existingSubscription) {
+            console.log("Creating new subscription");
             // Create Subscription only if one doesn't exist
             subscription = await prisma.subscription.create({
                 data: {
@@ -165,6 +171,7 @@ async function postHandler(req: Request) {
             console.log("✅ Subscription already exists, using existing one");
         }
 
+        console.log("Upserting user data...");
         const updatedUser = await prisma.user.upsert({
             where: { clerkId: user.id },
             update: {
@@ -172,22 +179,36 @@ async function postHandler(req: Request) {
             },
             create: {
                 clerkId: user.id,
-                email: user.emailAddresses[0]?.emailAddress || "",
+                email: email || user.emailAddresses[0]?.emailAddress || `no-email-${user.id}@campzeo.com`,
                 firstName: user.firstName,
                 lastName: user.lastName,
                 organisationId: organisation.id,
                 role: 'ORGANISATION_USER',
             },
         });
+
         // Handle Payment if not free trial
         if (plan !== "FREE_TRIAL" && paymentData) {
+            console.log("Processing payment and invoice...");
+            
+            // Normalize payment data (handle both formats from frontend: direct or nested in .payment)
+            const pData = paymentData.payment || paymentData;
+            const rOrderId = pData.razorpay_order_id || pData.orderId || pData.razorpayOrderId;
+            const rPaymentId = pData.razorpay_payment_id || pData.paymentId || pData.razorpayPaymentId;
+            const rSignature = pData.razorpay_signature || pData.signature || pData.razorpaySignature;
+
+            if (!rOrderId) {
+                console.error("Critical: razorpay_order_id is missing in paymentData", paymentData);
+                throw new Error("Razorpay Order ID is missing. Please contact support.");
+            }
+
             // Create Payment
             await prisma.payment.create({
                 data: {
                     organisationId: organisation.id,
-                    razorpayOrderId: paymentData.razorpay_order_id,
-                    razorpayPaymentId: paymentData.razorpay_payment_id,
-                    razorpaySignature: paymentData.razorpay_signature,
+                    razorpayOrderId: rOrderId,
+                    razorpayPaymentId: rPaymentId || "PENDING",
+                    razorpaySignature: rSignature || "PENDING",
                     amount: selectedPlan.price,
                     currency: "INR",
                     status: "success",
@@ -197,7 +218,7 @@ async function postHandler(req: Request) {
             });
 
             // Create Invoice
-            await prisma.invoice.create({
+            invoice = await prisma.invoice.create({
                 data: {
                     subscriptionId: subscription.id,
                     invoiceDate: new Date(),
@@ -215,45 +236,56 @@ async function postHandler(req: Request) {
                 }
             });
 
+            console.log("Sending payment receipt email...");
             // Send Payment Receipt
-            await sendPaymentReceipt({
-                email: email || user.emailAddresses[0]?.emailAddress || "",
-                amount: Number(selectedPlan.price),
-                currency: "INR",
-                planName: selectedPlan.name,
-                receiptId: paymentData.razorpay_payment_id,
-                date: new Date(),
-                organisationName: organizationName
-            });
+            try {
+                await sendPaymentReceipt({
+                    email: email || user.emailAddresses[0]?.emailAddress || "",
+                    amount: Number(selectedPlan.price),
+                    currency: "INR",
+                    planName: selectedPlan.name,
+                    receiptId: rPaymentId || "N/A",
+                    date: new Date(),
+                    organisationName: organizationName
+                });
+                console.log("Payment receipt email sent successfully");
+            } catch (emailErr) {
+                console.error("Failed to send payment receipt email:", emailErr);
+                // Don't crash the whole process if email fails
+            }
         }
 
         // Log event
-        await prisma.logEvents.create({
-            data: {
-                message: isUpdating
-                    ? `Organisation updated: ${organisation.name}`
-                    : `Organisation created: ${organisation.name}`,
-                level: 'Info',
-                timeStamp: new Date(),
-                properties: JSON.stringify({
-                    userId: updatedUser.id,
-                    organisationId: organisation.id,
-                    plan: selectedPlan.name,
-                    isUpdating
-                })
-            }
-        });
+        try {
+            await prisma.logEvents.create({
+                data: {
+                    message: isUpdating
+                        ? `Organisation updated: ${organisation.name}`
+                        : `Organisation created: ${organisation.name}`,
+                    level: 'Info',
+                    timeStamp: new Date(),
+                    properties: JSON.stringify({
+                        userId: updatedUser.id,
+                        organisationId: organisation.id,
+                        plan: selectedPlan.name,
+                        isUpdating
+                    })
+                }
+            });
+            console.log("Event logged successfully");
+        } catch (logErr) {
+            console.error("Failed to log event:", logErr);
+        }
 
+        console.log("Registration process completed successfully");
         return NextResponse.json({
             success: true,
             organisation,
             user: updatedUser,
             isUpdating,
-            invoice: plan !== "FREE_TRIAL" && paymentData ? await prisma.invoice.findFirst({ where: { description: `Subscription for ${selectedPlan.name}`, subscription: { organisationId: organisation.id } }, orderBy: { createdAt: 'desc' } }) : null,
-            // We can also just use the invoice created above if we assign it to a variable, but it's inside an if block.
-            // Let's rely on finding it or refactoring. 
-            // Better: let invoice variable be outside.
+            invoice,
         });
+
     
 }
 

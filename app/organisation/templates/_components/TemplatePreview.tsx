@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useState } from "react";
 import {
     MoreHorizontal,
     ThumbsUp,
@@ -19,17 +20,123 @@ interface TemplatePreviewProps {
     subject?: string | null;
     mediaUrls?: string[];
     isCompact?: boolean;
+    metadata?: {
+        thumbnailUrl?: string;
+    };
 }
+
+const getYouTubeId = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+};
+
+const isYouTubeUrl = (url: string) => !!getYouTubeId(url);
+
+const isVideoFile = (url: string) =>
+    !!url.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
+
+const getMediaThumbnail = (url: string): { src: string; isVideo: boolean } => {
+    const ytId = getYouTubeId(url);
+    if (ytId) return { src: `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`, isVideo: true };
+    if (isVideoFile(url)) return { src: url, isVideo: true };
+    return { src: url, isVideo: false };
+};
 
 export default function TemplatePreview({
     platform,
     content,
     subject,
     mediaUrls = [],
-    isCompact = false
+    isCompact = false,
+    metadata
 }: TemplatePreviewProps) {
+    const [isPlaying, setIsPlaying] = useState(false);
     const hasMedia = mediaUrls && mediaUrls.length > 0;
     const firstMedia = hasMedia ? mediaUrls[0] : null;
+
+    const renderMedia = (url: string | null, aspectRatio: string = "aspect-video") => {
+        if (!url) return null;
+        const media = getMediaThumbnail(url);
+        const ytId = getYouTubeId(url);
+        const coverImageUrl = metadata?.thumbnailUrl;
+
+        // If playing, show the actual video/embed
+        if (isPlaying) {
+            if (ytId) {
+                return (
+                    <div className={`relative ${aspectRatio} w-full overflow-hidden rounded bg-black`}>
+                        <iframe
+                            src={`https://www.youtube.com/embed/${ytId}?autoplay=1`}
+                            className="absolute inset-0 size-full"
+                            allow="autoplay; encrypted-media"
+                            allowFullScreen
+                        />
+                    </div>
+                );
+            }
+            if (media.isVideo) {
+                return (
+                    <div className={`relative ${aspectRatio} w-full overflow-hidden rounded bg-black`}>
+                        <video
+                            src={url}
+                            className="size-full object-cover"
+                            controls
+                            autoPlay
+                        />
+                    </div>
+                );
+            }
+        }
+
+        // Static Preview Priority: metadata.thumbnailUrl > Video frame > YT thumbnail > Image
+        return (
+            <div
+                className={`relative ${aspectRatio} w-full overflow-hidden rounded bg-gray-100 ${media.isVideo ? 'cursor-pointer group' : ''}`}
+                onClick={(e) => {
+                    if (media.isVideo) {
+                        e.stopPropagation();
+                        setIsPlaying(true);
+                    }
+                }}
+            >
+                {coverImageUrl ? (
+                    <Image
+                        src={coverImageUrl}
+                        alt="Cover"
+                        fill
+                        className="object-cover"
+                        unoptimized
+                    />
+                ) : (media.isVideo && !ytId) ? (
+                    <video
+                        src={media.src}
+                        className="size-full object-cover"
+                        preload="metadata"
+                        muted
+                        playsInline
+                    />
+                ) : (
+                    <Image
+                        src={media.src}
+                        alt="Preview"
+                        fill
+                        className="object-cover"
+                        unoptimized
+                    />
+                )}
+
+                {/* Play icon overlay for videos (Social platforms show it as a static overlay, YouTube switches to player) */}
+                {media.isVideo && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/20 transition-colors">
+                        <div className="rounded-full bg-red-600 p-3 shadow-lg transform group-hover:scale-110 transition-transform">
+                            <Play className="size-8 text-white fill-white" />
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     switch (platform) {
         case "FACEBOOK":
@@ -50,17 +157,7 @@ export default function TemplatePreview({
                             {content || "Your message will appear here..."}
                         </p>
 
-                        {hasMedia && (
-                            <div className="relative aspect-video w-full overflow-hidden rounded bg-gray-100">
-                                <Image
-                                    src={firstMedia!}
-                                    alt="Preview"
-                                    fill
-                                    className="object-cover"
-                                    unoptimized
-                                />
-                            </div>
-                        )}
+                        {hasMedia && renderMedia(firstMedia)}
 
                         {!isCompact && (
                             <div className="flex items-center justify-between border-t pt-2 mt-2">
@@ -90,18 +187,7 @@ export default function TemplatePreview({
                             <p className="text-sm font-semibold text-gray-900">yourbrand</p>
                         </div>
                     </div>
-
-                    {hasMedia ? (
-                        <div className="relative aspect-square w-full bg-black">
-                            <Image
-                                src={firstMedia!}
-                                alt="Preview"
-                                fill
-                                className="object-cover"
-                                unoptimized
-                            />
-                        </div>
-                    ) : (
+                    {hasMedia ? renderMedia(firstMedia, "aspect-square") : (
                         <div className="flex aspect-square items-center justify-center bg-gray-50">
                             <ImageIcon className="size-12 text-gray-400" />
                         </div>
@@ -145,17 +231,7 @@ export default function TemplatePreview({
                             {content || "Your post content..."}
                         </p>
 
-                        {hasMedia && (
-                            <div className="relative aspect-video w-full overflow-hidden rounded bg-gray-100">
-                                <Image
-                                    src={firstMedia!}
-                                    alt="Preview"
-                                    fill
-                                    className="object-cover"
-                                    unoptimized
-                                />
-                            </div>
-                        )}
+                        {hasMedia && renderMedia(firstMedia)}
 
                         {!isCompact && (
                             <div className="flex items-center gap-2 border-t pt-2 mt-2 text-xs text-gray-600">
@@ -174,22 +250,7 @@ export default function TemplatePreview({
         case "YOUTUBE":
             return (
                 <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
-                    {hasMedia ? (
-                        <div className="relative aspect-video w-full bg-black">
-                            <Image
-                                src={firstMedia!}
-                                alt="Preview"
-                                fill
-                                className="object-cover"
-                                unoptimized
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <div className="rounded-full bg-red-600 p-3">
-                                    <Play className="size-6 text-white fill-white" />
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
+                    {hasMedia ? renderMedia(firstMedia, "aspect-video") : (
                         <div className="flex aspect-video items-center justify-center bg-gray-900">
                             <Play className="size-16 text-gray-600" />
                         </div>
@@ -221,17 +282,7 @@ export default function TemplatePreview({
                         <p className="text-xs text-gray-900 whitespace-pre-wrap line-clamp-4">
                             {content || "Email content..."}
                         </p>
-                        {hasMedia && (
-                            <div className="mt-2 relative aspect-video w-full overflow-hidden rounded bg-gray-100">
-                                <Image
-                                    src={firstMedia!}
-                                    alt="Preview"
-                                    fill
-                                    className="object-cover"
-                                    unoptimized
-                                />
-                            </div>
-                        )}
+                        {hasMedia && renderMedia(firstMedia)}
                     </div>
                 </div>
             );
@@ -245,17 +296,7 @@ export default function TemplatePreview({
                             <p className="text-xs text-gray-900 whitespace-pre-wrap line-clamp-4">
                                 {content || "Message text..."}
                             </p>
-                            {hasMedia && (
-                                <div className="mt-2 relative aspect-video w-full overflow-hidden rounded bg-gray-100">
-                                    <Image
-                                        src={firstMedia!}
-                                        alt="Preview"
-                                        fill
-                                        className="object-cover"
-                                        unoptimized
-                                    />
-                                </div>
-                            )}
+                            {hasMedia && renderMedia(firstMedia)}
                             <p className="text-xs text-gray-400 text-right mt-1">Just now</p>
                         </div>
                     </div>
@@ -266,20 +307,12 @@ export default function TemplatePreview({
             return (
                 <div className="rounded-lg border bg-white shadow-sm overflow-hidden mx-auto" style={{ maxWidth: "240px" }}>
                     <div className="relative w-full aspect-[3/4] bg-gray-100">
-                        {hasMedia ? (
-                            <Image
-                                src={firstMedia!}
-                                alt="Pin Preview"
-                                fill
-                                className="object-cover"
-                                unoptimized
-                            />
-                        ) : (
+                        {hasMedia ? renderMedia(firstMedia, "aspect-[3/4]") : (
                             <div className="flex h-full w-full flex-col items-center justify-center p-4 text-center">
                                 <ImageIcon className="mb-2 size-8 text-gray-300" />
                             </div>
                         )}
-                        <div className="absolute right-2 top-2 rounded-full bg-white p-1.5 shadow-sm opacity-80">
+                        <div className="absolute right-2 top-2 z-10 rounded-full bg-white p-1.5 shadow-sm opacity-80">
                             <MoreHorizontal className="size-3 text-gray-700" />
                         </div>
                     </div>
