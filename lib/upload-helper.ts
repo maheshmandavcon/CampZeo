@@ -1,9 +1,9 @@
-
 export async function uploadToServer(file: File): Promise<{ url: string }> {
+  const serverUrl = process.env.NEXT_PUBLIC_UPLOAD_SERVER_URL || 'http://103.72.220.77:5000';
   const formData = new FormData();
   formData.append('files', file);
 
-  const res = await fetch('http://103.72.220.77:5000/api/upload', {
+  const res = await fetch(`${serverUrl}/api/upload`, {
     method: 'POST',
     body: formData,
   });
@@ -26,13 +26,14 @@ export async function uploadToServer(file: File): Promise<{ url: string }> {
 
 
 export async function deleteFromServer(publicUrl: string): Promise<boolean> {
+  const serverUrl = process.env.NEXT_PUBLIC_UPLOAD_SERVER_URL || 'http://103.72.220.77:5000';
   try {
     const filename = publicUrl.split('/').pop();
     if (!filename) return false;
 
     console.log(`[Cleanup] Deleting ${filename} from custom server...`);
 
-    const res = await fetch(`http://103.72.220.77:5000/api/file/${filename}`, {
+    const res = await fetch(`${serverUrl}/api/file/${filename}`, {
       method: 'DELETE',
     });
 

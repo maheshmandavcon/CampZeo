@@ -48,10 +48,11 @@ async function postHandler(request: NextRequest) {
 
         console.log('[Upload] Redirecting to custom server upload API');
 
+        const serverUrl = process.env.NEXT_PUBLIC_UPLOAD_SERVER_URL || 'http://103.72.220.77:5000';
         const uploadFormData = new FormData();
         uploadFormData.append('files', file);
 
-        const uploadRes = await fetch('http://103.72.220.77:5000/api/upload', {
+        const uploadRes = await fetch(`${serverUrl}/api/upload`, {
             method: 'POST',
             body: uploadFormData,
         });
