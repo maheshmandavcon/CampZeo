@@ -170,7 +170,7 @@ export async function sendOrganisationApproved(params: OrganisationApprovedParam
 
         try {
             await mg.messages.create(domain, msg);
-            console.log(`✅ Email sent to ${email} via Mailgun`);
+            console.log(` Email sent to ${email} via Mailgun`);
             return;
         } catch (error: any) {
             console.error('Error sending email via Mailgun:', error);

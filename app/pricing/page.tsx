@@ -78,17 +78,16 @@ export default function PricingPage() {
                                         <CardFooter>
                                             {isTrial ? (
                                                 // Free Trial: Redirect to purchase page with planId\
-                                                <Link href={`/purchase?planId=${plan.id}`} className="w-full">
-                                                    {/* <Link href="/coming-soon" className="w-full"> */}
-                                                    <Button
-                                                        className="w-full"
-                                                        variant="outline"
-                                                        size="lg"
-                                                    >
-                                                        Start Free Trial
-                                                        <ArrowRight className="ml-2 size-4" />
-                                                    </Button>
-                                                </Link>
+
+                                                <Button
+                                                    className="w-full"
+                                                    variant="outline"
+                                                    size="lg"
+                                                    onClick={() => router.push("/sign-up")}>
+                                                    Start Free Trial
+                                                    <ArrowRight className="ml-2 size-4" />
+                                                </Button>
+
                                             ) : isSignedIn ? (
                                                 // Paid Plan + Signed In: Go to purchase
                                                 <Button
@@ -108,7 +107,7 @@ export default function PricingPage() {
                                                     size="lg"
                                                     onClick={() => router.push(`/purchase?planId=${plan.id}`)}
                                                 >
-                                                    Sign Up
+                                                    Purchase Now
                                                 </Button>
                                                 // // <Button
                                                 //     className="w-full"

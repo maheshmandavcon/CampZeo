@@ -1,7 +1,7 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { sendPaymentReceipt, sendWelcomeEmail, sendNewDeviceSignInEmail } from "@/lib/email";
+import { sendPaymentReceipt, sendOrganisationInvite, sendWelcomeEmail, sendNewDeviceSignInEmail } from "@/lib/email";
 import { logError, logWarning, logInfo } from '@/lib/audit-logger';
 import { createClerkUser } from "@/lib/clerk-admin";
 import { verifyRazorpaySignature } from "@/lib/razorpay";
@@ -90,7 +90,6 @@ async function postHandler(req: Request) {
                 });
                 
                 finalClerkId = clerkUser.id;
-                console.log(' Clerk user created successfully:', finalClerkId);
             } catch (err: any) {
                 console.error("Failed to create Clerk user during checkout:", err);
                 return NextResponse.json({ error: err.message || "Failed to create user account" }, { status: 400 });
@@ -330,6 +329,13 @@ async function postHandler(req: Request) {
         if (!user && finalUserEmail && password) {
             console.log("Sending welcome/invite email to new user...");
             try {
+                // await sendOrganisationInvite({
+                //     email: finalUserEmail,
+                //     password: password,
+                //     organisationName: organizationName,
+                //     ownerName: finalFirstName || ownerName || "Owner",
+                // });
+                // console.log("Invite email sent successfully.");
 
                 await sendWelcomeEmail({
                     email: finalUserEmail,

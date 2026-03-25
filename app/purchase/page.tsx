@@ -45,6 +45,18 @@ function PurchaseContent() {
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [isDetecting, setIsDetecting] = useState(false);
 
+    type LocationOption = {
+        city: string;
+        state: string;
+        country: string;
+        countryCode: string;
+        display: string;
+    };
+
+    const [locationOptions, setLocationOptions] = useState<LocationOption[]>([]);
+    const [showLocationSelector, setShowLocationSelector] = useState(false);
+    const [postalOptions, setPostalOptions] = useState<LocationOption[]>([]);
+
     // Data for Organization Creation
     const [formData, setFormData] = useState({
         email: "",
@@ -91,8 +103,18 @@ function PurchaseContent() {
         }
     }, [plans, searchParams, selectedPlanId]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        let filteredValue = value;
+        
+        if (name === "postalCode") {
+            filteredValue = value.replace(/[^a-zA-Z0-9\s-]/g, "");
+        } else if (name === "mobile") {
+            filteredValue = value.replace(/[^0-9+\s\(\)-]/g, "");
+        }
+        
+        setFormData({ ...formData, [name]: filteredValue });
+    };
 
     const handleSelectChange = (name: string, value: string) =>
         setFormData({ ...formData, [name]: value });
@@ -101,15 +123,19 @@ function PurchaseContent() {
     useEffect(() => {
         const detectLocation = async () => {
             const { postalCode, country } = formData;
-            if (!postalCode || postalCode.length < 3) return;
+            if (!postalCode || postalCode.length < 3) {
+                setPostalOptions([]);
+                return;
+            }
 
-            // Find country code if country is selected
-            const currentCountry = countries.find(c => c.name === country);
-            const countryParam = currentCountry ? `&country=${encodeURIComponent(currentCountry.name)}` : "";
-
+            setPostalOptions([]);
             setIsDetecting(true);
+
             try {
-                // Primary: Nominatim (Global)
+                const currentCountry = countries.find(c => c.name === country);
+                const countryParam = currentCountry ? `&country=${encodeURIComponent(currentCountry.name)}` : "";
+
+                // 1. Primary: Nominatim (Global)
                 const url = `https://nominatim.openstreetmap.org/search?postalcode=${postalCode}${countryParam}&format=json&addressdetails=1`;
                 const res = await fetch(url, {
                     headers: {
@@ -118,40 +144,59 @@ function PurchaseContent() {
                     }
                 });
 
+                let options: LocationOption[] = [];
+
                 if (res.ok) {
                     const data = await res.json();
                     if (data && data.length > 0) {
-                        const address = data[0].address;
-                        const detectedCity = address.city || address.town || address.village || address.suburb || address.municipality;
-                        const detectedState = address.state || address.province || address.county || address.state_district;
-                        const detectedCountryCode = address.country_code?.toUpperCase();
+                        options = data.map((item: any) => {
+                            const addr = item.address;
+                            const city = addr.city || addr.town || addr.village || addr.municipality || addr.city_district || addr.district || addr.suburb || addr.state_district || "";
+                            const state = addr.state || addr.province || addr.county || "";
+                            const detectedCountryCode = addr.country_code?.toUpperCase();
+                            const matchedCountry = countries.find(c => c.code === detectedCountryCode);
 
-                        const matchedCountry = countries.find(c => c.code === detectedCountryCode);
-
-                        setFormData(prev => ({
-                            ...prev,
-                            city: detectedCity || prev.city,
-                            state: detectedState || prev.state,
-                            country: matchedCountry ? matchedCountry.name : (address.country || prev.country)
-                        }));
-                        setIsDetecting(false);
-                        return; // Success, exit
+                            return {
+                                city,
+                                state,
+                                country: matchedCountry ? matchedCountry.name : (addr.country || ""),
+                                countryCode: detectedCountryCode,
+                                display: `${city}${city && state ? ', ' : ''}${state}${(city || state) && (addr.country) ? ', ' : ''}${addr.country || (matchedCountry ? matchedCountry.name : '')}`
+                            };
+                        }).filter((opt: any) => opt.city && opt.state);
                     }
                 }
 
-                // Fallback for India if Nominatim yields nothing but it looks like an Indian pincode
-                if (postalCode.length === 6 && (!country || country === "India")) {
+                if (options.length === 0 && postalCode.length === 6 && (!country || country === "India") && /^\d+$/.test(postalCode)) {
                     const resIN = await fetch(`https://api.postalpincode.in/pincode/${postalCode}`);
                     const dataIN = await resIN.json();
                     if (dataIN[0]?.Status === "Success") {
-                        const details = dataIN[0].PostOffice[0];
-                        setFormData(prev => ({
-                            ...prev,
-                            city: details.District,
-                            state: details.State,
-                            country: "India"
-                        }));
+                        const offices = dataIN[0].PostOffice;
+                        options = Array.from(new Set(offices.map((o: any) => `${o.District}|${o.State}`)))
+                            .map(loc => {
+                                const [district, state] = (loc as string).split('|');
+                                return {
+                                    city: district,
+                                    state: state,
+                                    country: "India",
+                                    countryCode: "IN",
+                                    display: `${district}, ${state}, India`
+                                };
+                            });
                     }
+                }
+
+                // 3. Apply results
+                if (options.length === 1) {
+                    const opt = options[0];
+                    setFormData(prev => ({
+                        ...prev,
+                        city: opt.city,
+                        state: opt.state,
+                        country: opt.country || prev.country
+                    }));
+                } else if (options.length > 1) {
+                    setPostalOptions(options);
                 }
             } catch (error) {
                 console.error("Pincode detection error:", error);
@@ -160,7 +205,7 @@ function PurchaseContent() {
             }
         };
 
-        const debounce = setTimeout(detectLocation, 800);
+        const debounce = setTimeout(detectLocation, 600);
         return () => clearTimeout(debounce);
     }, [formData.postalCode, formData.country]);
 
@@ -434,6 +479,41 @@ function PurchaseContent() {
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4 col-span-1 md:col-span-2">
+                                 <div className="space-y-2">
+                                        <Label htmlFor="postalCode">Postal Code</Label>
+                                        <Input id="postalCode" name="postalCode" required value={formData.postalCode} onChange={handleChange} />
+                                        
+                                        {postalOptions.length > 0 && (
+                                            <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg animate-in fade-in slide-in-from-top-2 duration-300">
+                                                <p className="text-xs font-medium text-primary mb-2">Multiple locations found. Please select one:</p>
+                                                <Select
+                                                    onValueChange={(val) => {
+                                                        const selected = postalOptions.find(opt => opt.display === val);
+                                                        if (selected) {
+                                                            setFormData(prev => ({
+                                                                ...prev,
+                                                                city: selected.city,
+                                                                state: selected.state,
+                                                                country: selected.country
+                                                            }));
+                                                            setPostalOptions([]);
+                                                        }
+                                                    }}
+                                                >
+                                                    <SelectTrigger className="h-9 text-xs bg-background">
+                                                        <SelectValue placeholder="Select correct location..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {postalOptions.map((opt, idx) => (
+                                                            <SelectItem key={idx} value={opt.display} className="text-xs">
+                                                                {opt.display}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        )}
+                                    </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="city">City <span className="text-destructive">*</span></Label>
                                         <div className="relative">
@@ -489,10 +569,7 @@ function PurchaseContent() {
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="postalCode">Postal Code</Label>
-                                        <Input id="postalCode" name="postalCode" required value={formData.postalCode} onChange={handleChange} />
-                                    </div>
+                                    
                                 </div>
 
                                 {accountType === "business" && (
