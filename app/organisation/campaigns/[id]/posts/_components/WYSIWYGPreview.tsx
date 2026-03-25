@@ -77,7 +77,7 @@ export function WYSIWYGPreview({
                     {isVid ? (
                         <video
                             src={url}
-                            className="size-full object-cover"
+                            className="size-full object-fill"
                             autoPlay
                             muted
                             loop
@@ -88,7 +88,7 @@ export function WYSIWYGPreview({
                             src={url}
                             alt="Preview"
                             fill
-                            className="object-cover"
+                            className="object-fill"
                             unoptimized
                         />
                     )}
@@ -138,14 +138,14 @@ export function WYSIWYGPreview({
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); prevSlide(); }}
-                                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/20 p-1.5 text-white backdrop-blur-md transition-all hover:bg-white/40 opacity-0 group-hover:opacity-100 shadow-sm"
+                                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/20 p-1.5 text-white backdrop-blur-md transition-all hover:bg-white/40 opacity-15 group-hover:opacity-100 shadow-sm"
                             >
                                 <ChevronLeft className="size-4" />
                             </button>
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); nextSlide(); }}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/20 p-1.5 text-white backdrop-blur-md transition-all hover:bg-white/40 opacity-0 group-hover:opacity-100 shadow-sm"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/20 p-1.5 text-white backdrop-blur-md transition-all hover:bg-white/40 opacity-15 group-hover:opacity-100 shadow-sm"
                             >
                                 <ChevronRight className="size-4" />
                             </button>
@@ -266,7 +266,7 @@ export function WYSIWYGPreview({
                         ) : (
                             <video
                                 src={videoUrl}
-                                className="size-full object-cover"
+                                className="size-full object-fill"
                                 controls={!isYouTubeUrl}
                                 autoPlay
                                 muted
@@ -280,7 +280,7 @@ export function WYSIWYGPreview({
                                     src={thumbnailUrl}
                                     alt="Thumbnail"
                                     fill
-                                    className="object-cover"
+                                    className="object-fill"
                                     unoptimized
                                 />
                             ) : (

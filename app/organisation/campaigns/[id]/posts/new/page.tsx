@@ -254,16 +254,11 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 }
                 const data = await response.json();
                 const platforms = data.platforms || [];
-                // Filter out admin-only platforms (EMAIL, SMS, WHATSAPP are managed by admin)
-                const availablePlatforms = platforms.filter((p: string) =>
-                    !['EMAIL', 'SMS', 'WHATSAPP'].includes(p.toUpperCase())
-                );
-                // Add EMAIL, SMS, WHATSAPP as they're always available
-                setOrganisationPlatforms(['EMAIL', 'SMS', 'WHATSAPP', ...availablePlatforms]);
+                setOrganisationPlatforms(platforms);
             } catch (error) {
                 console.error('Error fetching organisation platforms:', error);
-                // Default to all platforms on error
-                setOrganisationPlatforms(['EMAIL', 'SMS', 'WHATSAPP', 'FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST']);
+                // Default to standard platforms on error
+                setOrganisationPlatforms(['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST']);
             } finally {
                 setLoadingPlatforms(false);
             }

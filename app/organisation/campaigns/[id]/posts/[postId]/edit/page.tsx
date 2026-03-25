@@ -154,18 +154,15 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                 setLoadingPlatforms(true);
                 const response = await fetch('/api/Organisation/GetPlatforms');
                 if (!response.ok) {
-                    setOrganisationPlatforms(['EMAIL', 'SMS', 'WHATSAPP', 'FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST']);
+                    setOrganisationPlatforms(['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST']);
                     return;
                 }
                 const data = await response.json();
-                const platforms = data.platforms || [];
-                const availablePlatforms = platforms.filter((p: string) =>
-                    !['EMAIL', 'SMS', 'WHATSAPP'].includes(p.toUpperCase())
-                );
-                setOrganisationPlatforms(['EMAIL', 'SMS', 'WHATSAPP', ...availablePlatforms]);
+                setOrganisationPlatforms(data.platforms || []);
             } catch (error) {
                 console.error('Error fetching organisation platforms:', error);
-                setOrganisationPlatforms(['EMAIL', 'SMS', 'WHATSAPP', 'FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST']);
+                // Default to standard platforms on error
+                setOrganisationPlatforms(['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST']);
             } finally {
                 setLoadingPlatforms(false);
             }

@@ -29,7 +29,7 @@ export async function sendSms(to: string, body: string, organisationId?: number)
         
         if (!accountSid || !authToken) {
             return { success: false, error: 'Twilio credentials missing' };
-        }
+        } 
 
         let formattedNumber = to.trim();
         if (!formattedNumber.startsWith('+')) {
