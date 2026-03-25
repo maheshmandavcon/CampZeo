@@ -9,13 +9,12 @@ import { withErrorHandling } from '@/lib/api-handler';
 async function postHandler(req: Request) {
 
         const user = await currentUser();
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, plan, isSignup, metadata } = await req.json();
 
-        if (!user) {
+        if (!user && !isSignup) {
             await logWarning("Unauthorized access attempt to verify payment", { action: "verify-payment" });
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
-
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, plan, isSignup, metadata } = await req.json();
 
         if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !plan) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -32,18 +31,8 @@ async function postHandler(req: Request) {
             return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
         }
 
-        // Get user from database
-        const dbUser = await prisma.user.findUnique({
-            where: { clerkId: user.id },
-            include: { organisation: true },
-        });
-
-        if (!dbUser) {
-            return NextResponse.json({ error: "User not found" }, { status: 404 });
-        }
-
         // Handle signup flow (no organisation yet)
-        if (isSignup || !dbUser.organisationId) {
+        if (isSignup) {
             // For signup, just verify the signature and return success
             // The payment record will be created when the organisation is created
             return NextResponse.json({
@@ -57,6 +46,15 @@ async function postHandler(req: Request) {
                     plan,
                 },
             });
+        }
+
+        const dbUser = await prisma.user.findUnique({
+            where: { clerkId: user!.id },
+            include: { organisation: true },
+        });
+
+        if (!dbUser || !dbUser.organisationId) {
+            return NextResponse.json({ error: "User or Organisation not found" }, { status: 404 });
         }
 
         // Handle upgrade flow (organisation exists)
@@ -190,7 +188,7 @@ async function postHandler(req: Request) {
         // Send Payment Receipt
         if (dbUser.organisation) {
             await sendPaymentReceipt({
-                email: user.emailAddresses[0]?.emailAddress || "",
+                email: user?.emailAddresses[0]?.emailAddress || dbUser.email || "",
                 amount: Number(payment.amount),
                 currency: payment.currency,
                 planName: plan,

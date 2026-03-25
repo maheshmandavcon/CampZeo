@@ -205,72 +205,13 @@ function PurchaseContent() {
         setLoading(true);
 
         try {
-            // If already signed in, just move to payment (the createOrganisation will handle the rest)
-            if (isSignedIn) {
-                setStep("PAYMENT");
-                setLoading(false);
-                return;
-            }
-
-            if (!isLoaded || !signUp) return;
-
-            // Split name
-            const nameParts = formData.name.trim().split(" ");
-            const firstName = nameParts[0];
-            const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
-
-            let signUpAttempt = signUp;
-            // Rest of existing signup logic...
-
-            // Check if we are resuming an existing signup flow
-            if (signUp.status === "missing_requirements" && signUp.emailAddress === formData.email) {
-                signUpAttempt = signUp;
-                // Check verification status
-                if (signUpAttempt.verifications?.emailAddress?.status === "verified") {
-                    // Already verified, try to complete
-                    const completeSignUp = await signUpAttempt.update({ firstName, lastName });
-                    if (completeSignUp.status === "complete") {
-                        await setActive({ session: completeSignUp.createdSessionId });
-                        setStep("PAYMENT");
-                        setLoading(false);
-                        return;
-                    }
-                    signUpAttempt = completeSignUp;
-                }
-            } else {
-                // Start fresh signup
-                signUpAttempt = await signUp.create({
-                    emailAddress: formData.email,
-                    password: formData.password,
-                    firstName,
-                    lastName,
-                });
-            }
-
-            // Prepare email verification if not already verified
-            if (signUpAttempt.verifications?.emailAddress?.status !== "verified") {
-                await signUpAttempt.prepareEmailAddressVerification({ strategy: "email_code" });
-                toast.success("Verification code sent to your email.");
-                setStep("VERIFICATION");
-            } else {
-                // If already verified but session not active
-                const completeSignUp = await signUpAttempt.update({ firstName, lastName });
-                if (completeSignUp.status === "complete") {
-                    await setActive({ session: completeSignUp.createdSessionId });
-                    setStep("PAYMENT");
-                } else {
-                    setStep("VERIFICATION");
-                }
-            }
+            // We bypass Clerk sign up and email verification during checkout entirely.
+            // The Clerk user and database records will be generated in bulk
+            // post successful Razorpay payment, just like the admin convert-enquiry flow.
+            setStep("PAYMENT");
         } catch (err: any) {
-            console.error("Sign up error:", err);
-            if (err.errors?.[0]?.code === "form_identifier_exists") {
-                toast.error("An account with this email already exists. Please sign in.");
-            } else if (err.errors?.[0]?.message) {
-                toast.error(err.errors[0].message);
-            } else {
-                toast.error("Failed to create account. Please try again.");
-            }
+            console.error("Navigation error:", err);
+            toast.error("An error occurred moving to payment.");
         } finally {
             setLoading(false);
         }
@@ -329,6 +270,8 @@ function PurchaseContent() {
                 body: JSON.stringify({
                     organizationName: accountType === 'individual' ? formData.name : formData.organisationName,
                     email: formData.email,
+                    password: formData.password, 
+                    ownerName: formData.name, 
                     phone: formData.mobile,
                     address: formData.address,
                     city: formData.city,
@@ -350,6 +293,20 @@ function PurchaseContent() {
 
             if (data.invoice) {
                 setInvoice(data.invoice);
+            }
+
+            if (!isSignedIn && formData.email && formData.password) {
+                try {
+                    const result = await signIn.create({
+                        identifier: formData.email,
+                        password: formData.password,
+                    });
+                    if (result.status === "complete") {
+                        await clerk.setActive({ session: result.createdSessionId });
+                    }
+                } catch (signInErr) {
+                    console.error("Auto sign-in failed:", signInErr);
+                }
             }
 
             toast.success("Account created successfully!");
@@ -632,8 +589,10 @@ function PurchaseContent() {
                                     <RazorpayButton
                                         plan={selectedPlan.name}
                                         amount={selectedPlan.price}
-                                        organizationName={formData.organisationName}
+                                        organizationName={formData.organisationName || formData.name}
                                         isSignup={true} // Important to redirect correctly or handle flow
+                                        prefillName={formData.name}
+                                        prefillEmail={formData.email}
                                         onSuccess={createOrganisation}
                                         className="w-full h-12 text-lg"
                                     >
