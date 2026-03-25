@@ -77,7 +77,7 @@ export function WYSIWYGPreview({
                     {isVid ? (
                         <video
                             src={url}
-                            className="size-full object-contain"
+                            className="size-full object-fill"
                             autoPlay
                             muted
                             loop
@@ -88,7 +88,7 @@ export function WYSIWYGPreview({
                             src={url}
                             alt="Preview"
                             fill
-                            className="object-contain"
+                            className="object-fill"
                             unoptimized
                         />
                     )}
@@ -266,7 +266,7 @@ export function WYSIWYGPreview({
                         ) : (
                             <video
                                 src={videoUrl}
-                                className="size-full object-contain"
+                                className="size-full object-fill"
                                 controls={!isYouTubeUrl}
                                 autoPlay
                                 muted
@@ -280,7 +280,7 @@ export function WYSIWYGPreview({
                                     src={thumbnailUrl}
                                     alt="Thumbnail"
                                     fill
-                                    className="object-contain"
+                                    className="object-fill"
                                     unoptimized
                                 />
                             ) : (
