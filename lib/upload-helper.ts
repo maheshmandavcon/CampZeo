@@ -5,6 +5,8 @@ export async function uploadToServer(file: File): Promise<{ url: string }> {
 
   const res = await fetch('http://103.72.220.77:5000/api/upload', {
     method: 'POST',
+    body: formData,
+  });
 
   if (!res.ok) {
     const errorText = await res.text();
