@@ -118,6 +118,8 @@ export async function generateContent(
                 contextParts.push(`Existing content to improve/modify: "${context.existingContent}"`);
             }
 
+            contextParts.push(`Include a minimum of 5 and a maximum of 10 highly relevant hashtags at the end of the content.`);
+
             if (contextParts.length > 0) {
                 enhancedPrompt = `${contextParts.join('\n')}\n\nUser request: ${prompt}\n\nGenerate the content.`;
 
