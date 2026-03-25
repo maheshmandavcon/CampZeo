@@ -2,6 +2,7 @@
 
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import {
   LayoutDashboard,
   BarChart3,
@@ -66,13 +67,20 @@ const SidebarNav = ({ onItemClick }: { onItemClick?: () => void }) => {
 
 export function OrganisationLayoutWrapper({
   children,
-  isImpersonating
+  isImpersonating,
+  hasSocialTokens
 }: {
   children: React.ReactNode;
   isImpersonating?: boolean;
+  hasSocialTokens?: boolean;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
+
+  const [isCheckingSocial, setIsCheckingSocial] = useState(
+    hasSocialTokens === false && !isImpersonating && pathname !== '/organisation/settings'
+  );
 
   const handleExitImpersonation = () => {
     document.cookie = "admin_impersonation=; path=/; max-age=0";
@@ -88,6 +96,60 @@ export function OrganisationLayoutWrapper({
       document.body.style.overflow = 'unset';
     };
   }, []);
+
+  useEffect(() => {
+    if (isImpersonating || pathname === '/organisation/settings') {
+      setIsCheckingSocial(false);
+    } else if (hasSocialTokens === false) {
+      setIsCheckingSocial(true);
+    }
+  }, [pathname, isImpersonating, hasSocialTokens]);
+
+  useEffect(() => {
+    if (isImpersonating) return;
+
+    let isMounted = true;
+
+    async function checkSocialStatus() {
+      try {
+        const res = await fetch('/api/user/social-status');
+        if (res.ok) {
+          const data = await res.json();
+          const hasConnectedPlatform =
+            data.facebook?.connected ||
+            data.instagram?.connected ||
+            data.linkedin?.connected ||
+            data.youtube?.connected ||
+            data.pinterest?.connected;
+
+          if (isMounted) {
+            if (!hasConnectedPlatform) {
+              if (pathname !== '/organisation/settings') {
+                router.push('/organisation/settings');
+              }
+              toast.error("No social platforms connected", {
+                description: "Please connect at least one social media account to continue using the platform.",
+                duration: 100000000,
+                id: "social-status-warning",
+              });
+            } else {
+              toast.dismiss("social-status-warning");
+              setIsCheckingSocial(false);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error checking social status:", e);
+        if (isMounted && hasSocialTokens !== false) setIsCheckingSocial(false);
+      }
+    }
+
+    checkSocialStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [pathname, isImpersonating, router, hasSocialTokens]);
 
   return (
 
@@ -162,7 +224,13 @@ export function OrganisationLayoutWrapper({
         <main className="flex-1 w-full overflow-y-auto bg-background">
           <div className=" flex flex-col">
             <div className="flex-1">
-              {children}
+              {isCheckingSocial ? (
+                <div className="flex items-center justify-center p-12 mt-10">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : (
+                children
+              )}
             </div>
             {/* Footer */}
           </div>

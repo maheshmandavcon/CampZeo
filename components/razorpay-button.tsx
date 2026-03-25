@@ -19,6 +19,8 @@ interface RazorpayButtonProps {
   isSignup?: boolean;
   metadata?: Record<string, any>;
   id?: string;
+  prefillName?: string;
+  prefillEmail?: string;
 }
 
 export function RazorpayButton({
@@ -33,6 +35,8 @@ export function RazorpayButton({
   isSignup = false,
   metadata,
   id,
+  prefillName,
+  prefillEmail,
 }: RazorpayButtonProps) {
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
@@ -59,7 +63,7 @@ export function RazorpayButton({
       return;
     }
 
-    if (!user) {
+    if (!user && !isSignup) {
       toast.error("Please sign in to continue");
       return;
     }
@@ -125,8 +129,8 @@ export function RazorpayButton({
           }
         },
         prefill: {
-          name: user.fullName || "",
-          email: user.primaryEmailAddress?.emailAddress || "",
+          name: user?.fullName || prefillName || "",
+          email: user?.primaryEmailAddress?.emailAddress || prefillEmail || "",
         },
         theme: {
           color: "#3b82f6",

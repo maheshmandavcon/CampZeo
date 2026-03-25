@@ -1,23 +1,19 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { sendPaymentReceipt } from "@/lib/email";
+import { sendPaymentReceipt, sendOrganisationInvite, sendWelcomeEmail, sendNewDeviceSignInEmail } from "@/lib/email";
 import { logError, logWarning, logInfo } from '@/lib/audit-logger';
+import { createClerkUser } from "@/lib/clerk-admin";
+import { verifyRazorpaySignature } from "@/lib/razorpay";
 
 import { withErrorHandling } from '@/lib/api-handler';
 async function postHandler(req: Request) {
 
         const user = await currentUser();
-
-        if (!user) {
-            await logWarning("Unauthorized access attempt to create organisation", { action: "create-organisation" });
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
         const body = await req.json();
 
         console.log("=== CREATE ORGANISATION REQUEST ===");
-        console.log("Request body:", JSON.stringify(body, null, 2));
+        console.log("Request body:", JSON.stringify({ ...body, password: body.password ? "***" : undefined }, null, 2));
         console.log("===================================");
 
         const {
@@ -26,6 +22,8 @@ async function postHandler(req: Request) {
             paymentData,
             phone,
             email,
+            password,
+            ownerName,
             address,
             city,
             state,
@@ -41,9 +39,66 @@ async function postHandler(req: Request) {
             );
         }
 
+        if (!user && (!email || !password)) {
+            await logWarning("Unauthorized checkout attempt to create organisation without credentials", { action: "create-organisation-guest" });
+            return NextResponse.json({ error: "Email and password are required to create an account." }, { status: 401 });
+        }
+
+        let rOrderId: string | undefined;
+        let rPaymentId: string | undefined;
+        let rSignature: string | undefined;
+        let finalClerkId = user?.id;
+        let finalUserEmail = email || user?.emailAddresses[0]?.emailAddress;
+        let finalFirstName = user?.firstName || ownerName?.split(' ')[0] || '';
+        let finalLastName = user?.lastName || ownerName?.split(' ').slice(1).join(' ') || '';
+
+        if (plan !== 'FREE_TRIAL') {
+            if (!paymentData) {
+                return NextResponse.json({ error: "Payment data is required for paid plans" }, { status: 400 });
+            }
+            const pData = paymentData.payment || paymentData;
+            rOrderId = pData.razorpay_order_id || pData.orderId || pData.razorpayOrderId;
+            rPaymentId = pData.razorpay_payment_id || pData.paymentId || pData.razorpayPaymentId;
+            rSignature = pData.razorpay_signature || pData.signature || pData.razorpaySignature;
+
+            if (!rOrderId || !rPaymentId || !rSignature) {
+                return NextResponse.json({ error: "Incomplete payment data" }, { status: 400 });
+            }
+
+            const isValid = verifyRazorpaySignature(rOrderId, rPaymentId, rSignature);
+            if (!isValid) {
+                return NextResponse.json({ error: "Invalid payment signature" }, { status: 400 });
+            }
+            console.log(" Razorpay Payment Signature strictly verified for organisation creation.");
+        }
+
+        if (!user) {
+            console.log('Creating new Clerk user for guest checkout...');
+            try {
+                const baseUsername = ownerName
+                    ? ownerName.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')
+                    : finalUserEmail!.split('@')[0].replace(/[^a-z0-9]/g, '');
+                
+                const username = `${baseUsername}${Date.now().toString().slice(-4)}`;
+
+                const clerkUser = await createClerkUser({
+                    email: finalUserEmail!.trim(),
+                    password: password.trim(),
+                    firstName: finalFirstName,
+                    lastName: finalLastName,
+                    username: username,
+                });
+                
+                finalClerkId = clerkUser.id;
+            } catch (err: any) {
+                console.error("Failed to create Clerk user during checkout:", err);
+                return NextResponse.json({ error: err.message || "Failed to create user account" }, { status: 400 });
+            }
+        }
+
         // Check if user already has an organisation
         const existingUser = await prisma.user.findUnique({
-            where: { clerkId: user.id },
+            where: { clerkId: finalClerkId! },
             include: {
                 organisation: {
                     include: {
@@ -85,8 +140,8 @@ async function postHandler(req: Request) {
             organisation = await prisma.organisation.create({
                 data: {
                     name: organizationName,
-                    ownerName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Owner',
-                    email: email || user.emailAddresses[0]?.emailAddress,
+                    ownerName: `${finalFirstName} ${finalLastName}`.trim() || ownerName || 'Owner',
+                    email: finalUserEmail!,
                     phone,
                     address,
                     city,
@@ -173,15 +228,15 @@ async function postHandler(req: Request) {
 
         console.log("Upserting user data...");
         const updatedUser = await prisma.user.upsert({
-            where: { clerkId: user.id },
+            where: { clerkId: finalClerkId! },
             update: {
                 organisationId: organisation.id,
             },
             create: {
-                clerkId: user.id,
-                email: email || user.emailAddresses[0]?.emailAddress || `no-email-${user.id}@campzeo.com`,
-                firstName: user.firstName,
-                lastName: user.lastName,
+                clerkId: finalClerkId!,
+                email: finalUserEmail || `no-email-${finalClerkId}@campzeo.com`,
+                firstName: finalFirstName,
+                lastName: finalLastName,
                 organisationId: organisation.id,
                 role: 'ORGANISATION_USER',
             },
@@ -190,12 +245,6 @@ async function postHandler(req: Request) {
         // Handle Payment if not free trial
         if (plan !== "FREE_TRIAL" && paymentData) {
             console.log("Processing payment and invoice...");
-            
-            // Normalize payment data (handle both formats from frontend: direct or nested in .payment)
-            const pData = paymentData.payment || paymentData;
-            const rOrderId = pData.razorpay_order_id || pData.orderId || pData.razorpayOrderId;
-            const rPaymentId = pData.razorpay_payment_id || pData.paymentId || pData.razorpayPaymentId;
-            const rSignature = pData.razorpay_signature || pData.signature || pData.razorpaySignature;
 
             if (!rOrderId) {
                 console.error("Critical: razorpay_order_id is missing in paymentData", paymentData);
@@ -240,7 +289,7 @@ async function postHandler(req: Request) {
             // Send Payment Receipt
             try {
                 await sendPaymentReceipt({
-                    email: email || user.emailAddresses[0]?.emailAddress || "",
+                    email: finalUserEmail || "",
                     amount: Number(selectedPlan.price),
                     currency: "INR",
                     planName: selectedPlan.name,
@@ -275,6 +324,35 @@ async function postHandler(req: Request) {
             console.log("Event logged successfully");
         } catch (logErr) {
             console.error("Failed to log event:", logErr);
+        }
+
+        if (!user && finalUserEmail && password) {
+            console.log("Sending welcome/invite email to new user...");
+            try {
+                // await sendOrganisationInvite({
+                //     email: finalUserEmail,
+                //     password: password,
+                //     organisationName: organizationName,
+                //     ownerName: finalFirstName || ownerName || "Owner",
+                // });
+                // console.log("Invite email sent successfully.");
+
+                await sendWelcomeEmail({
+                    email: finalUserEmail,
+                    userName: finalFirstName || ownerName || "Owner",
+                    organisationName: organizationName,
+                });
+                console.log("Welcome message sent successfully.");
+
+                await sendNewDeviceSignInEmail({
+                    email: finalUserEmail,
+                    userName: finalFirstName || ownerName || "Owner",
+                });
+                console.log("New device signed in email sent successfully.");
+
+            } catch (emailErr) {
+                console.error("Failed to send welcome/invite/device emails:", emailErr);
+            }
         }
 
         console.log("Registration process completed successfully");

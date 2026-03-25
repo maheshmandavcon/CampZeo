@@ -79,5 +79,14 @@ export default async function OrganisationLayout({
     }
   }
 
-  return <OrganisationLayoutWrapper isImpersonating={isImpersonating}>{children}</OrganisationLayoutWrapper>;
+  const hasSocialTokens = !!(
+    dbUser.facebookAccessToken ||
+    dbUser.instagramAccessToken ||
+    dbUser.linkedInAccessToken ||
+    dbUser.pinterestAccessToken ||
+    dbUser.youtubeAccessToken ||
+    dbUser.facebookPageAccessToken
+  );
+
+  return <OrganisationLayoutWrapper isImpersonating={isImpersonating} hasSocialTokens={hasSocialTokens}>{children}</OrganisationLayoutWrapper>;
 }

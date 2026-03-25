@@ -170,7 +170,7 @@ export async function sendOrganisationApproved(params: OrganisationApprovedParam
 
         try {
             await mg.messages.create(domain, msg);
-            console.log(`✅ Email sent to ${email} via Mailgun`);
+            console.log(` Email sent to ${email} via Mailgun`);
             return;
         } catch (error: any) {
             console.error('Error sending email via Mailgun:', error);
@@ -482,3 +482,122 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
 
     return true; // Return true for mock success
 }
+
+export interface WelcomeEmailParams {
+    email: string;
+    userName: string;
+    organisationName?: string;
+}
+
+export async function sendWelcomeEmail(params: WelcomeEmailParams): Promise<boolean> {
+    const { email, userName, organisationName } = params;
+    const { apiKey, domain, fromEmail } = await getEmailConfig();
+
+    if (apiKey && domain && fromEmail) {
+        const mailgun = new Mailgun(FormData);
+        const mg = mailgun.client({ username: 'api', key: apiKey });
+
+        const msg: any = {
+            from: fromEmail,
+            to: [email],
+            subject: `Welcome to CampZeo!`,
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2>Welcome to CampZeo!</h2>
+                    <p>Hi ${userName},</p>
+                    <p>We're thrilled to have you on board. CampZeo is your all-in-one platform to manage your business effectively.</p>
+                    ${organisationName ? `<p>Your organisation <strong>${organisationName}</strong> has been set up successfully.</p>` : ''}
+                    <p>If you have any questions, feel free to reply to this email or contact our support team.</p>
+                    <p>
+                        <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/" 
+                           style="background-color: #0070f3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                           Get Started
+                        </a>
+                    </p>
+                </div>
+            `,
+        };
+
+        try {
+            await mg.messages.create(domain, msg);
+            console.log(`✅ Welcome email sent to ${email}`);
+            return true;
+        } catch (error: any) {
+            console.error('Error sending welcome email via Mailgun:', error);
+            return false;
+        }
+    }
+
+    console.log('='.repeat(60));
+    console.log('📧 MOCK EMAIL: Welcome Email');
+    console.log('='.repeat(60));
+    console.log(`To: ${email}`);
+    console.log(`Subject: Welcome to CampZeo!`);
+    console.log('\nBody:');
+    console.log(`Hi ${userName},`);
+    console.log(`Welcome to CampZeo! We're thrilled to have you.`);
+    console.log('='.repeat(60));
+
+    return true;
+}
+
+export interface NewDeviceSignInParams {
+    email: string;
+    userName: string;
+    deviceInfo?: string;
+    location?: string;
+}
+
+export async function sendNewDeviceSignInEmail(params: NewDeviceSignInParams): Promise<boolean> {
+    const { email, userName, deviceInfo, location } = params;
+    const { apiKey, domain, fromEmail } = await getEmailConfig();
+
+    const time = new Date().toLocaleString();
+
+    if (apiKey && domain && fromEmail) {
+        const mailgun = new Mailgun(FormData);
+        const mg = mailgun.client({ username: 'api', key: apiKey });
+
+        const msg: any = {
+            from: fromEmail,
+            to: [email],
+            subject: `New sign-in to your CampZeo account`,
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2>New Sign-In Detected</h2>
+                    <p>Hi ${userName},</p>
+                    <p>Your CampZeo account was just signed in from a new device.</p>
+                    <div style="background-color: #f9f9f9; padding: 20px; border-radius: 5px; margin: 20px 0;">
+                        <p><strong>Device:</strong> ${deviceInfo || 'Unknown Device'}</p>
+                        <p><strong>Location:</strong> ${location || 'Unknown Location'}</p>
+                        <p><strong>Time:</strong> ${time}</p>
+                    </div>
+                    <p>If this was you, you can safely ignore this email.</p>
+                    <p>If this wasn't you, please secure your account immediately by resetting your password.</p>
+                </div>
+            `,
+        };
+
+        try {
+            await mg.messages.create(domain, msg);
+            console.log(`✅ New device sign-in email sent to ${email}`);
+            return true;
+        } catch (error: any) {
+            console.error('Error sending new device sign-in email via Mailgun:', error);
+            return false;
+        }
+    }
+
+    console.log('='.repeat(60));
+    console.log('📧 MOCK EMAIL: New Device Sign-In');
+    console.log('='.repeat(60));
+    console.log(`To: ${email}`);
+    console.log(`Subject: New sign-in to your CampZeo account`);
+    console.log('\nBody:');
+    console.log(`Hi ${userName},`);
+    console.log(`New sign-in from ${deviceInfo || 'Unknown Device'} at ${time}.`);
+    console.log('='.repeat(60));
+
+    return true;
+}
+

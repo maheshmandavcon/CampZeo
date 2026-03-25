@@ -4,7 +4,8 @@ import { Badge } from './ui/badge';
 import { Check, Zap, Shield, BarChart3, Users, Star, ArrowRight } from 'lucide-react';
 import { useState } from 'react';
 import { PaymentModal } from './PaymentModal';
-import { SignInButton, SignUpButton, SignedOut, SignedIn, UserButton } from '@clerk/clerk-react';
+import { SignInButton, SignedOut, SignedIn, UserButton } from '@clerk/clerk-react';
+import Link from 'next/link';
 
 interface LandingPageProps {
   onLogin: (role: 'admin' | 'organisation') => void;
@@ -80,63 +81,8 @@ export function LandingPage({ onLogin, onNavigate }: LandingPageProps) {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const handlePlanSelect = (plan: Plan) => {
-    if (plan.isTrial) {
-      // =============================================
-      // TODO: REPLACE WITH CLERK SIGN UP
-      // =============================================
-      // In production, redirect to Clerk sign-up with trial metadata:
-      //
-      // import { useSignUp } from '@clerk/nextjs'
-      // const { signUp } = useSignUp()
-      // 
-      // await signUp.create({
-      //   emailAddress: email,
-      //   password: password,
-      //   unsafeMetadata: {
-      //     plan: 'FREE_TRIAL',
-      //     trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
-      //   }
-      // })
-      //
-      // Then in Clerk webhook, create organisation with trial:
-      // await prisma.organisation.create({
-      //   data: {
-      //     plan: 'FREE_TRIAL',
-      //     status: 'TRIAL',
-      //     trialEndsAt: userData.unsafeMetadata.trialEndsAt
-      //   }
-      // })
-      // =============================================
-      
-      // Start free trial - mock Clerk signup
-      alert('Starting free trial! You would be redirected to sign up with Clerk.');
-      // In production: Redirect to Clerk sign-up with trial metadata
-      onLogin('organisation');
-    } else {
-      // Show payment modal for paid plans
-      setSelectedPlan(plan);
-      setShowPaymentModal(true);
-    }
-  };
-
-  const handlePaymentSuccess = () => {
-    // =============================================
-    // TODO: HANDLE SUCCESSFUL PAYMENT
-    // =============================================
-    // After successful payment verification:
-    // 1. Backend has already created/updated organisation in database
-    // 2. Backend has recorded payment in Payment table
-    // 3. Backend has logged activity
-    // 4. Now redirect user to dashboard
-    //
-    // The payment verification API should return:
-    // { success: true, organisation: {...}, redirectUrl: '/dashboard' }
-    // =============================================
-    
-    setShowPaymentModal(false);
-    // Mock successful payment and account creation
-    alert('Payment successful! Your account has been created.');
-    onLogin('organisation');
+    // Redirect all plan selections straight to the new purchase funnel
+    window.location.href = `/purchase?planId=${plan.name}`;
   };
 
   return (
@@ -163,11 +109,11 @@ export function LandingPage({ onLogin, onNavigate }: LandingPageProps) {
             <div className="flex items-center gap-4">
               <SignedOut>
                 <div className="flex items-center gap-3">
-                  <SignUpButton>
+                  <Link href="/purchase">
                     <button className="px-3 py-2 text-primary border border-primary rounded-md hover:bg-primary/10">
                       Sign Up
                     </button>
-                  </SignUpButton>
+                  </Link>
 
                   <SignInButton>
                     <button className="px-3 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
@@ -353,14 +299,7 @@ export function LandingPage({ onLogin, onNavigate }: LandingPageProps) {
         </div>
       </footer>
 
-      {/* Payment Modal */}
-      {showPaymentModal && selectedPlan && (
-        <PaymentModal
-          plan={selectedPlan}
-          onClose={() => setShowPaymentModal(false)}
-          onSuccess={handlePaymentSuccess}
-        />
-      )}
+
     </div>
   );
 }

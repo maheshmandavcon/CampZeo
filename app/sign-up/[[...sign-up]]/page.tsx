@@ -451,7 +451,48 @@ export default function Page() {
                   className="h-10"
                 />
               </div>
+<div className="space-y-2">
+                <Label htmlFor="postalCode">Postal Code <span className="text-destructive">*</span></Label>
+                <Input
+                  id="postalCode"
+                  name="postalCode"
+                  placeholder="10001"
+                  value={form.postalCode}
+                  onChange={handleChange}
+                  className="h-10"
+                />
 
+                {postalOptions.length > 0 && (
+                  <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg animate-in fade-in slide-in-from-top-2 duration-300">
+                    <p className="text-xs font-medium text-primary mb-2">Multiple locations found. Please select one:</p>
+                    <Select
+                      onValueChange={(val) => {
+                        const selected = postalOptions.find(opt => opt.display === val);
+                        if (selected) {
+                          setForm(prev => ({
+                            ...prev,
+                            city: selected.city,
+                            state: selected.state,
+                            country: selected.country
+                          }));
+                          setPostalOptions([]);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-xs bg-background">
+                        <SelectValue placeholder="Select correct location..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {postalOptions.map((opt, idx) => (
+                          <SelectItem key={idx} value={opt.display} className="text-xs">
+                            {opt.display}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="city">City <span className="text-destructive">*</span></Label>
                 <div className="relative">
@@ -509,49 +550,7 @@ export default function Page() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="postalCode">Postal Code <span className="text-destructive">*</span></Label>
-                <Input
-                  id="postalCode"
-                  name="postalCode"
-                  placeholder="10001"
-                  value={form.postalCode}
-                  onChange={handleChange}
-                  className="h-10"
-                />
-
-                {/* Selection UI for multiple matches */}
-                {postalOptions.length > 0 && (
-                  <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg animate-in fade-in slide-in-from-top-2 duration-300">
-                    <p className="text-xs font-medium text-primary mb-2">Multiple locations found. Please select one:</p>
-                    <Select
-                      onValueChange={(val) => {
-                        const selected = postalOptions.find(opt => opt.display === val);
-                        if (selected) {
-                          setForm(prev => ({
-                            ...prev,
-                            city: selected.city,
-                            state: selected.state,
-                            country: selected.country
-                          }));
-                          setPostalOptions([]);
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="h-9 text-xs bg-background">
-                        <SelectValue placeholder="Select correct location..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {postalOptions.map((opt, idx) => (
-                          <SelectItem key={idx} value={opt.display} className="text-xs">
-                            {opt.display}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
+              
 
               {accountType === "business" && (
                 <div className="col-span-1 md:col-span-2 space-y-2">
