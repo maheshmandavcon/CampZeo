@@ -46,22 +46,29 @@ async function postHandler(request: NextRequest) {
         const fileExtension = file.name.split('.').pop();
         const filename = `${crypto.randomUUID()}.${fileExtension}`;
 
-        // Always use Vercel Blob storage
-        if (!process.env.BLOB_READ_WRITE_TOKEN) {
-            return NextResponse.json({
-                error: 'Blob storage not configured. Please set BLOB_READ_WRITE_TOKEN environment variable.'
-            }, { status: 500 });
-        }
+        console.log('[Upload] Redirecting to custom server upload API');
 
-        console.log('[Upload] Using Vercel Blob storage');
+        const uploadFormData = new FormData();
+        uploadFormData.append('files', file);
 
-        const blob = await put(filename, file, {
-            access: 'public',
-            addRandomSuffix: false,
+        const uploadRes = await fetch('http://103.72.220.77:5000/api/upload', {
+            method: 'POST',
+            body: uploadFormData,
         });
 
-        const url = blob.url;
-        console.log('[Upload] File uploaded to Vercel Blob:', url);
+        if (!uploadRes.ok) {
+            const errorText = await uploadRes.text();
+            throw new Error(`Custom server upload failed: ${uploadRes.statusText}. ${errorText}`);
+        }
+
+        const uploadData = await uploadRes.json();
+        const url = uploadData.urls && uploadData.urls.length > 0 ? uploadData.urls[0] : null;
+
+        if (!url) {
+            throw new Error('[Upload] Custom server upload succeeded but no URL was returned.');
+        }
+
+        console.log('[Upload] File uploaded to custom server:', url);
 
         return NextResponse.json({
             url,

@@ -58,7 +58,7 @@ import {
 } from '@/components/ui/select';
 import React from 'react'; // Import React for React.use
 import { AIContentAssistant } from '@/components/ai-content-assistant';
-import { upload } from '@vercel/blob/client';
+import { uploadToServer } from '@/lib/upload-helper';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { isVideoUrl } from '@/lib/media-utils';
@@ -461,13 +461,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 }
 
                 // Use client-side upload
-                const newBlob = await upload(file.name, file, {
-                    access: 'public',
-                    handleUploadUrl: '/api/upload',
-                    onUploadProgress: (progress) => {
-                        setUploadProgress(progress.percentage);
-                    }
-                });
+                const newBlob = await uploadToServer(file);
 
                 newUrls.push(newBlob.url);
             }
@@ -518,13 +512,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
             const file = files[0];
 
-            const newBlob = await upload(file.name, file, {
-                access: 'public',
-                handleUploadUrl: '/api/upload',
-                onUploadProgress: (progress) => {
-                    setUploadProgress(progress.percentage);
-                }
-            });
+            const newBlob = await uploadToServer(file);
 
             setThumbnailUrl(newBlob.url);
             toast.success('Thumbnail uploaded successfully');
