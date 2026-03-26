@@ -161,6 +161,16 @@ async function postHandler(req: Request) {
             if (existingEnquiry) {
                 errors.push("An enquiry with this email already exists");
             }
+
+            const existingOrg = await prisma.organisation.findFirst({
+                where: {
+                    email: { equals: data.email.trim(), mode: 'insensitive' },
+                    isDeleted: false,
+                },
+            });
+            if (existingOrg) {
+                errors.push("An organisation with this email already exists. Only one active organisation can be associated with an email at a time.");
+            }
         }
 
         // If there are validation errors, return them

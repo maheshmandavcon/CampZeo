@@ -58,7 +58,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <ClerkProvider
           signInFallbackRedirectUrl="/onboarding"
-          signUpFallbackRedirectUrl="/onboarding"
+          signUpFallbackRedirectUrl="/auth/after-signin"
           dynamic
         >
           {children}

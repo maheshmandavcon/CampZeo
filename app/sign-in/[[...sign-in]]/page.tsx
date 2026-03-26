@@ -14,7 +14,7 @@ export default function Page() {
             elements: {
               rootBox: "mx-auto w-full",
               card: "shadow-xl border-muted/20 bg-background",
-              footerAction: "hidden", // Hides the "Sign up" link
+             footerAction: { display: 'none' }
             }
           }}
           fallbackRedirectUrl="/auth/after-signin"

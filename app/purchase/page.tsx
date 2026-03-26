@@ -33,6 +33,7 @@ function PurchaseContent() {
     const { plans, isLoading: plansLoading } = usePlans();
     const clerk = useClerk();
     const { user, isLoaded: userLoaded, isSignedIn } = useUser();
+  const [emailError, setEmailError] = useState<string | null>(null);
 
     const [step, setStep] = useState<"DETAILS" | "VERIFICATION" | "PAYMENT" | "SUCCESS">("DETAILS");
     const [loading, setLoading] = useState(false);
@@ -250,6 +251,23 @@ function PurchaseContent() {
         setLoading(true);
 
         try {
+            // Check email availability before proceeding
+            const checkRes = await fetch('/api/check-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: formData.email.trim() }),
+            });
+            const checkData = await checkRes.json();
+            if (checkData.isSuccess && checkData.exists) {
+                 setEmailError(checkData.message);
+                toast.error("Email Already In Use", {
+
+                    description: checkData.message,
+                });
+                setLoading(false);
+                return;
+            }
+
             // We bypass Clerk sign up and email verification during checkout entirely.
             // The Clerk user and database records will be generated in bulk
             // post successful Razorpay payment, just like the admin convert-enquiry flow.
@@ -466,7 +484,8 @@ function PurchaseContent() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
-                                    <Input id="email" name="email" type="email" required value={formData.email} onChange={handleChange} placeholder="john@example.com" />
+                                    <Input id="email" name="email" type="email" required value={formData.email} onChange={(e) => { handleChange(e); setEmailError(null); }} placeholder="john@example.com" className={`h-10 ${emailError ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                                    {emailError && <p className="text-red-500 text-sm">{emailError}</p>}
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="mobile">Mobile <span className="text-destructive">*</span></Label>

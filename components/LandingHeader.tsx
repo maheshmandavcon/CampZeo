@@ -48,13 +48,19 @@ export function LandingHeader() {
                         <SignedOut>
                             <div className="flex  items-center gap-3">
                                 <Button variant="outline" className="cursor-pointer hover:text-red-500" onClick={() => router.push("/sign-up")}>
-                                {/* <Button variant="outline" className="cursor-pointer hover:text-red-500" onClick={() => router.push("/coming-soon")}> */}
+                                    {/* <Button variant="outline" className="cursor-pointer hover:text-red-500" onClick={() => router.push("/coming-soon")}> */}
                                     Sign Up
                                 </Button>
                                 {/* <Button variant="outline" className="cursor-pointer bg-red-600 text-white hover:bg-red-500/50 hover:text-white" onClick={() => router.push("/coming-soon")}>
                                     Sign In
                                 </Button> */}
-                                <SignInButton mode="modal">
+                                <SignInButton mode="modal" appearance={{
+                                    elements: {
+                                        footerAction: { display: 'none' },
+                                        socialButtonsBlock: { display: 'none' },
+                                        dividerRow: { display: 'none' },
+                                    }
+                                }} >
                                     <Button className="cursor-pointer hover:bg-red-500/50 hover:text-red-500">Sign In</Button>
                                 </SignInButton>
                             </div>

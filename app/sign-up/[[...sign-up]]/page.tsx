@@ -26,6 +26,7 @@ export default function Page() {
 
   const [loading, setLoading] = useState(false);
   const [accountType, setAccountType] = useState<"business" | "individual">("business");
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
@@ -268,6 +269,24 @@ export default function Page() {
     setLoading(true);
 
     try {
+      const checkRes = await fetch('/api/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email.trim() }),
+      });
+      const checkData = await checkRes.json();
+      if (checkData.isSuccess && checkData.exists) {
+        setEmailError(checkData.message);
+        toast.error("Email Already In Use", {
+          description: checkData.message,
+        });
+        setLoading(false);
+        return;
+      }
+    } catch {
+    }
+
+    try {
       const response = await fetch("/api/enquiries", {
         method: "POST",
         body: JSON.stringify(submissionForm),
@@ -430,9 +449,10 @@ export default function Page() {
                   type="email"
                   placeholder="name@example.com"
                   value={form.email}
-                  onChange={handleChange}
-                  className="h-10"
+                  onChange={(e) => { handleChange(e); setEmailError(null); }}
+                  className={`h-10 ${emailError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
                 />
+                {emailError && <p className="text-xs text-red-500 font-medium">{emailError}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="mobile">Mobile Number <span className="text-destructive">*</span></Label>
