@@ -27,6 +27,7 @@ export default async function OrganisationLayout({
           subscriptions: {
             orderBy: { createdAt: 'desc' },
             take: 1,
+            include: { plan: true },
           },
         },
       },
@@ -79,6 +80,40 @@ export default async function OrganisationLayout({
     }
   }
 
+  const organisation = dbUser.organisation;
+  const subscription = organisation?.subscriptions?.[0];
+  const now = new Date();
+  let expiryData = null;
+
+  if (organisation?.isTrial && organisation?.trialEndDate) {
+    const trialEndDate = new Date(organisation.trialEndDate);
+    const msDiff = trialEndDate.getTime() - now.getTime();
+    const daysRemaining = Math.ceil(msDiff / (1000 * 60 * 60 * 24));
+
+    if (daysRemaining <= 3 && daysRemaining >= 0) {
+      expiryData = {
+        daysRemaining,
+        planName: "Free Trial",
+        expiryDate: organisation.trialEndDate.toISOString(),
+        type: 'trial' as const
+      };
+    }
+  } else if (subscription && subscription.endDate) {
+    const endDate = new Date(subscription.endDate);
+    const msDiff = endDate.getTime() - now.getTime();
+    const daysRemaining = Math.ceil(msDiff / (1000 * 60 * 60 * 24));
+
+    if (daysRemaining <= 3 && daysRemaining >= 0 &&
+      (subscription.status === 'COMPLETED' || subscription.status === 'active' || subscription.status === 'ACTIVE')) {
+      expiryData = {
+        daysRemaining,
+        planName: subscription.plan?.name || "Paid Plan",
+        expiryDate: subscription.endDate.toISOString(),
+        type: 'subscription' as const
+      };
+    }
+  }
+
   const hasSocialTokens = !!(
     dbUser.facebookAccessToken ||
     dbUser.instagramAccessToken ||
@@ -88,5 +123,5 @@ export default async function OrganisationLayout({
     dbUser.facebookPageAccessToken
   );
 
-  return <OrganisationLayoutWrapper isImpersonating={isImpersonating} hasSocialTokens={hasSocialTokens}>{children}</OrganisationLayoutWrapper>;
+  return <OrganisationLayoutWrapper isImpersonating={isImpersonating} hasSocialTokens={hasSocialTokens} expiryData={expiryData}>{children}</OrganisationLayoutWrapper>;
 }
