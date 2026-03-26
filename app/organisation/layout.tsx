@@ -81,9 +81,7 @@ export default async function OrganisationLayout({
       const msDiff = trialEndDate.getTime() - now.getTime();
       const daysRemaining = Math.ceil(msDiff / (1000 * 60 * 60 * 24));
 
-      console.log(`[Expiry Check] Org: ${organisation.name}, days: ${daysRemaining}`);
-      
-      if (daysRemaining <= 14 && daysRemaining >= 0) {
+      if (daysRemaining <= 3 && daysRemaining >= 0) {
         expiryData = {
           daysRemaining,
           planName: "Free Trial",
@@ -96,9 +94,7 @@ export default async function OrganisationLayout({
       const msDiff = endDate.getTime() - now.getTime();
       const daysRemaining = Math.ceil(msDiff / (1000 * 60 * 60 * 24));
 
-      console.log(`[Expiry Check] Sub: ${subscription.plan?.name}, days: ${daysRemaining}`);
-      
-      if (daysRemaining <= 14 && daysRemaining >= 0 &&
+      if (daysRemaining <= 3 && daysRemaining >= 0 &&
         (subscription.status === 'COMPLETED' || subscription.status === 'active' || subscription.status === 'ACTIVE')) {
         expiryData = {
           daysRemaining,
@@ -108,7 +104,6 @@ export default async function OrganisationLayout({
         };
       }
     }
-    console.log(`[Expiry Check] Final expiryData:`, expiryData);
   }
 
   const hasSocialTokens = !!(
@@ -121,9 +116,9 @@ export default async function OrganisationLayout({
   );
 
   return (
-    <OrganisationLayoutWrapper 
-      isImpersonating={isImpersonating} 
-      hasSocialTokens={hasSocialTokens} 
+    <OrganisationLayoutWrapper
+      isImpersonating={isImpersonating}
+      hasSocialTokens={hasSocialTokens}
       expiryData={expiryData}
     >
       {children}

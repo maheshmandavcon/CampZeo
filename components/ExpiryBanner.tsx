@@ -12,7 +12,7 @@ interface ExpiryBannerProps {
 }
 
 export function ExpiryBanner({ daysRemaining, planName, expiryDate, type }: ExpiryBannerProps) {
-    if (daysRemaining > 14 || daysRemaining < 0) return null;
+    if (daysRemaining > 3 || daysRemaining < 0) return null;
 
     const isUrgent = daysRemaining <= 1;
     const formattedDate = new Date(expiryDate).toLocaleDateString(undefined, {
