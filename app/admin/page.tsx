@@ -1131,7 +1131,7 @@ export default function AdminDashboard() {
                 <Settings className="mr-3 size-4" /> Platform Config
               </TabsTrigger>
               <TabsTrigger value="system" className="justify-start px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-white hover:bg-red-800 hover:text-slate-200 transition-all rounded-md mx-2">
-                <MoreVertical className="mr-3 size-4" /> Job Settings
+                <MoreVertical className="mr-3 size-4" />  Broadcast Message
               </TabsTrigger>
               <TabsTrigger value="logs" className="justify-start px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-white hover:bg-red-800 hover:text-slate-200 transition-all rounded-md mx-2">
                 <CheckCircle className="mr-3 size-4" /> Audit Logs
