@@ -5,7 +5,7 @@ import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 import { SocialNormalizerService } from "@/lib/social-normalizer";
 import { withErrorHandling } from "@/lib/api-handler";
 
-async function getHandler(
+async function getHandler( 
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {

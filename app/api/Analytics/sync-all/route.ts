@@ -7,7 +7,7 @@ import { withErrorHandling } from '@/lib/api-handler';
 async function getHandler(request: NextRequest) {
 
         const user = await currentUser();
-
+ 
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }

@@ -5,7 +5,7 @@ import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 import { withErrorHandling } from '@/lib/api-handler';
 
 async function getPostsHandler(req: NextRequest) {
-    const user = await currentUser();
+    const user = await currentUser(); 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     let orgId = -1;
