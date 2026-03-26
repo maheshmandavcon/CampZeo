@@ -12,7 +12,7 @@ interface ExpiryBannerProps {
 }
 
 export function ExpiryBanner({ daysRemaining, planName, expiryDate, type }: ExpiryBannerProps) {
-    if (daysRemaining > 3 || daysRemaining < 0) return null;
+    if (daysRemaining > 14 || daysRemaining < 0) return null;
 
     const isUrgent = daysRemaining <= 1;
     const formattedDate = new Date(expiryDate).toLocaleDateString(undefined, {
@@ -34,7 +34,7 @@ export function ExpiryBanner({ daysRemaining, planName, expiryDate, type }: Expi
         : "bg-amber-600 hover:bg-amber-700 text-white";
 
     return (
-        <div className={`w-full border-b px-6 py-2.5 flex flex-col md:flex-row items-center justify-between gap-4 z-40 relative animate-in fade-in slide-in-from-top duration-500 ${bannerStyles}`}>
+        <div className={`w-full border-b px-6 py-2.5 flex flex-col md:flex-row items-center justify-between gap-4 z-50 sticky top-0 animate-in fade-in slide-in-from-top duration-500 ${bannerStyles}`}>
             <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-full shrink-0 ${iconContainerStyles}`}>
                     <AlertTriangle className="size-5" />

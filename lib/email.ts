@@ -601,3 +601,98 @@ export async function sendNewDeviceSignInEmail(params: NewDeviceSignInParams): P
     return true;
 }
 
+
+export interface PlanExpiryEmailParams {
+    email: string;
+    orgName: string;
+    planName: string;
+    expiryDate: Date;
+    daysRemaining: number;
+    autoRenew?: boolean;
+}
+
+
+export async function sendPlanExpiryEmail(params: PlanExpiryEmailParams): Promise<boolean> {
+    const { email, orgName, planName, expiryDate, daysRemaining, autoRenew } = params;
+    const { apiKey, domain, fromEmail } = await getEmailConfig();
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://campzeo.com';
+    const renewalUrl = `${appUrl}/organisation/billing`;
+    const formattedExpiry = new Date(expiryDate).toLocaleDateString();
+
+    const subject = `Action Required: Your ${planName} for ${orgName} expires in ${daysRemaining} ${daysRemaining === 1 ? 'day' : 'days'}`;
+
+    let autoPayMessage = "";
+    if (autoRenew) {
+        autoPayMessage = `
+            <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0; font-weight: bold;">Auto-Pay is Enabled</p>
+                <p style="margin: 5px 0 0 0; font-size: 14px;">Your plan will be automatically renewed on ${formattedExpiry}. Please ensure your payment method has sufficient funds.</p>
+            </div>
+        `;
+    }
+
+    const html = `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; color: #333; line-height: 1.6;">
+            <div style="text-align: center; padding: 20px 0;">
+                <img src="${appUrl}/logo-1.png" alt="CampZeo" style="height: 50px;">
+            </div>
+            <div style="border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                <div style="background-color: ${daysRemaining === 1 ? '#fee2e2' : '#fef3c7'}; padding: 20px; text-align: center;">
+                    <h2 style="margin: 0; color: ${daysRemaining === 1 ? '#991b1b' : '#92400e'};">Plan Expiring Soon</h2>
+                </div>
+                <div style="padding: 30px;">
+                    <p>Hi there,</p>
+                    <p>This is a reminder that your <strong>${planName}</strong> for <strong>${orgName}</strong> is set to expire in <strong>${daysRemaining} ${daysRemaining === 1 ? 'day' : 'days'}</strong> on <strong>${formattedExpiry}</strong>.</p>
+                    
+                    ${autoPayMessage}
+
+                    <p>To ensure uninterrupted service and keep managing your social media effectively, please renew your plan now.</p>
+                    
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="${renewalUrl}" style="background-color: #7c3aed; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                            Pay Now & Renew
+                        </a>
+                    </div>
+
+                    <p style="font-size: 14px; color: #666;">If you have already renewed or upgraded, please ignore this email.</p>
+                </div>
+            </div>
+            <div style="text-align: center; padding: 20px; font-size: 12px; color: #999;">
+                &copy; ${new Date().getFullYear()} CampZeo. All rights reserved.<br>
+                This is an automated message regarding your subscription.
+            </div>
+        </div>
+    `;
+
+    if (apiKey && domain && fromEmail) {
+        const mailgun = new Mailgun(FormData);
+        const mg = mailgun.client({ username: 'api', key: apiKey });
+
+        const msg: any = {
+            from: fromEmail,
+            to: [email],
+            subject: subject,
+            html: html,
+        };
+
+        try {
+            await mg.messages.create(domain, msg);
+            console.log(`✅ Plan expiry email sent to ${email} via Mailgun`);
+            return true;
+        } catch (error: any) {
+            console.error('Error sending plan expiry email via Mailgun:', error);
+            return false;
+        }
+    }
+
+    console.log('='.repeat(60));
+    console.log('📧 MOCK EMAIL: Plan Expiry');
+    console.log('='.repeat(60));
+    console.log(`To: ${email}`);
+    console.log(`Subject: ${subject}`);
+    console.log('\nBody excerpt: Plan Expiring Soon...');
+    console.log('='.repeat(60));
+
+    return true;
+}

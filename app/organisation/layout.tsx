@@ -45,73 +45,70 @@ export default async function OrganisationLayout({
   }
 
   // If user is admin and NOT impersonating, redirect to admin dashboard
-  // When impersonating, allow admin to access organization routes
   if (dbUser.role === "ADMIN_USER" && !isImpersonating) {
     redirect("/admin");
   }
 
+  const organisation = dbUser.organisation;
+  const subscription = organisation?.subscriptions?.[0];
+  const now = new Date();
+
   // Check organisation status - skip these checks when admin is impersonating
-  if (!isImpersonating) {
-    if (dbUser.organisation && dbUser.organisation.isDeleted) {
+  if (!isImpersonating && organisation) {
+    if (organisation.isDeleted) {
       redirect("/suspended");
     }
 
-    if (dbUser.organisation && !dbUser.organisation.isApproved) {
+    if (!organisation.isApproved) {
       redirect("/pending-approval");
     }
 
     // Check for trial/subscription validity
-    const organisation = dbUser.organisation;
-    const subscription = organisation?.subscriptions?.[0];
-    const now = new Date();
-
-    // Check if trial is valid
-    const isTrialValid = organisation?.isTrial && organisation?.trialEndDate && organisation.trialEndDate > now;
-
-    // Check if has active subscription
-    // Assuming 'COMPLETED' or 'active' statuses indicate a valid paid subscription
-    // And checking endDate if it exists
+    const isTrialValid = organisation.isTrial && organisation.trialEndDate && new Date(organisation.trialEndDate) > now;
     const hasActiveSubscription = subscription &&
       (subscription.status === 'COMPLETED' || subscription.status === 'active' || subscription.status === 'ACTIVE') &&
-      (!subscription.endDate || subscription.endDate > now);
+      (!subscription.endDate || new Date(subscription.endDate) > now);
 
     if (!isTrialValid && !hasActiveSubscription) {
       redirect("/select-plan");
     }
   }
 
-  const organisation = dbUser.organisation;
-  const subscription = organisation?.subscriptions?.[0];
-  const now = new Date();
   let expiryData = null;
+  if (organisation) {
+    if (organisation.isTrial && organisation.trialEndDate) {
+      const trialEndDate = new Date(organisation.trialEndDate);
+      const msDiff = trialEndDate.getTime() - now.getTime();
+      const daysRemaining = Math.ceil(msDiff / (1000 * 60 * 60 * 24));
 
-  if (organisation?.isTrial && organisation?.trialEndDate) {
-    const trialEndDate = new Date(organisation.trialEndDate);
-    const msDiff = trialEndDate.getTime() - now.getTime();
-    const daysRemaining = Math.ceil(msDiff / (1000 * 60 * 60 * 24));
+      console.log(`[Expiry Check] Org: ${organisation.name}, days: ${daysRemaining}`);
+      
+      if (daysRemaining <= 14 && daysRemaining >= 0) {
+        expiryData = {
+          daysRemaining,
+          planName: "Free Trial",
+          expiryDate: organisation.trialEndDate.toISOString(),
+          type: 'trial' as const
+        };
+      }
+    } else if (subscription && subscription.endDate) {
+      const endDate = new Date(subscription.endDate);
+      const msDiff = endDate.getTime() - now.getTime();
+      const daysRemaining = Math.ceil(msDiff / (1000 * 60 * 60 * 24));
 
-    if (daysRemaining <= 3 && daysRemaining >= 0) {
-      expiryData = {
-        daysRemaining,
-        planName: "Free Trial",
-        expiryDate: organisation.trialEndDate.toISOString(),
-        type: 'trial' as const
-      };
+      console.log(`[Expiry Check] Sub: ${subscription.plan?.name}, days: ${daysRemaining}`);
+      
+      if (daysRemaining <= 14 && daysRemaining >= 0 &&
+        (subscription.status === 'COMPLETED' || subscription.status === 'active' || subscription.status === 'ACTIVE')) {
+        expiryData = {
+          daysRemaining,
+          planName: subscription.plan?.name || "Paid Plan",
+          expiryDate: subscription.endDate.toISOString(),
+          type: 'subscription' as const
+        };
+      }
     }
-  } else if (subscription && subscription.endDate) {
-    const endDate = new Date(subscription.endDate);
-    const msDiff = endDate.getTime() - now.getTime();
-    const daysRemaining = Math.ceil(msDiff / (1000 * 60 * 60 * 24));
-
-    if (daysRemaining <= 3 && daysRemaining >= 0 &&
-      (subscription.status === 'COMPLETED' || subscription.status === 'active' || subscription.status === 'ACTIVE')) {
-      expiryData = {
-        daysRemaining,
-        planName: subscription.plan?.name || "Paid Plan",
-        expiryDate: subscription.endDate.toISOString(),
-        type: 'subscription' as const
-      };
-    }
+    console.log(`[Expiry Check] Final expiryData:`, expiryData);
   }
 
   const hasSocialTokens = !!(
@@ -123,5 +120,13 @@ export default async function OrganisationLayout({
     dbUser.facebookPageAccessToken
   );
 
-  return <OrganisationLayoutWrapper isImpersonating={isImpersonating} hasSocialTokens={hasSocialTokens} expiryData={expiryData}>{children}</OrganisationLayoutWrapper>;
+  return (
+    <OrganisationLayoutWrapper 
+      isImpersonating={isImpersonating} 
+      hasSocialTokens={hasSocialTokens} 
+      expiryData={expiryData}
+    >
+      {children}
+    </OrganisationLayoutWrapper>
+  );
 }
