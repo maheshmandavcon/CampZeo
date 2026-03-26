@@ -139,31 +139,50 @@ export function AdminSchedulerView() {
             setLoading(true);
             setResult(null);
 
-            const response = await fetch('/api/scheduler/campaign-posts', {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET || 'test-secret-key'}`,
-                    'x-manual-run': 'true',
-                },
+            const authHeader = `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET || 'test-secret-key'}`;
+
+            const [campaignRes, planExpiryRes, socialMetricsRes] = await Promise.allSettled([
+                fetch('/api/scheduler/campaign-posts', {
+                    method: 'GET',
+                    headers: { 'Authorization': authHeader, 'x-manual-run': 'true' },
+                }).then(r => r.json()),
+                fetch('/api/scheduler/plan-expiry', {
+                    method: 'GET',
+                    headers: { 'Authorization': authHeader },
+                }).then(r => r.json()),
+                fetch('/api/scheduler/social-metrics', {
+                    method: 'GET',
+                    headers: { 'Authorization': authHeader },
+                }).then(r => r.json()),
+            ]);
+
+            const campaignData = campaignRes.status === 'fulfilled' ? campaignRes.value : { success: false, error: campaignRes.reason?.message };
+            const planExpiryData = planExpiryRes.status === 'fulfilled' ? planExpiryRes.value : { success: false, error: planExpiryRes.reason?.message };
+            const socialMetricsData = socialMetricsRes.status === 'fulfilled' ? socialMetricsRes.value : { success: false, error: socialMetricsRes.reason?.message };
+
+            const allSuccess = campaignData.success && planExpiryData.success && socialMetricsData.success;
+
+            setResult({
+                success: allSuccess,
+                timestamp: new Date().toISOString(),
+                results: campaignData.results || { total: 0, processed: 0, failed: 0, errors: [] },
+                message: [
+                    `Campaign Posts: ${campaignData.success ? '✅' : '❌'} ${campaignData.message || campaignData.error || ''}`,
+                    `Plan Expiry: ${planExpiryData.success ? '✅' : '❌'} ${planExpiryData.message || planExpiryData.error || ''}`,
+                    `Social Metrics: ${socialMetricsData.success ? '✅' : '❌'} ${socialMetricsData.message || socialMetricsData.error || ''}`,
+                ].join('\n'),
             });
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Failed to run scheduler');
-            }
-
-            setResult(data);
             setLastRun(new Date().toISOString());
 
-            if (data.success) {
-                toast.success(`Scheduler completed! Processed: ${data.results?.processed || 0}, Failed: ${data.results?.failed || 0}`);
+            if (allSuccess) {
+                toast.success('All scheduler jobs completed successfully!');
             } else {
-                toast.error('Scheduler failed: ' + (data.error || 'Unknown error'));
+                toast.warning('Some scheduler jobs had issues. Check results below.');
             }
         } catch (error) {
-            console.error('Error running scheduler:', error);
-            toast.error(error instanceof Error ? error.message : 'Failed to run scheduler');
+            console.error('Error running schedulers:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to run schedulers');
             setResult({
                 success: false,
                 timestamp: new Date().toISOString(),
@@ -202,9 +221,9 @@ export function AdminSchedulerView() {
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h2 className="text-2xl font-bold tracking-tight text-slate-900">Campaign Posts Scheduler</h2>
+                <h2 className="text-2xl font-bold tracking-tight text-slate-900">Scheduler Management</h2>
                 <p className="text-muted-foreground">
-                    Manage and monitor automatic campaign post scheduling
+                    Manage and monitor all automated scheduler jobs
                 </p>
             </div>
 
@@ -315,9 +334,9 @@ export function AdminSchedulerView() {
             {/* Control Card */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Manual Trigger</CardTitle>
+                    <CardTitle>Run All Scheduler Jobs</CardTitle>
                     <CardDescription>
-                        Click the button below to manually run the scheduler. This will process all posts that are scheduled for now or earlier.
+                        Click the button below to manually run all 3 scheduler jobs together: Campaign Posts, Plan Expiry Notifications, and Social Metrics.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -330,12 +349,12 @@ export function AdminSchedulerView() {
                             {loading ? (
                                 <>
                                     <Loader2 className="size-4 mr-2 animate-spin" />
-                                    Running...
+                                    Running All Jobs...
                                 </>
                             ) : (
                                 <>
                                     <Play className="size-4 mr-2" />
-                                    Run Scheduler Now
+                                    Run All Schedulers Now
                                 </>
                             )}
                         </Button>
@@ -348,12 +367,28 @@ export function AdminSchedulerView() {
                         )}
                     </div>
 
+                    <div className="grid grid-cols-3 gap-3 text-sm">
+                        <div className="p-3 border rounded-lg bg-muted/30 text-center">
+                            <div className="font-medium">📬 Campaign Posts</div>
+                            <div className="text-xs text-muted-foreground mt-1">Sends scheduled posts</div>
+                        </div>
+                        <div className="p-3 border rounded-lg bg-muted/30 text-center">
+                            <div className="font-medium">⏰ Plan Expiry</div>
+                            <div className="text-xs text-muted-foreground mt-1">Sends expiry reminders</div>
+                        </div>
+                        <div className="p-3 border rounded-lg bg-muted/30 text-center">
+                            <div className="font-medium">📊 Social Metrics</div>
+                            <div className="text-xs text-muted-foreground mt-1">Refreshes metrics data</div>
+                        </div>
+                    </div>
+
                     <div className="text-sm text-muted-foreground">
-                        <p>ℹ️ The scheduler runs automatically every 5 minutes in production via Vercel Cron.</p>
+                        <p>ℹ️ All jobs run automatically via Vercel Cron in production.</p>
                         <p className="mt-1">This manual trigger is useful for testing and immediate execution.</p>
                     </div>
                 </CardContent>
             </Card>
+
 
             {/* Results Card */}
             {result && (
@@ -378,6 +413,15 @@ export function AdminSchedulerView() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                        {result.message && (
+                            <div className="p-4 border rounded-lg bg-muted/30 space-y-2">
+                                <h4 className="font-medium text-sm mb-2">Job Results:</h4>
+                                {result.message.split('\n').map((line, i) => (
+                                    <div key={i} className="text-sm">{line}</div>
+                                ))}
+                            </div>
+                        )}
+
                         {result.success && result.results ? (
                             <>
                                 {/* Summary Stats */}

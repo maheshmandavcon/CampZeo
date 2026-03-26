@@ -71,6 +71,27 @@ async function postHandler(
             const password = bodyPassword || generatePassword();
             const email = bodyEmail || organisation.email;
 
+            if (email) {
+                const conflictingUser = await prisma.user.findFirst({
+                    where: {
+                        email: { equals: email, mode: 'insensitive' },
+                        organisationId: { not: organisationId },
+                        organisation: {
+                            isDeleted: false,
+                            isApproved: true,
+                        },
+                    },
+                    include: { organisation: true },
+                });
+
+                if (conflictingUser) {
+                    return NextResponse.json({
+                        isSuccess: false,
+                        message: `A user account with "${email}" is already linked to organisation "${conflictingUser.organisation?.name}". Each email can only be associated with one active organisation at a time. Please suspend the existing organisation first or use a different email.`,
+                    }, { status: 409 });
+                }
+            }
+
             if (!email) {
                 console.error("No email found for organisation, cannot create user");
             } else {
