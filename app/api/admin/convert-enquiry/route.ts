@@ -98,10 +98,11 @@ async function postHandler(req: Request) {
             }
 
             // Generate username from name field
-            const username = enquiry.name
+            const baseUsername = enquiry.name
                 .toLowerCase()
-                .replace(/\s+/g, '') // Remove all spaces
-                .replace(/[^a-z0-9]/g, ''); // Keep only alphanumeric
+                .replace(/\s+/g, '')
+                .replace(/[^a-z0-9]/g, '');
+            const username = `${baseUsername}${Math.floor(1000 + Math.random() * 9000)}`;
 
             if (!username || username.length === 0) {
                 throw new Error('Invalid name - cannot generate username');
