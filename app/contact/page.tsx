@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { Mail, Phone, MapPin, Send, ArrowLeft, Loader2, MessageSquare, Sparkles } from "lucide-react";
+import { Mail, Phone, MapPin, Send, ArrowLeft, Loader2, MessageSquare, Sparkles, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -22,6 +22,12 @@ export default function ContactPage() {
         subject: "",
         message: "",
     });
+    const recaptchaRef = useRef<ReCAPTCHA>(null);
+
+    const handleResetCaptcha = () => {
+        recaptchaRef.current?.reset();
+        setCaptchaToken(null);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -214,12 +220,23 @@ export default function ContactPage() {
                                             />
                                         </div>
 
-                                        <div className="flex justify-center">
+                                        <div className="flex flex-col items-center gap-2">
                                             <ReCAPTCHA
+                                                ref={recaptchaRef}
                                                 sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
                                                 onChange={setCaptchaToken}
                                                 theme="light" // or "dark" depending on your UI preference
                                             />
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={handleResetCaptcha}
+                                                className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1.5 h-8"
+                                            >
+                                                <RotateCcw className="size-3" />
+                                                Reset reCAPTCHA
+                                            </Button>
                                         </div>
 
                                         <Button

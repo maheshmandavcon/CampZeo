@@ -97,31 +97,63 @@ async function postHandler(req: Request) {
                 );
             }
 
-            // Generate username from name field
-            const baseUsername = enquiry.name
-                .toLowerCase()
-                .replace(/\s+/g, '')
-                .replace(/[^a-z0-9]/g, '');
-            const username = `${baseUsername}${Math.floor(1000 + Math.random() * 9000)}`;
-
-            if (!username || username.length === 0) {
-                throw new Error('Invalid name - cannot generate username');
-            }
-
             // Split name into firstName and lastName
             const nameParts = enquiry.name.trim().split(/\s+/);
             const firstName = nameParts[0];
             const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined;
 
             console.log('Creating new Clerk user for lead...');
-            clerkUser = await createClerkUser({
-                email: enquiry.email.trim(),
-                password: enquiry.password.trim(),
-                firstName: firstName,
-                lastName: lastName,
-                username: username,
-            });
-            console.log('Clerk user created successfully:', clerkUser.id);
+
+            const MAX_ATTEMPTS = 5;
+            let attempts = 0;
+            let lastError = null;
+
+            while (attempts < MAX_ATTEMPTS) {
+                attempts++;
+                const baseUsername = enquiry.name
+                    .toLowerCase()
+                    .replace(/\s+/g, '')
+                    .replace(/[^a-z0-9]/g, '');
+                const suffixLength = attempts === 1 ? 9000 : 90000;
+                const suffixStart = attempts === 1 ? 1000 : 10000;
+                const username = `${baseUsername}${Math.floor(suffixStart + Math.random() * suffixLength)}`;
+
+                if (!username || username.length === 0) {
+                    throw new Error('Invalid name - cannot generate username');
+                }
+
+                try {
+            
+                    if (attempts === 1) {
+                        throw new Error('Failed to create user: That username is taken. Please try another.');
+                    }
+
+                    clerkUser = await createClerkUser({
+                        email: enquiry.email.trim(),
+                        password: enquiry.password.trim(),
+                        firstName: firstName,
+                        lastName: lastName,
+                        username: username,
+                    });
+                    console.log(`Clerk user created successfully on attempt ${attempts}:`, clerkUser.id);
+                    break; 
+                } catch (error: any) {
+                    lastError = error;
+                    const errorMessage = error?.message || '';
+                    if (errorMessage.toLowerCase().includes('username is taken') && attempts < MAX_ATTEMPTS) {
+                        console.warn(`Username collision for ${username}, retrying (Attempt ${attempts}/${MAX_ATTEMPTS})...`);
+                        await logWarning("Clerk username collision during conversion", {
+                            enquiryId,
+                            email: enquiry.email,
+                            username,
+                            attempt: attempts,
+                            action: "convert-enquiry"
+                        });
+                        continue;
+                    }
+                    throw error;
+                }
+            }
         }
     } catch (clerkError: any) {
         console.error('Detailed Clerk error:', clerkError);

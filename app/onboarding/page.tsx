@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, Star, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { Loader2, CheckCircle2, Star, ArrowRight, Eye, EyeOff, RotateCcw } from "lucide-react";
 import { countries } from "@/lib/countries";
 import ReCAPTCHA from "react-google-recaptcha";
 import {
@@ -35,6 +35,12 @@ export default function OnboardingPage() {
   const [isDetecting, setIsDetecting] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [isCaptchaRequired, setIsCaptchaRequired] = useState(true);
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
+
+  const handleResetCaptcha = () => {
+    recaptchaRef.current?.reset();
+    setCaptchaToken(null);
+  };
 
   useEffect(() => {
     // Only require captcha on campzeo.com
@@ -655,12 +661,23 @@ export default function OnboardingPage() {
             </div>
 
             {isCaptchaRequired && (
-              <div className="flex justify-center my-4">
+              <div className="flex flex-col items-center gap-2 my-4">
                 <ReCAPTCHA
+                  ref={recaptchaRef}
                   sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
                   onChange={setCaptchaToken}
                   theme="light"
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResetCaptcha}
+                  className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1.5 h-8"
+                >
+                  <RotateCcw className="size-3" />
+                  Reset reCAPTCHA
+                </Button>
               </div>
             )}
 
