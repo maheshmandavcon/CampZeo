@@ -164,6 +164,7 @@ export function OrganisationLayoutWrapper({
     <div className="h-screen flex flex-col overflow-hidden bg-muted/30">
    
       {expiryData && (
+        <ExpiryBanner
           daysRemaining={expiryData.daysRemaining}
           planName={expiryData.planName}
           expiryDate={expiryData.expiryDate}
