@@ -33,7 +33,7 @@ function PurchaseContent() {
     const { plans, isLoading: plansLoading } = usePlans();
     const clerk = useClerk();
     const { user, isLoaded: userLoaded, isSignedIn } = useUser();
-  const [emailError, setEmailError] = useState<string | null>(null);
+    const [emailError, setEmailError] = useState<string | null>(null);
 
     const [step, setStep] = useState<"DETAILS" | "VERIFICATION" | "PAYMENT" | "SUCCESS">("DETAILS");
     const [loading, setLoading] = useState(false);
@@ -107,13 +107,13 @@ function PurchaseContent() {
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         let filteredValue = value;
-        
+
         if (name === "postalCode") {
             filteredValue = value.replace(/[^a-zA-Z0-9\s-]/g, "");
         } else if (name === "mobile") {
             filteredValue = value.replace(/[^0-9+\s\(\)-]/g, "");
         }
-        
+
         setFormData({ ...formData, [name]: filteredValue });
     };
 
@@ -259,7 +259,7 @@ function PurchaseContent() {
             });
             const checkData = await checkRes.json();
             if (checkData.isSuccess && checkData.exists) {
-                 setEmailError(checkData.message);
+                setEmailError(checkData.message);
                 toast.error("Email Already In Use", {
 
                     description: checkData.message,
@@ -333,8 +333,8 @@ function PurchaseContent() {
                 body: JSON.stringify({
                     organizationName: accountType === 'individual' ? formData.name : formData.organisationName,
                     email: formData.email,
-                    password: formData.password, 
-                    ownerName: formData.name, 
+                    password: formData.password,
+                    ownerName: formData.name,
                     phone: formData.mobile,
                     address: formData.address,
                     city: formData.city,
@@ -498,10 +498,10 @@ function PurchaseContent() {
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4 col-span-1 md:col-span-2">
-                                 <div className="space-y-2">
+                                    <div className="space-y-2">
                                         <Label htmlFor="postalCode">Postal Code</Label>
                                         <Input id="postalCode" name="postalCode" required value={formData.postalCode} onChange={handleChange} />
-                                        
+
                                         {postalOptions.length > 0 && (
                                             <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg animate-in fade-in slide-in-from-top-2 duration-300">
                                                 <p className="text-xs font-medium text-primary mb-2">Multiple locations found. Please select one:</p>
@@ -588,7 +588,7 @@ function PurchaseContent() {
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    
+
                                 </div>
 
                                 {accountType === "business" && (

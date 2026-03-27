@@ -82,6 +82,7 @@ export default function CampaignsPage() {
     const [deleteCampaignId, setDeleteCampaignId] = useState<number | null>(null);
     const [showCampaignModal, setShowCampaignModal] = useState(false);
     const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+    const [exporting, setExporting] = useState(false);
 
     // Fetch campaigns
     const fetchCampaigns = async () => {
@@ -148,8 +149,29 @@ export default function CampaignsPage() {
     };
 
     // Handle export campaigns
-    const handleExport = () => {
-        window.open('/api/campaigns/export', '_blank');
+    const handleExport = async () => {
+        try {
+            setExporting(true);
+            const response = await fetch('/api/campaigns/export');
+            if (!response.ok) throw new Error('Failed to export campaigns');
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `campaigns-${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            toast.success('Campaigns exported successfully');
+        } catch (error) {
+            console.error('Error exporting campaigns:', error);
+            toast.error('Failed to export campaigns');
+        } finally {
+            setExporting(false);
+        }
     };
 
     // Format date
@@ -218,8 +240,13 @@ export default function CampaignsPage() {
                                 variant="outline"
                                 className="cursor-pointer"
                                 onClick={handleExport}
+                                disabled={exporting || campaigns.length === 0}
                             >
-                                <Download className="size-4 mr-2" />
+                                {exporting ? (
+                                    <Loader2 className="size-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Download className="size-4 mr-2" />
+                                )}
                                 Export All
                             </Button>
                         </div>

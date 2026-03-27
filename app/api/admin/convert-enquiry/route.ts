@@ -73,6 +73,10 @@ async function postHandler(req: Request) {
 
     // Step 2: Create or link Clerk user
     let clerkUser;
+    const generatedPassword = (!enquiry.password || enquiry.password.trim() === '')
+        ? Math.random().toString(36).slice(-10) + "A1!a"
+        : enquiry.password.trim();
+
     try {
         const client = await clerkClient();
 
@@ -86,16 +90,16 @@ async function postHandler(req: Request) {
             console.log('Using existing Clerk user:', clerkUser.id);
         } else {
             // User doesn't exist, need to create one. Verify password exists.
-            if (!enquiry.password || enquiry.password.trim() === '') {
-                return NextResponse.json(
-                    {
-                        isSuccess: false,
-                        error: "Password not found in enquiry",
-                        details: "A password is required to create a new authentication account for this lead."
-                    },
-                    { status: 400 }
-                );
-            }
+            // if (!enquiry.password || enquiry.password.trim() === '') {
+            //     return NextResponse.json(
+            //         {
+            //             isSuccess: false,
+            //             error: "Password not found in enquiry",
+            //             details: "A password is required to create a new authentication account for this lead."
+            //         },
+            //         { status: 400 }
+            //     );
+            // }
 
             // Split name into firstName and lastName
             const nameParts = enquiry.name.trim().split(/\s+/);
@@ -128,9 +132,10 @@ async function postHandler(req: Request) {
                         throw new Error('Failed to create user: That username is taken. Please try another.');
                     }
 
+                    // password: enquiry.password.trim(),
                     clerkUser = await createClerkUser({
                         email: enquiry.email.trim(),
-                        password: enquiry.password.trim(),
+                        password: generatedPassword,
                         firstName: firstName,
                         lastName: lastName,
                         username: username,
@@ -305,7 +310,7 @@ async function postHandler(req: Request) {
     try {
         await sendOrganisationInvite({
             email: enquiry.email,
-            password: enquiry.password || "Redirect to login",
+            password: generatedPassword,
             organisationName: enquiry.organisationName || enquiry.name,
             ownerName: enquiry.name,
         });

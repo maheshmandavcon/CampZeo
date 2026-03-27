@@ -155,8 +155,8 @@ export default function ExportView() {
                     <div className="flex flex-wrap gap-4 pt-4 border-t">
                         <Button
                             variant="default"
-                            className="gap-2"
-                            disabled={isExporting}
+                            className="gap-2 cursor-pointer"
+                            disabled={isExporting || isLoadingPreview || previewData.length === 0}
                             onClick={() => handleExport('xlsx')}
                         >
                             <FileDown className="w-4 h-4" />
@@ -164,8 +164,8 @@ export default function ExportView() {
                         </Button>
                         <Button
                             variant="outline"
-                            className="gap-2"
-                            disabled={isExporting}
+                            className="gap-2 cursor-pointer"
+                            disabled={isExporting || isLoadingPreview || previewData.length === 0}
                             onClick={() => handleExport('csv')}
                         >
                             <Filter className="w-4 h-4" />

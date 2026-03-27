@@ -198,11 +198,11 @@ export default function Page() {
       return;
     }
 
+    // password: "Password",
+    // confirmPassword: "Confirm Password",
     // Validation logic remains the same
     const requiredFields: Record<string, string> = {
       email: "Email",
-      password: "Password",
-      confirmPassword: "Confirm Password",
       name: "Owner Name",
       mobile: "Mobile Number",
       address: "Address",
@@ -226,12 +226,12 @@ export default function Page() {
       }
     }
 
-    if (form.password !== form.confirmPassword) {
-      toast.error("Password Mismatch", {
-        description: "Passwords do not match.",
-      });
-      return;
-    }
+    // if (form.password !== form.confirmPassword) {
+    //   toast.error("Password Mismatch", {
+    //     description: "Passwords do not match.",
+    //   });
+    //   return;
+    // }
 
     const submissionForm = {
       ...form,
@@ -249,14 +249,14 @@ export default function Page() {
       return;
     }
 
-    // Password validation
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    if (!passwordRegex.test(form.password)) {
-      toast.error("Weak Password", {
-        description: "Password must be at least 8 characters with 1 uppercase, 1 lowercase, and 1 number.",
-      });
-      return;
-    }
+    // // Password validation
+    // const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+    // if (!passwordRegex.test(form.password)) {
+    //   toast.error("Weak Password", {
+    //     description: "Password must be at least 8 characters with 1 uppercase, 1 lowercase, and 1 number.",
+    //   });
+    //   return;
+    // }
 
     // Mobile validation
     if (form.mobile.length < 10) {
@@ -591,7 +591,7 @@ export default function Page() {
                   />
                 </div>
               )}
-
+{/* 
               <div className="col-span-1 md:col-span-2 space-y-2">
                 <Label htmlFor="password">Password <span className="text-destructive">*</span></Label>
                 <div className="relative">
@@ -637,7 +637,7 @@ export default function Page() {
                 <p className="text-xs text-muted-foreground">
                   Must contain at least 8 characters, 1 uppercase, 1 lowercase, and 1 number.
                 </p>
-              </div>
+              </div> */}
 
               <div className="col-span-1 md:col-span-2 space-y-2">
                 <Label htmlFor="enquiryText">Why are you interested in Campzeo? <span className="text-destructive">*</span></Label>

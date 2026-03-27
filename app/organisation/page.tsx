@@ -13,7 +13,8 @@ import {
   Contact,
   Loader2,
   LayoutDashboard,
-  Calendar
+  Calendar,
+  Share2
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -206,6 +207,9 @@ export default function OrganisationDashboard() {
   }
 
   const orgName = user?.organisation?.name || "Your Organisation";
+  const userName = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
+  const isOwnerNameSameAsOrg = userName.trim().toLowerCase() === orgName.trim().toLowerCase();
+  
   const latestSubscription = user?.organisation?.subscriptions?.[0];
   const planName = latestSubscription?.plan?.name || "Free";
 
@@ -303,13 +307,21 @@ export default function OrganisationDashboard() {
 
               <Card className="cursor-pointer hover:bg-yellow-50/50 transition-colors">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Team Size</CardTitle>
-                  <Users className="size-8 bg-yellow-400 p-2 rounded-full text-white " />
+                  <CardTitle className="text-sm font-medium">
+                    {isOwnerNameSameAsOrg ? "Connected Accounts" : "Team Size"}
+                  </CardTitle>
+                  {isOwnerNameSameAsOrg ? (
+                    <Share2 className="size-8 bg-blue-500 p-2 rounded-full text-white" />
+                  ) : (
+                    <Users className="size-8 bg-yellow-400 p-2 rounded-full text-white" />
+                  )}
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{usage?.users.current || 1}</div>
+                  <div className="text-2xl font-bold">
+                    {isOwnerNameSameAsOrg ? (usage?.platforms.current || 0) : (usage?.users.current || 1)}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Active team members
+                    {isOwnerNameSameAsOrg ? "Active social connections" : "Active team members"}
                   </p>
                 </CardContent>
               </Card>
