@@ -88,10 +88,12 @@ async function sendPostHandler(
         throw new ApiError(400, result.error);
     }
 
+    // Return the actual success state and accumulated errors (e.g. partial successes or individual SMS/WhatsApp failures)
     return NextResponse.json({
-        success: true,
+        success: result.success,
         sent: result.sent,
-        failed: result.failed
+        failed: result.failed,
+        errors: result.errors
     });
 }
 

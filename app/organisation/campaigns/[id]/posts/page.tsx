@@ -403,7 +403,16 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
             } else {
                 if (!data.success && data.sent === 0) {
                     const firstError = data.errors?.[0]?.split(': ')[1] || data.error || 'Failed to send post';
-                    toast.error(`Failed: ${firstError}`);
+                    if (firstError.toLowerCase().includes('credit')) {
+                        toast.error(`Failed: ${firstError}`, {
+                            action: {
+                                label: 'Add Credits',
+                                onClick: () => router.push('/organisation/billing')
+                            },
+                        });
+                    } else {
+                        toast.error(`Failed: ${firstError}`);
+                    }
                 } else if (data.failed > 0) {
                     toast.warning(`Sent: ${data.sent}, Failed: ${data.failed}`);
                 } else {
@@ -445,7 +454,17 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
                 console.error('Failed to log error:', logError);
             }
 
-            toast.error(error instanceof Error ? error.message : 'Failed to share post');
+            const errorMessage = error instanceof Error ? error.message : 'Failed to share post';
+            if (errorMessage.toLowerCase().includes('credit')) {
+                toast.error(errorMessage, {
+                    action: {
+                        label: 'Add Credits',
+                        onClick: () => router.push('/organisation/billing')
+                    },
+                });
+            } else {
+                toast.error(errorMessage);
+            }
         } finally {
             setSendingShare(false);
         }

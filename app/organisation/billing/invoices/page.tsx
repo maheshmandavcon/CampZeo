@@ -23,9 +23,19 @@ import { useRouter } from "next/navigation";
 import { formatPrice } from "@/lib/plans";
 import { toast } from "sonner";
 
+interface PaymentData {
+    id: string;
+    amount: number;
+    currency: string;
+    status: string;
+    plan: string;
+    createdAt: string;
+}
+
 export default function InvoicesPage() {
     const router = useRouter();
     const [invoices, setInvoices] = useState<any[]>([]);
+    const [payments, setPayments] = useState<PaymentData[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -35,13 +45,23 @@ export default function InvoicesPage() {
     const fetchInvoices = async () => {
         try {
             setLoading(true);
-            const response = await fetch("/api/invoices");
-            if (!response.ok) throw new Error("Failed to fetch invoices");
-            const data = await response.json();
-            setInvoices(data.invoices || []);
+            const [invoicesResponse, paymentsResponse] = await Promise.all([
+                fetch("/api/invoices"),
+                fetch("/api/payments")
+            ]);
+
+            if (invoicesResponse.ok) {
+                const data = await invoicesResponse.json();
+                setInvoices(data.invoices || []);
+            }
+
+            if (paymentsResponse.ok) {
+                const data = await paymentsResponse.json();
+                setPayments(data.payments || []);
+            }
         } catch (error) {
-            console.error("Error fetching invoices:", error);
-            toast.error("Failed to load invoices");
+            console.error("Error fetching data:", error);
+            toast.error("Failed to load billing history");
         } finally {
             setLoading(false);
         }
@@ -72,7 +92,7 @@ export default function InvoicesPage() {
                     <CardHeader>
                         <CardTitle>Invoice History</CardTitle>
                         <CardDescription>
-                            A list of all invoices generated for your organisation
+                            A list of all invoices and payment transactions for your organisation
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -80,10 +100,10 @@ export default function InvoicesPage() {
                             <div className="flex items-center justify-center py-12">
                                 <Loader2 className="size-8 animate-spin text-muted-foreground" />
                             </div>
-                        ) : invoices.length === 0 ? (
+                        ) : invoices.length === 0 && payments.length === 0 ? (
                             <div className="text-center py-12">
                                 <FileText className="size-12 mx-auto text-muted-foreground mb-4" />
-                                <p className="text-muted-foreground">No invoices found</p>
+                                <p className="text-muted-foreground">No billing history found</p>
                             </div>
                         ) : (
                             <div className="rounded-md border">
@@ -95,12 +115,12 @@ export default function InvoicesPage() {
                                             <TableHead>Description</TableHead>
                                             <TableHead>Amount</TableHead>
                                             <TableHead>Status</TableHead>
-                                            <TableHead className="text-right">Actions</TableHead>
+
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {invoices.map((invoice) => (
-                                            <TableRow key={invoice.id}>
+                                            <TableRow key={`inv-${invoice.id}`}>
                                                 <TableCell className="font-medium">
                                                     {invoice.invoiceNumber}
                                                 </TableCell>
@@ -119,9 +139,9 @@ export default function InvoicesPage() {
                                                     <Badge
                                                         variant={
                                                             invoice.status === "PAID"
-                                                                ? "default" // default is usually dark/primary
+                                                                ? "default"
                                                                 : invoice.status === "PENDING"
-                                                                    ? "secondary" // secondary usually lighter
+                                                                    ? "secondary"
                                                                     : "destructive"
                                                         }
                                                         className={
@@ -130,6 +150,9 @@ export default function InvoicesPage() {
                                                     >
                                                         {invoice.status}
                                                     </Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline">Invoice</Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     <Button
@@ -143,12 +166,47 @@ export default function InvoicesPage() {
                                                 </TableCell>
                                             </TableRow>
                                         ))}
+                                        {payments.map((payment) => (
+                                            <TableRow key={`pay-${payment.id}`}>
+                                                <TableCell className="font-medium text-muted-foreground text-xs">
+                                                    {(payment as any).razorpayPaymentId || (payment as any).razorpayOrderId || '—'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {new Date(payment.createdAt).toLocaleDateString()}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {payment.plan} Plan
+                                                </TableCell>
+                                                <TableCell>
+                                                    {formatPrice(payment.amount, payment.currency)}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge
+                                                        variant={
+                                                            payment.status === "COMPLETED"
+                                                                ? "default"
+                                                                : payment.status === "PENDING"
+                                                                    ? "secondary"
+                                                                    : "destructive"
+                                                        }
+                                                        className={
+                                                            payment.status === "COMPLETED" ? "bg-red-600 hover:bg-red-700" : ""
+                                                        }
+                                                    >
+                                                        {payment.status}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell />
+                                            </TableRow>
+                                        ))}
                                     </TableBody>
                                 </Table>
                             </div>
                         )}
                     </CardContent>
                 </Card>
+
+
             </div>
         </div>
     );

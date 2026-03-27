@@ -158,19 +158,16 @@ async function createPostHandler(
 
     // Platform restriction: SMS and WhatsApp require a paid subscription (ACTIVE or CANCELING) and NOT a trial
     if (['SMS', 'WHATSAPP'].includes(type.toUpperCase())) {
-        const org = await prisma.organisation.findUnique({
-            where: { id: effectiveOrganisationId },
-            select: { isTrial: true }
-        });
-
-        const hasPaidSubscription = await prisma.subscription.findFirst({
+        const activeSubscription = await prisma.subscription.findFirst({
             where: {
                 organisationId: effectiveOrganisationId,
                 status: { in: ['ACTIVE', 'active', 'CANCELING', 'COMPLETED'] },
             },
+            include: { plan: true }
         });
 
-        const isLocked = org?.isTrial || !hasPaidSubscription;
+        // Locked if no active subscription or if it's explicitly a trial plan/free trial
+        const isLocked = !activeSubscription || activeSubscription.plan?.name === 'FREE_TRIAL' || activeSubscription.isTrial;
 
         if (isLocked) {
             return NextResponse.json(
@@ -234,65 +231,28 @@ async function createPostHandler(
     // If it's a social post and not scheduled, send it immediately
     const isSocialPlatform = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(type);
 
-    // Before creating a new post, check for existing DRAFT/FAILED post
-    const existingPost = await prisma.campaignPost.findFirst({
-        where: {
+    // Always create a new post (no dedup — campaigns can have multiple SMS/WhatsApp posts)
+    const post = await prisma.campaignPost.create({
+        data: {
             campaignId,
+            subject,
+            message,
             type,
-            isDeleted: false,
-            status: 'DRAFT',
-            isPostSent: false,
+            senderEmail: type === 'EMAIL' ? senderEmail : null,
+            scheduledPostTime: scheduledPostTime ? new Date(scheduledPostTime) : (!isSocialPlatform ? new Date() : null),
+            isAttachedToCampaign: true,
+            videoUrl: mediaUrls && mediaUrls.length > 0 ? mediaUrls[0] : null,
+            mediaUrls: mediaUrls || [],
+            metadata,
+        },
+        include: {
+            campaign: {
+                include: {
+                    organisation: true,
+                }
+            }
         }
     });
-
-    let post;
-    if (existingPost) {
-        // Reuse the existing post — update it with new data
-        post = await prisma.campaignPost.update({
-            where: { id: existingPost.id },
-            data: {
-                subject,
-                message,
-                senderEmail: type === 'EMAIL' ? senderEmail : null,
-                scheduledPostTime: scheduledPostTime ? new Date(scheduledPostTime) : (!isSocialPlatform ? new Date() : null),
-                videoUrl: mediaUrls && mediaUrls.length > 0 ? mediaUrls[0] : null,
-                mediaUrls: mediaUrls || [],
-                metadata,
-                failureReason: null, // clear previous failure reason
-                status: 'DRAFT',
-            },
-            include: {
-                campaign: {
-                    include: {
-                        organisation: true,
-                    }
-                }
-            }
-        });
-    } else {
-        // Create new post
-        post = await prisma.campaignPost.create({
-            data: {
-                campaignId,
-                subject,
-                message,
-                type,
-                senderEmail: type === 'EMAIL' ? senderEmail : null,
-                scheduledPostTime: scheduledPostTime ? new Date(scheduledPostTime) : (!isSocialPlatform ? new Date() : null),
-                isAttachedToCampaign: true,
-                videoUrl: mediaUrls && mediaUrls.length > 0 ? mediaUrls[0] : null, // Legacy support
-                mediaUrls: mediaUrls || [],
-                metadata,
-            },
-            include: {
-                campaign: {
-                    include: {
-                        organisation: true,
-                    }
-                }
-            }
-        });
-    }
 
     
     if (isSocialPlatform && !scheduledPostTime) {

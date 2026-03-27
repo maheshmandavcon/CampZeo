@@ -64,6 +64,7 @@ import { AdminBroadcastNotification } from "@/components/admin/admin-broadcast-n
 import { AdminSchedulerView } from "@/components/admin/admin-scheduler-view";
 import { AdminNotificationSettings } from "@/components/admin/admin-notification-settings";
 import { AdminSystemAlerts } from "@/components/admin/admin-system-alerts";
+import { AdminTwilioRequests } from "@/components/admin/AdminTwilioRequests";
 import { Clock } from "lucide-react";
 
 // JSON Viewer Component with Syntax Highlighting
@@ -1139,6 +1140,9 @@ export default function AdminDashboard() {
               <TabsTrigger value="scheduler" className="justify-start px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-white hover:bg-red-800 hover:text-slate-200 transition-all rounded-md mx-2">
                 <Clock className="mr-3 size-4" /> Scheduler
               </TabsTrigger>
+              <TabsTrigger value="twilio" className="justify-start px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-white hover:bg-red-800 hover:text-slate-200 transition-all rounded-md mx-2">
+                <Smartphone className="mr-3 size-4" /> Twilio Requests
+              </TabsTrigger>
               <TabsTrigger value="notifications" className="justify-start px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-white hover:bg-red-800 hover:text-slate-200 transition-all rounded-md mx-2">
                 <Bell className="mr-3 size-4" /> SMTP Configuration
               </TabsTrigger>
@@ -1584,6 +1588,10 @@ export default function AdminDashboard() {
                   </>
                 )}
               </Card>
+            </TabsContent>
+            {/* Twilio Requests */}
+            <TabsContent value="twilio" className="m-0 focus-visible:outline-none">
+              <AdminTwilioRequests />
             </TabsContent>
             {/* Enquiry */}
             <TabsContent value="enquiry" className="m-0 focus-visible:outline-none">

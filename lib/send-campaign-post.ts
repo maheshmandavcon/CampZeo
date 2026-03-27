@@ -816,6 +816,43 @@ export async function sendCampaignPost(
 
         const campaignTag = `campaign-${post.id}`;
 
+        // Twilio Access & Credit Pre-check
+        if (post.type === 'SMS' || post.type === 'WHATSAPP') {
+            const [org, wallet] = await Promise.all([
+                prisma.organisation.findUnique({
+                    where: { id: post.campaign.organisationId },
+                    select: { twilioAccessStatus: true }
+                }),
+                prisma.wallet.findUnique({
+                    where: { organisationId: post.campaign.organisationId }
+                })
+            ]);
+
+            if (org?.twilioAccessStatus !== "APPROVED") {
+                const error = `Twilio access not approved for this organisation (${org?.twilioAccessStatus || 'NONE'}).`;
+                await prisma.campaignPost.update({
+                    where: { id: post.id },
+                    data: { status: 'PUBLISHED', failureReason: error }
+                });
+                return { success: false, error, sent: 0, failed: contacts.length };
+            }
+
+            const required = contacts.length;
+            const available = post.type === 'SMS' ? (wallet?.smsCreditsAvailable || 0) : (wallet?.whatsappCreditsAvailable || 0);
+
+            if (required > available) {
+                const errorMessage = available === 0 
+                    ? `no message credits please add on credit first`
+                    : `Insufficient ${post.type} credits. Required: ${required}, Available: ${available}.`;
+                
+                await prisma.campaignPost.update({
+                    where: { id: post.id },
+                    data: { status: 'PUBLISHED', failureReason: errorMessage }
+                });
+                return { success: false, error: errorMessage, sent: 0, failed: required };
+            }
+        }
+
         let successCount = 0;
         let failCount = 0;
         const errors: string[] = [];
@@ -878,7 +915,7 @@ export async function sendCampaignPost(
                     message = message.replace(new RegExp(key, 'g'), value);
                 });
 
-                const result = await sendSms(contact.contactMobile, message);
+                const result = await sendSms(contact.contactMobile, message, post.campaign.organisationId, post.id);
                 if (result.success) successCount++;
                 else {
                     failCount++;
@@ -908,7 +945,7 @@ export async function sendCampaignPost(
                     message = message.replace(new RegExp(key, 'g'), value);
                 });
 
-                const result = await sendWhatsapp(number, message, post.mediaUrls);
+                const result = await sendWhatsapp(number, message, post.mediaUrls, post.campaign.organisationId, post.id);
                 if (result.success) successCount++;
                 else {
                     failCount++;
