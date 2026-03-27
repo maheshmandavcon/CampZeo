@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Zap, Loader2, CheckCircle2, Star, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { Zap, Loader2, CheckCircle2, Star, ArrowRight, Eye, EyeOff, RotateCcw } from "lucide-react";
 import { countries } from "@/lib/countries";
 import ReCAPTCHA from "react-google-recaptcha";
 import {
@@ -26,11 +26,18 @@ export default function Page() {
 
   const [loading, setLoading] = useState(false);
   const [accountType, setAccountType] = useState<"business" | "individual">("business");
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [isCaptchaRequired, setIsCaptchaRequired] = useState(true);
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
+
+  const handleResetCaptcha = () => {
+    recaptchaRef.current?.reset();
+    setCaptchaToken(null);
+  };
 
   // State for handling multiple location matches
   type LocationOption = {
@@ -191,11 +198,11 @@ export default function Page() {
       return;
     }
 
+    // password: "Password",
+    // confirmPassword: "Confirm Password",
     // Validation logic remains the same
     const requiredFields: Record<string, string> = {
       email: "Email",
-      password: "Password",
-      confirmPassword: "Confirm Password",
       name: "Owner Name",
       mobile: "Mobile Number",
       address: "Address",
@@ -219,12 +226,12 @@ export default function Page() {
       }
     }
 
-    if (form.password !== form.confirmPassword) {
-      toast.error("Password Mismatch", {
-        description: "Passwords do not match.",
-      });
-      return;
-    }
+    // if (form.password !== form.confirmPassword) {
+    //   toast.error("Password Mismatch", {
+    //     description: "Passwords do not match.",
+    //   });
+    //   return;
+    // }
 
     const submissionForm = {
       ...form,
@@ -242,14 +249,14 @@ export default function Page() {
       return;
     }
 
-    // Password validation
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    if (!passwordRegex.test(form.password)) {
-      toast.error("Weak Password", {
-        description: "Password must be at least 8 characters with 1 uppercase, 1 lowercase, and 1 number.",
-      });
-      return;
-    }
+    // // Password validation
+    // const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+    // if (!passwordRegex.test(form.password)) {
+    //   toast.error("Weak Password", {
+    //     description: "Password must be at least 8 characters with 1 uppercase, 1 lowercase, and 1 number.",
+    //   });
+    //   return;
+    // }
 
     // Mobile validation
     if (form.mobile.length < 10) {
@@ -260,6 +267,24 @@ export default function Page() {
     }
 
     setLoading(true);
+
+    try {
+      const checkRes = await fetch('/api/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email.trim() }),
+      });
+      const checkData = await checkRes.json();
+      if (checkData.isSuccess && checkData.exists) {
+        setEmailError(checkData.message);
+        toast.error("Email Already In Use", {
+          description: checkData.message,
+        });
+        setLoading(false);
+        return;
+      }
+    } catch {
+    }
 
     try {
       const response = await fetch("/api/enquiries", {
@@ -424,9 +449,10 @@ export default function Page() {
                   type="email"
                   placeholder="name@example.com"
                   value={form.email}
-                  onChange={handleChange}
-                  className="h-10"
+                  onChange={(e) => { handleChange(e); setEmailError(null); }}
+                  className={`h-10 ${emailError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
                 />
+                {emailError && <p className="text-xs text-red-500 font-medium">{emailError}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="mobile">Mobile Number <span className="text-destructive">*</span></Label>
@@ -565,7 +591,7 @@ export default function Page() {
                   />
                 </div>
               )}
-
+{/* 
               <div className="col-span-1 md:col-span-2 space-y-2">
                 <Label htmlFor="password">Password <span className="text-destructive">*</span></Label>
                 <div className="relative">
@@ -611,7 +637,7 @@ export default function Page() {
                 <p className="text-xs text-muted-foreground">
                   Must contain at least 8 characters, 1 uppercase, 1 lowercase, and 1 number.
                 </p>
-              </div>
+              </div> */}
 
               <div className="col-span-1 md:col-span-2 space-y-2">
                 <Label htmlFor="enquiryText">Why are you interested in Campzeo? <span className="text-destructive">*</span></Label>
@@ -627,12 +653,23 @@ export default function Page() {
             </div>
 
             {isCaptchaRequired && (
-              <div className="flex justify-center my-4">
+              <div className="flex flex-col items-center gap-2 my-4">
                 <ReCAPTCHA
+                  ref={recaptchaRef}
                   sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
                   onChange={setCaptchaToken}
                   theme="light"
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResetCaptcha}
+                  className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1.5 h-8"
+                >
+                  <RotateCcw className="size-3" />
+                  Reset reCAPTCHA
+                </Button>
               </div>
             )}
 

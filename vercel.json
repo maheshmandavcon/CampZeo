@@ -12,6 +12,10 @@
     {
       "path": "/api/scheduler/social-metrics",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/scheduler/plan-expiry",
+      "schedule": "0 0 * * *"
     }
   ]
 }

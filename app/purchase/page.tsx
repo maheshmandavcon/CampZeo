@@ -33,6 +33,7 @@ function PurchaseContent() {
     const { plans, isLoading: plansLoading } = usePlans();
     const clerk = useClerk();
     const { user, isLoaded: userLoaded, isSignedIn } = useUser();
+    const [emailError, setEmailError] = useState<string | null>(null);
 
     const [step, setStep] = useState<"DETAILS" | "VERIFICATION" | "PAYMENT" | "SUCCESS">("DETAILS");
     const [loading, setLoading] = useState(false);
@@ -106,13 +107,13 @@ function PurchaseContent() {
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         let filteredValue = value;
-        
+
         if (name === "postalCode") {
             filteredValue = value.replace(/[^a-zA-Z0-9\s-]/g, "");
         } else if (name === "mobile") {
             filteredValue = value.replace(/[^0-9+\s\(\)-]/g, "");
         }
-        
+
         setFormData({ ...formData, [name]: filteredValue });
     };
 
@@ -250,6 +251,23 @@ function PurchaseContent() {
         setLoading(true);
 
         try {
+            // Check email availability before proceeding
+            const checkRes = await fetch('/api/check-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: formData.email.trim() }),
+            });
+            const checkData = await checkRes.json();
+            if (checkData.isSuccess && checkData.exists) {
+                setEmailError(checkData.message);
+                toast.error("Email Already In Use", {
+
+                    description: checkData.message,
+                });
+                setLoading(false);
+                return;
+            }
+
             // We bypass Clerk sign up and email verification during checkout entirely.
             // The Clerk user and database records will be generated in bulk
             // post successful Razorpay payment, just like the admin convert-enquiry flow.
@@ -315,8 +333,8 @@ function PurchaseContent() {
                 body: JSON.stringify({
                     organizationName: accountType === 'individual' ? formData.name : formData.organisationName,
                     email: formData.email,
-                    password: formData.password, 
-                    ownerName: formData.name, 
+                    password: formData.password,
+                    ownerName: formData.name,
                     phone: formData.mobile,
                     address: formData.address,
                     city: formData.city,
@@ -466,7 +484,8 @@ function PurchaseContent() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
-                                    <Input id="email" name="email" type="email" required value={formData.email} onChange={handleChange} placeholder="john@example.com" />
+                                    <Input id="email" name="email" type="email" required value={formData.email} onChange={(e) => { handleChange(e); setEmailError(null); }} placeholder="john@example.com" className={`h-10 ${emailError ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                                    {emailError && <p className="text-red-500 text-sm">{emailError}</p>}
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="mobile">Mobile <span className="text-destructive">*</span></Label>
@@ -479,10 +498,10 @@ function PurchaseContent() {
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4 col-span-1 md:col-span-2">
-                                 <div className="space-y-2">
+                                    <div className="space-y-2">
                                         <Label htmlFor="postalCode">Postal Code</Label>
                                         <Input id="postalCode" name="postalCode" required value={formData.postalCode} onChange={handleChange} />
-                                        
+
                                         {postalOptions.length > 0 && (
                                             <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg animate-in fade-in slide-in-from-top-2 duration-300">
                                                 <p className="text-xs font-medium text-primary mb-2">Multiple locations found. Please select one:</p>
@@ -569,7 +588,7 @@ function PurchaseContent() {
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    
+
                                 </div>
 
                                 {accountType === "business" && (

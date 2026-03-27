@@ -10,13 +10,12 @@ import { postToPinterest, createPinterestBoard, getPinterestPostInsights } from 
 import { sendSms, sendWhatsapp } from '@/lib/twilio';
 import { createBoostedAd } from '@/lib/meta-ads';
 import { logInfo } from '@/lib/audit-logger';
+import { deleteFromServer } from '@/lib/upload-helper';
 
-/**
- * Clean up Vercel Storage blobs after successful publication and update DB with platform URLs
- */
+
 async function cleanupBlobs(urls: (string | string[] | null | undefined)[]) {
     const allUrls = urls.flat().filter((url): url is string =>
-        typeof url === 'string' && url.includes('vercel-storage.com')
+        typeof url === 'string' && (url.includes('vercel-storage.com') || url.includes('103.72.220.77'))
     );
 
     if (allUrls.length > 0) {
@@ -55,11 +54,23 @@ async function cleanupBlobs(urls: (string | string[] | null | undefined)[]) {
         }
 
         if (urlsToDelete.length > 0) {
-            console.log(`[Cleanup] Deleting ${urlsToDelete.length} blobs from Vercel Storage...`);
-            try {
-                await del(urlsToDelete);
-            } catch (error) {
-                console.error('[Cleanup] Failed to delete blobs:', error);
+            console.log(`[Cleanup] Deleting ${urlsToDelete.length} files...`);
+
+            const vercelUrls = urlsToDelete.filter(url => url.includes('vercel-storage.com'));
+            const customUrls = urlsToDelete.filter(url => url.includes('103.72.220.77'));
+
+            if (vercelUrls.length > 0) {
+                try {
+                    await del(vercelUrls);
+                } catch (error) {
+                    console.error('[Cleanup] Failed to delete Vercel blobs:', error);
+                }
+            }
+
+            if (customUrls.length > 0) {
+                for (const url of customUrls) {
+                    await deleteFromServer(url);
+                }
             }
         }
     }

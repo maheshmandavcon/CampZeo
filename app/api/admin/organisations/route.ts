@@ -189,6 +189,20 @@ async function createUpdateOrganisationHandler(req: Request) {
         });
     } else {
         // CREATE
+        const existingOrg = await prisma.organisation.findFirst({
+            where: {
+                email: { equals: email, mode: 'insensitive' },
+                isDeleted: false,
+            },
+        });
+
+        if (existingOrg) {
+            return NextResponse.json({
+                isSuccess: false,
+                message: `An organisation with the email "${email}" already exists (${existingOrg.name}). Only one active organisation can be associated with an email at a time. Please use a different email or suspend the existing organisation first.`,
+            }, { status: 409 });
+        }
+
         const trialStartDate = isFreeTrial ? new Date() : null;
         const trialEndDate = isFreeTrial ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) : null;
 
@@ -213,7 +227,7 @@ async function createUpdateOrganisationHandler(req: Request) {
                 isTrial: isFreeTrial,
                 trialStartDate,
                 trialEndDate,
-                isApproved: false, // Requires admin approval
+                isApproved: false,
                 ownerName,
                 organisationPlatforms: {
                     create: validPlatforms.map((p: string) => ({

@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Play, Sparkles, Mail, MessageSquare, Facebook, Instagram, Linkedin, Youtube, Twitter, Image as ImageIcon, Send, Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, ThumbsUp, Repeat2, Upload, X, Phone, Pin, MoreVertical } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { upload } from '@vercel/blob/client';
+import { uploadToServer } from '@/lib/upload-helper';
 
 const ALL_PLATFORMS = [
     { value: "EMAIL", label: "Email", icon: Mail },
@@ -93,14 +93,7 @@ export default function NewTemplatePage() {
             const uploadedUrls: string[] = [];
 
             for (const file of Array.from(files)) {
-                // Use client-side upload to avoid Vercel 4.5MB serverless limit
-                const newBlob = await upload(file.name, file, {
-                    access: 'public',
-                    handleUploadUrl: '/api/upload',
-                    onUploadProgress: (progress) => {
-                        setUploadProgress(progress.percentage);
-                    }
-                });
+                const newBlob = await uploadToServer(file);
 
                 if (newBlob.url) {
                     uploadedUrls.push(newBlob.url);
@@ -133,13 +126,7 @@ export default function NewTemplatePage() {
             const file = files[0];
 
             // Use client-side upload
-            const newBlob = await upload(file.name, file, {
-                access: 'public',
-                handleUploadUrl: '/api/upload',
-                onUploadProgress: (progress) => {
-                    setUploadProgress(progress.percentage);
-                }
-            });
+            const newBlob = await uploadToServer(file);
 
             if (newBlob.url) {
                 setFormData(prev => ({

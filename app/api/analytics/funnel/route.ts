@@ -5,7 +5,7 @@ import { withErrorHandling } from '@/lib/api-handler';
 
 async function getFunnelHandler(request: NextRequest) {
     const user = await currentUser();
-    if (!user) {
+    if (!user) { 
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

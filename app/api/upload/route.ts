@@ -25,7 +25,7 @@ export async function POST(request: Request): Promise<NextResponse> {
                 return {
                     // Allowed content types are commented out to allow ANY file type
                     // allowedContentTypes: [ ... ], 
-                    maximumSizeInBytes: 500 * 1024 * 1024, // 500MB
+                    maximumSizeInBytes: 2000 * 1024 * 1024,
                     tokenPayload: JSON.stringify({
                         userId: user.id,
                     }),

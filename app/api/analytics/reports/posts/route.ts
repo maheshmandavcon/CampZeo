@@ -24,7 +24,7 @@ async function getHandler(req: NextRequest) {
             }
             orgId = dbUser.organisationId;
         }
-
+ 
         const { searchParams } = new URL(req.url);
         const campaignId = searchParams.get('campaignId');
         const platform = searchParams.get('platform');

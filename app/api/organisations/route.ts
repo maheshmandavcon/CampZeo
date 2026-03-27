@@ -52,6 +52,41 @@ async function postHandler(req: Request) {
         let finalFirstName = user?.firstName || ownerName?.split(' ')[0] || '';
         let finalLastName = user?.lastName || ownerName?.split(' ').slice(1).join(' ') || '';
 
+        if (finalUserEmail) {
+            const trimmedEmail = finalUserEmail.trim();
+            
+            const existingOrg = await prisma.organisation.findFirst({
+                where: {
+                    email: { equals: trimmedEmail, mode: 'insensitive' },
+                    isDeleted: false,
+                },
+            });
+
+            if (existingOrg) {
+                return NextResponse.json(
+                    { error: "An organisation with this email already exists. Only one active organisation can be associated with an email at a time." },
+                    { status: 409 }
+                );
+            }
+
+            const existingUserWithOrg = await prisma.user.findFirst({
+                where: {
+                    email: { equals: trimmedEmail, mode: 'insensitive' },
+                    organisation: {
+                        isDeleted: false,
+                        isApproved: true,
+                    },
+                },
+            });
+
+            if (existingUserWithOrg) {
+                return NextResponse.json(
+                    { error: "An account with this email is already associated with an active organisation." },
+                    { status: 409 }
+                );
+            }
+        }
+
         if (plan !== 'FREE_TRIAL') {
             if (!paymentData) {
                 return NextResponse.json({ error: "Payment data is required for paid plans" }, { status: 400 });

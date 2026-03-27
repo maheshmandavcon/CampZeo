@@ -312,7 +312,7 @@ export default function ContactListPage() {
                                 variant="outline"
                                 className="cursor-pointer"
                                 onClick={() => handleExport(false)}
-                                disabled={exporting}
+                                disabled={exporting || contacts.length === 0}
                             >
                                 {exporting ? (
                                     <Loader2 className="size-4 mr-2 animate-spin" />

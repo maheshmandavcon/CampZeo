@@ -29,7 +29,7 @@ import Image from 'next/image';
 import { AIContentAssistant } from '@/components/ai-content-assistant';
 import { WYSIWYGPreview } from '../../_components/WYSIWYGPreview';
 import { useUser } from '@clerk/nextjs';
-import { upload } from '@vercel/blob/client';
+import { uploadToServer } from '@/lib/upload-helper';
 import { MetaBoostSection, MetaBoostOptions } from '../../_components/MetaBoostSection';
 import { isVideoUrl } from '@/lib/media-utils';
 
@@ -490,13 +490,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                 }
 
                 // Use client-side upload to avoid Vercel 4.5MB serverless limit
-                const newBlob = await upload(file.name, file, {
-                    access: 'public',
-                    handleUploadUrl: '/api/upload',
-                    onUploadProgress: (progress) => {
-                        setUploadProgress(progress.percentage);
-                    }
-                });
+                const newBlob = await uploadToServer(file);
 
                 newUrls.push(newBlob.url);
             }
@@ -549,13 +543,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
 
             const file = files[0];
 
-            const newBlob = await upload(file.name, file, {
-                access: 'public',
-                handleUploadUrl: '/api/upload',
-                onUploadProgress: (progress) => {
-                    setUploadProgress(progress.percentage);
-                }
-            });
+            const newBlob = await uploadToServer(file);
 
             setThumbnailUrl(newBlob.url);
             toast.success('Thumbnail uploaded successfully');

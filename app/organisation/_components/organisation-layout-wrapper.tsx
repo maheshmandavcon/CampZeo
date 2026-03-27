@@ -22,6 +22,7 @@ import { useState } from "react";
 import { SignedIn, UserButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { ExpiryBanner } from "@/components/ExpiryBanner";
 
 // Navigation items configuration
 const navItems = [
@@ -37,7 +38,6 @@ const navItems = [
   { href: "/organisation/billing", label: "Billing", icon: CurrencyIcon },
 ];
 
-// Sidebar Navigation Component
 const SidebarNav = ({ onItemClick }: { onItemClick?: () => void }) => {
   const pathname = usePathname();
 
@@ -68,11 +68,18 @@ const SidebarNav = ({ onItemClick }: { onItemClick?: () => void }) => {
 export function OrganisationLayoutWrapper({
   children,
   isImpersonating,
-  hasSocialTokens
+  hasSocialTokens,
+  expiryData
 }: {
   children: React.ReactNode;
   isImpersonating?: boolean;
   hasSocialTokens?: boolean;
+  expiryData?: {
+    daysRemaining: number;
+    planName: string;
+    expiryDate: string;
+    type: 'trial' | 'subscription';
+  } | null | undefined;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const router = useRouter();
@@ -155,7 +162,16 @@ export function OrganisationLayoutWrapper({
 
 
     <div className="h-screen flex flex-col overflow-hidden bg-muted/30">
-      {/* Impersonation Banner - Always at very top */}
+   
+      {expiryData && (
+        <ExpiryBanner
+          daysRemaining={expiryData.daysRemaining}
+          planName={expiryData.planName}
+          expiryDate={expiryData.expiryDate}
+          type={expiryData.type}
+        />
+      )}
+
       {isImpersonating && (
         <div className="flex-shrink-0 bg-amber-100 text-amber-900 px-4 py-1.5 text-xs font-medium text-center border-b border-amber-200 flex items-center justify-center gap-2">
           <span>You are impersonating an organisation.</span>
