@@ -337,7 +337,7 @@ export default function BillingPlansPage() {
                                         <SelectContent>
                                             {availableMigrationPlans.map((plan) => (
                                                 <SelectItem key={plan.id} value={plan.id.toString()}>
-                                                    {plan.name} - ₹{plan.price}/{plan.billingCycle}
+                                                    {plan.name === "FREE_TRIAL" ? "FREE TRIAL" : plan.name} - ₹{plan.price}/{plan.billingCycle}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>

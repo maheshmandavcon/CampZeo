@@ -235,7 +235,7 @@ export function LandingPage({ onLogin, onNavigate }: LandingPageProps) {
                   </div>
                 )}
                 <CardHeader>
-                  <CardTitle>{plan.name}</CardTitle>
+                  <CardTitle>{plan.name === "FREE_TRIAL" ? "FREE TRIAL" : plan.name}</CardTitle>
                   <CardDescription>{plan.description}</CardDescription>
                   <div className="mt-4">
                     <span className="text-4xl">

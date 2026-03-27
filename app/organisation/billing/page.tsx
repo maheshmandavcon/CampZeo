@@ -358,7 +358,7 @@ export default function BillingPage() {
                     </div>
                   )}
                   <CardHeader>
-                    <CardTitle>{plan.name}</CardTitle>
+                    <CardTitle>{plan.name === "FREE_TRIAL" ? "FREE TRIAL" : plan.name}</CardTitle>
                     <div className="mt-4">
                       <span className="text-4xl font-bold">
                         {formatPrice(plan.price, "INR")}

@@ -2089,7 +2089,7 @@ export default function AdminDashboard() {
                           })
                           .map((plan: any) => (
                             <TableRow key={plan.id}>
-                              <TableCell className="font-medium">{plan.name}</TableCell>
+                              <TableCell className="font-medium">{plan.name === "FREE_TRIAL" ? "FREE TRIAL" : plan.name}</TableCell>
                               <TableCell className="max-w-xs truncate">
                                 {plan.description || "-"}
                               </TableCell>
@@ -2461,7 +2461,7 @@ export default function AdminDashboard() {
                               .filter(p => p.id !== deletingPlan?.id && p.isActive)
                               .map((plan: any) => (
                                 <SelectItem key={plan.id} value={plan.id.toString()}>
-                                  {plan.name} - ₹{Number(plan.price).toLocaleString()}/{plan.billingCycle}
+                                  {plan.name === "FREE_TRIAL" ? "FREE TRIAL" : plan.name} - ₹{Number(plan.price).toLocaleString()}/{plan.billingCycle}
                                 </SelectItem>
                               ))}
                           </SelectContent>

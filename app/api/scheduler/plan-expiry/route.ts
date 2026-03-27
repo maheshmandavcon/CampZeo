@@ -5,30 +5,48 @@ import { logInfo, logError } from "@/lib/audit-logger";
 
 export async function GET(req: Request) {
     const authHeader = req.headers.get("Authorization");
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}` && process.env.NODE_ENV === "production") {
+    if (
+        authHeader !== `Bearer ${process.env.CRON_SECRET}` &&
+        process.env.NODE_ENV === "production"
+    ) {
         return new Response("Unauthorized", { status: 401 });
     }
 
     const now = new Date();
+    const fourDaysFromNow = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000);
+    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+
     let notificationsSent = 0;
 
     try {
+
         const expiringTrials = await prisma.organisation.findMany({
             where: {
                 isTrial: true,
+                isDeleted: false,
+                isApproved: true,
                 trialEndDate: {
                     not: null,
-                    gte: now, 
+                    gte: now,
+                    lte: fourDaysFromNow,
+                },
+
+                subscriptions: {
+                    none: {
+                        status: "ACTIVE",
+                    },
                 },
             },
             include: {
                 users: {
-                    where: { role: 'ORGANISATION_USER' },
-                    take: 1,
+                    where: { role: "ORGANISATION_USER" },
                 },
                 notifications: {
-                    where: { type: 'PLAN_EXPIRY' },
-                    orderBy: { createdAt: 'desc' },
+                    where: {
+                        type: "PLAN_EXPIRY",
+                        createdAt: { gte: threeDaysAgo },
+                    },
+                    orderBy: { createdAt: "desc" },
                 },
             },
         });
@@ -49,7 +67,9 @@ export async function GET(req: Request) {
             if (milestone === null) continue;
 
             const alreadySent = org.notifications.some(
-                (n) => n.message.includes(`${milestone}-day`) && n.type === 'PLAN_EXPIRY'
+                (n) =>
+                    n.message.includes(`${milestone}-day`) &&
+                    n.type === "PLAN_EXPIRY"
             );
 
             if (alreadySent) continue;
@@ -59,16 +79,16 @@ export async function GET(req: Request) {
                 await sendPlanExpiryEmail({
                     email: user.email,
                     orgName: org.name,
-                    planName: "Free Trial",
+                    planName: "FREE_TRIAL",
                     expiryDate: org.trialEndDate,
-                    daysRemaining: daysRemaining,
+                    daysRemaining,
                 });
                 notificationsSent++;
 
                 await prisma.notification.create({
                     data: {
-                        message: `${milestone}-day trial expiry reminder sent to ${org.name} (${daysRemaining} days left)`,
-                        type: 'PLAN_EXPIRY',
+                        message: `${milestone}-day trial expiry reminder to ${org.name} (${daysRemaining} days left). Please upgrade your plan to continue using our services.`,
+                        type: "PLAN_EXPIRY",
                         organisationId: org.id,
                         isSuccess: true,
                     },
@@ -78,22 +98,30 @@ export async function GET(req: Request) {
 
         const expiringSubscriptions = await prisma.subscription.findMany({
             where: {
-                status: 'ACTIVE',
+                status: "ACTIVE",
                 endDate: {
                     not: null,
                     gte: now,
+                    lte: fourDaysFromNow,
+                },
+                organisation: {
+                    isDeleted: false,
+                    isApproved: true,
+                    isTrial: false,
                 },
             },
             include: {
                 organisation: {
                     include: {
                         users: {
-                            where: { role: 'ORGANISATION_USER' },
-                            take: 1,
+                            where: { role: "ORGANISATION_USER" },
                         },
                         notifications: {
-                            where: { type: 'PLAN_EXPIRY' },
-                            orderBy: { createdAt: 'desc' },
+                            where: {
+                                type: "PLAN_EXPIRY",
+                                createdAt: { gte: threeDaysAgo },
+                            },
+                            orderBy: { createdAt: "desc" },
                         },
                     },
                 },
@@ -117,7 +145,9 @@ export async function GET(req: Request) {
             if (milestone === null) continue;
 
             const alreadySent = sub.organisation.notifications.some(
-                (n) => n.message.includes(`${milestone}-day`) && n.type === 'PLAN_EXPIRY'
+                (n) =>
+                    n.message.includes(`${milestone}-day`) &&
+                    n.type === "PLAN_EXPIRY"
             );
 
             if (alreadySent) continue;
@@ -129,15 +159,15 @@ export async function GET(req: Request) {
                     orgName: sub.organisation.name,
                     planName: sub.plan?.name || "Paid Plan",
                     expiryDate: sub.endDate,
-                    daysRemaining: daysRemaining,
+                    daysRemaining,
                     autoRenew: sub.autoRenew,
                 });
                 notificationsSent++;
 
                 await prisma.notification.create({
                     data: {
-                        message: `${milestone}-day plan expiry reminder sent to ${sub.organisation.name} (${daysRemaining} days left)`,
-                        type: 'PLAN_EXPIRY',
+                        message: `${milestone}-day plan expiry reminder to ${sub.organisation.name} (${daysRemaining} days left). Please upgrade your plan to continue using our services.`,
+                        type: "PLAN_EXPIRY",
                         organisationId: sub.organisationId,
                         isSuccess: true,
                     },
@@ -145,23 +175,28 @@ export async function GET(req: Request) {
             }
         }
 
-        await logInfo(`Plan expiry scheduler completed. Notifications sent: ${notificationsSent}`, {
-            action: "plan_expiry_scheduler",
-            notificationsSent,
-        });
+        await logInfo(
+            `Plan expiry scheduler completed. Notifications sent: ${notificationsSent}`,
+            {
+                action: "plan_expiry_scheduler",
+                notificationsSent,
+            }
+        );
 
         return NextResponse.json({
             success: true,
             notificationsSent,
             message: `Processed plan expiries. Sent ${notificationsSent} notifications.`,
         });
-
     } catch (error: any) {
         console.error("Error in plan expiry scheduler:", error);
         await logError("Plan expiry scheduler failed", {
             action: "plan_expiry_scheduler",
             error: error.message,
         });
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        return NextResponse.json(
+            { success: false, error: error.message },
+            { status: 500 }
+        );
     }
 }

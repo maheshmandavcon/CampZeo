@@ -154,7 +154,7 @@ export function PaymentModal({ plan, onClose, onSuccess }: PaymentModalProps) {
           <div className="bg-muted p-4 rounded-lg space-y-2">
             <div className="flex justify-between">
               <span>Plan</span>
-              <span>{plan.name}</span>
+              <span>{plan.name === "FREE_TRIAL" ? "FREE TRIAL" : plan.name}</span>
             </div>
             <div className="flex justify-between">
               <span>Amount</span>

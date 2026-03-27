@@ -57,7 +57,7 @@ export default function PricingPage() {
                                             </div>
                                         )}
                                         <CardHeader>
-                                            <CardTitle className="text-2xl">{plan.name}</CardTitle>
+                                            <CardTitle className="text-2xl">{plan.name === "FREE_TRIAL" ? "FREE TRIAL" : plan.name}</CardTitle>
                                             <CardDescription>{plan.description || (isTrial ? "Try all features for free" : "Perfect for your needs")}</CardDescription>
                                             <div className="mt-4">
                                                 <span className="text-4xl font-bold">{plan.price === 0 ? "Free" : formatPrice(plan.price, "INR")}</span>
