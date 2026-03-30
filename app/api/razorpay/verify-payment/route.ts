@@ -121,7 +121,7 @@ async function postHandler(req: Request) {
                     // Update organisation isTrial flag
                     await prisma.organisation.update({
                         where: { id: dbUser.organisationId! },
-                        data: { isTrial: false }
+                        data: { isTrial: false,trialEndDate: null }
                     });
                 } else {
                     // Immediate: Reset dates to today
@@ -141,7 +141,7 @@ async function postHandler(req: Request) {
                     // Update organisation isTrial flag
                     await prisma.organisation.update({
                         where: { id: dbUser.organisationId! },
-                        data: { isTrial: false }
+                        data: { isTrial: false,trialEndDate: null }
                     });
                 }
             } else {
@@ -161,7 +161,7 @@ async function postHandler(req: Request) {
                 // Set organisation.isTrial to false when a paid subscription is created
                 await prisma.organisation.update({
                     where: { id: dbUser.organisationId! },
-                    data: { isTrial: false }
+                    data: { isTrial: false,trialEndDate: null }
                 });
             }
 

@@ -128,7 +128,7 @@ export default function SelectPlanPage() {
                                     className="w-full"
                                 >
                                     <TrendingUp className="size-4 mr-2" />
-                                    Upgrade to {plan.name}
+                                    Upgrade to {plan.name === "FREE_TRIAL" ? "FREE TRIAL" : plan.name}
                                 </RazorpayButton>
                             </CardContent>
                         </Card>

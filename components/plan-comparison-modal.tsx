@@ -179,7 +179,7 @@ export function PlanComparisonModal({
                                             <th className="py-4 px-6 text-xs font-bold uppercase tracking-widest text-muted-foreground/60 bg-muted/30 first:rounded-l-2xl">Features</th>
                                             {plans.map((plan, i) => (
                                                 <th key={plan.id} className={`py-4 px-6 text-center text-xs font-bold uppercase tracking-widest text-muted-foreground/60 bg-muted/30 ${i === plans.length - 1 ? "rounded-r-2xl" : ""}`}>
-                                                    {plan.name}
+                                                    {plan.name === "FREE_TRIAL" ? "FREE TRIAL" : plan.name}
                                                 </th>
                                             ))}
                                         </tr>
