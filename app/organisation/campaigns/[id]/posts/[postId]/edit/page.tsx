@@ -480,13 +480,18 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
             setUploadProgress(0); // Reset progress
 
             const newUrls: string[] = [];
-            let hasVideo = false;
+            let currentVideos = mediaUrls.filter(url => isVideoUrl(url)).length;
+            let newlyAddedVideos = 0;
 
             for (const file of files) {
+                const isVideo = file.type.startsWith('video/');
 
-                // Check if video
-                if (file.type.startsWith('video/')) {
-                    hasVideo = true;
+                if (type === 'LINKEDIN' && isVideo) {
+                    if (currentVideos + newlyAddedVideos >= 1) {
+                        toast.error('LinkedIn only allows one video per post. Subsequent videos were skipped.');
+                        continue;
+                    }
+                    newlyAddedVideos++;
                 }
 
                 // Use client-side upload to avoid Vercel 4.5MB serverless limit
@@ -591,6 +596,13 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
         if (!type) {
             toast.error('Please select a platform');
             return;
+        }
+        if (type === 'LINKEDIN') {
+            const videoCount = mediaUrls.filter(url => isVideoUrl(url)).length;
+            if (videoCount > 1) {
+                toast.error('LinkedIn only allows one video per post. Please remove extra videos.');
+                return;
+            }
         }
 
         if (!message && !subject) {

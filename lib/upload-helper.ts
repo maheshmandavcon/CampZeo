@@ -1,5 +1,5 @@
 export async function uploadToServer(file: File): Promise<{ url: string }> {
-  const serverUrl = process.env.NEXT_PUBLIC_UPLOAD_SERVER_URL || 'http://103.72.220.77:5000';
+  const serverUrl = process.env.NEXT_PUBLIC_UPLOAD_SERVER_URL || '';
   const formData = new FormData();
   formData.append('files', file);
 
@@ -26,7 +26,7 @@ export async function uploadToServer(file: File): Promise<{ url: string }> {
 
 
 export async function deleteFromServer(publicUrl: string): Promise<boolean> {
-  const serverUrl = process.env.NEXT_PUBLIC_UPLOAD_SERVER_URL || 'http://103.72.220.77:5000';
+  const serverUrl = process.env.NEXT_PUBLIC_UPLOAD_SERVER_URL || '';
   try {
     const filename = publicUrl.split('/').pop();
     if (!filename) return false;

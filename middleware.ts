@@ -7,11 +7,13 @@ const isProtectedRoute = createRouteMatcher([
     "/profile(.*)",
     "/organisation(.*)",
     "/admin(.*)",
+    "/contacts(.*)",
 ]);
 
 // Define organization routes that need special handling for impersonation
 const isOrganisationRoute = createRouteMatcher([
     "/organisation(.*)",
+    "/contacts(.*)",
 ]);
 
 // Define API routes that can use X-API-Key authentication (for mobile apps)
@@ -98,7 +100,7 @@ export default clerkMiddleware(async (auth, req) => {
             // Check for admin impersonation cookie
             const adminImpersonation = request.cookies.get('admin_impersonation');
 
-            if (adminImpersonation?.value === 'true') {
+            if (adminImpersonation?.value) {
                 // Admin is impersonating - allow access to organization routes
                 // The cookie will be cleared when the admin signs out or after expiry
                 console.log('Admin impersonation detected - allowing organization access');

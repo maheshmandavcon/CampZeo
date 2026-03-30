@@ -2,6 +2,7 @@ import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logError, logWarning, logInfo } from '@/lib/audit-logger';
+import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
 
 import { withErrorHandling } from '@/lib/api-handler';
 // GET: List all templates for the organization
@@ -14,10 +15,19 @@ async function getHandler(req: Request) {
 
         const dbUser = await prisma.user.findUnique({
             where: { clerkId: user.id },
-            include: { organisation: true }
+            select: { organisationId: true, role: true }
         });
 
-        if (!dbUser?.organisationId) {
+        let effectiveOrganisationId = dbUser?.organisationId;
+
+        if (dbUser?.role === 'ADMIN_USER') {
+            const impersonatedId = await getImpersonatedOrganisationId();
+            if (impersonatedId) {
+                effectiveOrganisationId = impersonatedId;
+            }
+        }
+
+        if (!effectiveOrganisationId) {
             return NextResponse.json({ error: "No organization found" }, { status: 404 });
         }
 
@@ -28,7 +38,7 @@ async function getHandler(req: Request) {
         const isActive = searchParams.get("isActive");
 
         const whereClause: any = {
-            organisationId: dbUser.organisationId
+            organisationId: effectiveOrganisationId
         };
 
         if (platform) {
@@ -79,7 +89,17 @@ async function postHandler(req: Request) {
             where: { clerkId: user.id }
         });
 
-        if (!dbUser?.organisationId) {
+        let effectiveOrganisationId = dbUser?.organisationId;
+
+        // Check for admin impersonation
+        if (dbUser?.role === 'ADMIN_USER') {
+            const impersonatedId = await getImpersonatedOrganisationId();
+            if (impersonatedId) {
+                effectiveOrganisationId = impersonatedId;
+            }
+        }
+
+        if (!effectiveOrganisationId) {
             return NextResponse.json({ error: "No organization found" }, { status: 404 });
         }
 
@@ -124,7 +144,7 @@ async function postHandler(req: Request) {
             category: formattedCategory,
             metadata,
             mediaUrls,
-            organisationId: dbUser.organisationId,
+            organisationId: dbUser?.organisationId,
             createdBy: user.id
         });
 
@@ -140,7 +160,7 @@ async function postHandler(req: Request) {
                 metadata: metadata || {},
                 mediaUrls: mediaUrls || [],
                 isActive: isActive !== undefined ? isActive : true,
-                organisationId: dbUser.organisationId,
+                organisationId: effectiveOrganisationId,
                 createdBy: user.id
             }
         });

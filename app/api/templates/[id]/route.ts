@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logInfo } from '@/lib/audit-logger';
 import { withErrorHandling } from '@/lib/api-handler';
+import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';  
 
 // GET: Get a single template
 async function getHandler(
@@ -22,17 +23,27 @@ async function getHandler(
     }
 
     const dbUser = await prisma.user.findUnique({
-        where: { clerkId: user.id }
+        where: { clerkId: user.id },
+        select: { organisationId: true, role: true }
     });
 
-    if (!dbUser?.organisationId) {
+    let effectiveOrganisationId = dbUser?.organisationId;
+
+    if (dbUser?.role === 'ADMIN_USER') {
+        const impersonatedId = await getImpersonatedOrganisationId();
+        if (impersonatedId) {
+            effectiveOrganisationId = impersonatedId;
+        }
+    }
+
+    if (!effectiveOrganisationId) {
         return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
     }
 
     const template = await prisma.messageTemplate.findFirst({
         where: {
             id: templateId,
-            organisationId: dbUser.organisationId
+            organisationId: effectiveOrganisationId
         }
     });
 
@@ -64,10 +75,20 @@ async function putHandler(
     }
 
     const dbUser = await prisma.user.findUnique({
-        where: { clerkId: user.id }
+        where: { clerkId: user.id },
+        select: { organisationId: true, role: true }
     });
 
-    if (!dbUser?.organisationId) {
+    let effectiveOrganisationId = dbUser?.organisationId;
+
+    if (dbUser?.role === 'ADMIN_USER') {
+        const impersonatedId = await getImpersonatedOrganisationId();
+        if (impersonatedId) {
+            effectiveOrganisationId = impersonatedId;
+        }
+    }
+
+    if (!effectiveOrganisationId) {
         return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
     }
 
@@ -75,7 +96,7 @@ async function putHandler(
     const existingTemplate = await prisma.messageTemplate.findFirst({
         where: {
             id: templateId,
-            organisationId: dbUser.organisationId
+            organisationId: effectiveOrganisationId
         }
     });
 
@@ -137,10 +158,20 @@ async function deleteHandler(
     }
 
     const dbUser = await prisma.user.findUnique({
-        where: { clerkId: user.id }
+        where: { clerkId: user.id },
+        select: { organisationId: true, role: true }
     });
 
-    if (!dbUser?.organisationId) {
+    let effectiveOrganisationId = dbUser?.organisationId;
+
+    if (dbUser?.role === 'ADMIN_USER') {
+        const impersonatedId = await getImpersonatedOrganisationId();
+        if (impersonatedId) {
+            effectiveOrganisationId = impersonatedId;
+        }
+    }
+
+    if (!effectiveOrganisationId) {
         return NextResponse.json({ error: "Organisation not found" }, { status: 404 });
     }
 
@@ -148,7 +179,7 @@ async function deleteHandler(
     const existingTemplate = await prisma.messageTemplate.findFirst({
         where: {
             id: templateId,
-            organisationId: dbUser.organisationId
+            organisationId: effectiveOrganisationId
         }
     });
 

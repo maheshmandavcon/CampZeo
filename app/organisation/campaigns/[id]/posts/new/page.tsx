@@ -481,13 +481,18 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             setUploadProgress(0); // Reset progress
 
             const newUrls: string[] = [];
-            let hasVideo = false;
+            let currentVideos = mediaUrls.filter(url => isVideoUrl(url)).length;
+            let newlyAddedVideos = 0;
 
             for (const file of files) {
-
-                // Check if video
-                if (file.type.startsWith('video/')) {
-                    hasVideo = true;
+                const isVideo = file.type.startsWith('video/');
+                
+                if (selectedPlatform === 'LINKEDIN' && isVideo) {
+                    if (currentVideos + newlyAddedVideos >= 1) {
+                        toast.error('LinkedIn only allows one video per post. Subsequent videos were skipped.');
+                        continue; 
+                    }
+                    newlyAddedVideos++;
                 }
 
                 // Use client-side upload
@@ -792,6 +797,14 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         if (!selectedPlatform) {
             toast.error('Please select a platform');
             return;
+        }
+
+        if (selectedPlatform === 'LINKEDIN') {
+            const videoCount = mediaUrls.filter(url => isVideoUrl(url)).length;
+            if (videoCount > 1) {
+                toast.error('LinkedIn only allows one video per post. Please remove extra videos.');
+                return;
+            }
         }
 
         // SMS validation
