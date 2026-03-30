@@ -46,7 +46,7 @@ export const PLANS: Record<PlanType, Plan> = {
     ENTERPRISE: {
         id: "ENTERPRISE",
         name: "Enterprise",
-        price: 9999,
+        price: 0,
         currency: "INR",
         interval: "month",
         features: [

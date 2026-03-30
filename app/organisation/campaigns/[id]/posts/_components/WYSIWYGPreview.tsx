@@ -138,16 +138,16 @@ export function WYSIWYGPreview({
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); prevSlide(); }}
-                                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/20 p-1.5 text-white backdrop-blur-md transition-all hover:bg-white/40 opacity-15 group-hover:opacity-100 shadow-sm"
+                                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full border bg-white p-1.5 text-white backdrop-blur-md transition-all hover:bg-white/40   shadow-sm"
                             >
-                                <ChevronLeft className="size-4" />
+                                <ChevronLeft className="size-4 text-black " />
                             </button>
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); nextSlide(); }}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/20 p-1.5 text-white backdrop-blur-md transition-all hover:bg-white/40 opacity-15 group-hover:opacity-100 shadow-sm"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border bg-white p-1.5 text-white backdrop-blur-md transition-all hover:bg-white/40   shadow-sm"
                             >
-                                <ChevronRight className="size-4" />
+                                <ChevronRight className="size-4  text-black " />
                             </button>
 
                             {/* Pagination Dots */}

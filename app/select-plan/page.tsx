@@ -85,14 +85,14 @@ export default function SelectPlanPage() {
                 </p>
             </div>
 
-            <div className="grid gap-8 md:grid-cols-3">
+            <div className="grid gap-8 md:grid-cols-2">
                 {paidPlans.map((plan) => {
                     const isPopular = plan.price > 0 && plan.price < 5000;
 
                     return (
                         <Card
                             key={plan.id}
-                            className={`relative flex flex-col ${isPopular ? "border-primary shadow-lg scale-105 z-10" : ""}`}
+                            className={`relative flex flex-col ${isPopular ? "border-primary shadow-lg  p-5  z-10" : ""}`}
                         >
                             {isPopular && (
                                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -103,7 +103,7 @@ export default function SelectPlanPage() {
                                 <CardTitle className="text-2xl">{plan.name}</CardTitle>
                                 <div className="mt-4">
                                     <span className="text-4xl font-bold">
-                                        {formatPrice(plan.price, "INR")}
+                                        {formatPrice(plan.price, "INR")}                              
                                     </span>
                                     <span className="text-muted-foreground">/{plan.billingCycle || 'month'}</span>
                                 </div>
