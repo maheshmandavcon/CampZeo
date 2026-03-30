@@ -359,7 +359,7 @@ export async function sendPaymentReceipt(params: PaymentReceiptParams): Promise<
     const formattedAmount = new Intl.NumberFormat('en-IN', {
         style: 'currency',
         currency: currency
-    }).format(amount / 100); // Amount is in smallest currency unit
+    }).format(amount); // Amount is in smallest currency unit
 
     const formattedDate = new Date(date).toLocaleDateString();
 
