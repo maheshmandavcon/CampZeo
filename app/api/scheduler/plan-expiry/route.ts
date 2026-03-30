@@ -33,23 +33,25 @@ export async function GET(req: Request) {
 
                 subscriptions: {
                     none: {
-                        status: "ACTIVE",
+                        status: {
+                            in: ["ACTIVE", "active", "COMPLETED"],
+                        },
                     },
                 },
             },
             include: {
-                users: {
-                    where: { role: "ORGANISATION_USER" },
-                },
+                users: true, // Fetch all users to find a fallback if no ORGANISATION_USER exists
                 notifications: {
                     where: {
                         type: "PLAN_EXPIRY",
-                        createdAt: { gte: threeDaysAgo },
+                        createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) }, // Use 24h window for deduplication
                     },
                     orderBy: { createdAt: "desc" },
                 },
             },
         });
+
+        console.log(`[PlanExpiry] Found ${expiringTrials.length} expiring trials`);
 
         for (const org of expiringTrials) {
             if (!org.trialEndDate) continue;
@@ -72,10 +74,16 @@ export async function GET(req: Request) {
                     n.type === "PLAN_EXPIRY"
             );
 
-            if (alreadySent) continue;
+            if (alreadySent) {
+                console.log(`[PlanExpiry] Notification already sent for trial org ${org.name} milestone ${milestone}-day`);
+                continue;
+            }
 
-            const user = org.users[0];
+            const organisationUser = org.users.find(u => u.role === "ORGANISATION_USER");
+            const user = organisationUser || org.users[0];
+
             if (user?.email) {
+                console.log(`[PlanExpiry] Sending ${milestone}-day trial expiry mail to ${user.email} (Org: ${org.name}, Role: ${user.role})`);
                 await sendPlanExpiryEmail({
                     email: user.email,
                     orgName: org.name,
@@ -98,7 +106,9 @@ export async function GET(req: Request) {
 
         const expiringSubscriptions = await prisma.subscription.findMany({
             where: {
-                status: "ACTIVE",
+                status: {
+                    in: ["ACTIVE", "active", "COMPLETED"],
+                },
                 endDate: {
                     not: null,
                     gte: now,
@@ -113,13 +123,11 @@ export async function GET(req: Request) {
             include: {
                 organisation: {
                     include: {
-                        users: {
-                            where: { role: "ORGANISATION_USER" },
-                        },
+                        users: true, 
                         notifications: {
                             where: {
                                 type: "PLAN_EXPIRY",
-                                createdAt: { gte: threeDaysAgo },
+                                createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) }, 
                             },
                             orderBy: { createdAt: "desc" },
                         },
@@ -128,6 +136,8 @@ export async function GET(req: Request) {
                 plan: true,
             },
         });
+
+        console.log(`[PlanExpiry] Found ${expiringSubscriptions.length} expiring subscriptions`);
 
         for (const sub of expiringSubscriptions) {
             if (!sub.endDate) continue;
@@ -150,10 +160,17 @@ export async function GET(req: Request) {
                     n.type === "PLAN_EXPIRY"
             );
 
-            if (alreadySent) continue;
+            if (alreadySent) {
+                console.log(`[PlanExpiry] Notification already sent for subscription org ${sub.organisation.name} milestone ${milestone}-day`);
+                continue;
+            }
 
-            const user = sub.organisation.users[0];
+            // Fallback: Pick any user if no ORGANISATION_USER exists
+            const organisationUser = sub.organisation.users.find(u => u.role === "ORGANISATION_USER");
+            const user = organisationUser || sub.organisation.users[0];
+
             if (user?.email) {
+                console.log(`[PlanExpiry] Sending ${milestone}-day subscription expiry mail to ${user.email} (Org: ${sub.organisation.name}, Role: ${user.role})`);
                 await sendPlanExpiryEmail({
                     email: user.email,
                     orgName: sub.organisation.name,
