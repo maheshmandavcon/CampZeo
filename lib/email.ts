@@ -696,3 +696,82 @@ export async function sendPlanExpiryEmail(params: PlanExpiryEmailParams): Promis
 
     return true;
 }
+
+export interface TwilioAccessStatusParams {
+    email: string;
+    organisationName: string;
+    status: 'APPROVED' | 'REJECTED';
+    reason?: string;
+    ownerName?: string;
+}
+
+/**
+ * Send Twilio access request status notification email
+ * @param params - Email parameters
+ */
+export async function sendTwilioAccessStatusEmail(params: TwilioAccessStatusParams): Promise<boolean> {
+    const { email, organisationName, status, reason, ownerName } = params;
+    const { apiKey, domain, fromEmail } = await getEmailConfig();
+
+    const isApproved = status === 'APPROVED';
+    const subject = `Twilio Access Request ${isApproved ? 'Approved' : 'Rejected'} - ${organisationName}`;
+    
+    const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+            <div style="background-color: ${isApproved ? '#f0fdf4' : '#fef2f2'}; padding: 20px; border-radius: 8px; border-left: 4px solid ${isApproved ? '#22c55e' : '#ef4444'};">
+                <h2 style="margin-top: 0; color: ${isApproved ? '#166534' : '#991b1b'};">Twilio Access Request ${isApproved ? 'Approved' : 'Rejected'}</h2>
+                <p>Dear ${ownerName || 'User'},</p>
+                <p>Your request for Twilio access for the organisation <strong>${organisationName}</strong> has been <strong>${status.toLowerCase()}</strong> by the administrator.</p>
+                
+                ${reason ? `
+                <div style="background-color: rgba(0,0,0,0.05); padding: 15px; border-radius: 4px; margin: 15px 0;">
+                    <p style="margin: 0; font-weight: bold;">Note from administrator:</p>
+                    <p style="margin: 5px 0 0 0;">${reason}</p>
+                </div>
+                ` : ''}
+
+                <p>
+                    <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/organisation/settings" 
+                       style="background-color: ${isApproved ? '#22c55e' : '#ef4444'}; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                       View Settings
+                    </a>
+                </p>
+            </div>
+            <p style="font-size: 12px; color: #666; margin-top: 20px; text-align: center;">
+                &copy; ${new Date().getFullYear()} CampZeo. All rights reserved.
+            </p>
+        </div>
+    `;
+
+    if (apiKey && domain && fromEmail) {
+        const mailgun = new Mailgun(FormData);
+        const mg = mailgun.client({ username: 'api', key: apiKey });
+
+        const msg: any = {
+            from: fromEmail,
+            to: [email],
+            subject: subject,
+            html: html,
+        };
+
+        try {
+            await mg.messages.create(domain, msg);
+            console.log(`✅ Twilio access status email sent to ${email} (${status})`);
+            return true;
+        } catch (error: any) {
+            console.error('Error sending Twilio access status email via Mailgun:', error);
+            return false;
+        }
+    }
+
+    // Mock implementation
+    console.log('='.repeat(60));
+    console.log(`📧 MOCK EMAIL: Twilio Access Request ${status}`);
+    console.log('='.repeat(60));
+    console.log(`To: ${email}`);
+    console.log(`Subject: ${subject}`);
+    if (reason) console.log(`Reason: ${reason}`);
+    console.log('='.repeat(60));
+
+    return true;
+}

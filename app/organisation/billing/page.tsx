@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 import { PLANS, formatPrice, type PlanType } from "@/lib/plans";
@@ -18,6 +19,9 @@ import { usePlans } from "@/hooks/use-plans";
 import { PlanChangeDialog } from "@/components/plan-change-dialog";
 import { PlanComparisonModal } from "@/components/plan-comparison-modal";
 import { CancelSubscriptionDialog } from "@/components/cancel-subscription-dialog";
+import { WalletCard } from "@/components/wallet/WalletCard";
+import { CreditPackagePicker } from "@/components/wallet/CreditPackagePicker";
+import { TwilioAccessRequestSection } from "@/components/wallet/TwilioAccessRequestSection";
 import { useRef } from "react";
 
 interface OrganisationData {
@@ -99,6 +103,8 @@ export default function BillingPage() {
   const [selectedPlanForChange, setSelectedPlanForChange] = useState<any | null>(null);
   const [activationTiming, setActivationTiming] = useState<"IMMEDIATE" | "DEFERRED">("IMMEDIATE");
   const [isUpdatingAutoRenew, setIsUpdatingAutoRenew] = useState(false);
+  const [walletData, setWalletData] = useState<any>(null);
+  const [creditPackages, setCreditPackages] = useState<any[]>([]);
   const razorpayButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -108,12 +114,14 @@ export default function BillingPage() {
   const fetchBillingData = async () => {
     try {
       // Fetch data in parallel
-      const [userResponse, paymentsResponse, subscriptionResponse, usageResponse] =
+      const [userResponse, paymentsResponse, subscriptionResponse, usageResponse, walletResponse, packagesResponse] =
         await Promise.all([
           fetch("/api/user/me"),
           fetch("/api/payments"),
           fetch("/api/subscription/current"),
           fetch("/api/subscription/usage"),
+          fetch("/api/wallet/balance"),
+          fetch("/api/payments/credit-packages"),
         ]);
 
       if (userResponse.ok) {
@@ -134,6 +142,16 @@ export default function BillingPage() {
       if (usageResponse.ok) {
         const usageMetrics = await usageResponse.json();
         setUsageData(usageMetrics);
+      }
+
+      if (walletResponse.ok) {
+        const wallet = await walletResponse.json();
+        setWalletData(wallet);
+      }
+
+      if (packagesResponse.ok) {
+        const pkgs = await packagesResponse.json();
+        setCreditPackages(pkgs.packages || []);
       }
     } catch (error) {
       console.error("Error fetching billing data:", error);
@@ -263,7 +281,6 @@ export default function BillingPage() {
 
         {/* Usage Metrics */}
         {usageData && <UsageMetricsCard usage={usageData.usage} />}
-
         {/* Current Plan Card */}
         {subscription && currentPlan && (
           <Card className="border-primary/20">
@@ -337,119 +354,163 @@ export default function BillingPage() {
           </Card>
         )}
 
-        {/* Available Plans */}
-        <div>
-          <h2 className="text-2xl font-bold mb-4">Available Plans</h2>
-          <div className="grid gap-6 md:grid-cols-3">
-            {plans.map((plan) => {
-              const isCurrentPlan = currentPlan?.id === plan.id || currentPlan?.name === plan.name;
-              const canUpgrade = currentPlan && !isCurrentPlan && plan.price > Number(currentPlan.price);
-              const isPopular = plan.price > 0 && plan.price < 5000;
+        {/* Twilio Access & Wallet */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-1">
+            <TwilioAccessRequestSection
+              status={walletData?.twilioAccess?.twilioAccessStatus || "NONE"}
+              reason={walletData?.twilioAccess?.twilioAccessReason}
+              onSuccess={fetchBillingData}
+            />
+          </div>
 
-              return (
-                <Card
-                  key={plan.id}
-                  id={`plan-${plan.id}`}
-                  className={`relative ${isPopular ? "border-primary shadow-lg" : ""}`}
-                >
-                  {isPopular && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <Badge className="bg-primary">Most Popular</Badge>
-                    </div>
-                  )}
-                  <CardHeader>
-                    <CardTitle>{plan.name === "FREE_TRIAL" ? "FREE TRIAL" : plan.name}</CardTitle>
-                    <div className="mt-4">
-                      <span className="text-4xl font-bold">
-                        {formatPrice(plan.price, "INR")}
-                      </span>
-                      <span className="text-muted-foreground">/{plan.billingCycle || 'month'}</span>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <ul className="space-y-2">
-                      {plan.features.map((feature, index) => (
-                        <li key={index} className="flex items-start gap-2">
-                          <Check className="size-5 text-primary shrink-0 mt-0.5" />
-                          <span className="text-sm">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
+          {walletData?.twilioAccess?.twilioAccessStatus === "APPROVED" && (
+            <div className="lg:col-span-2">
+              <WalletCard
+                smsAvailable={walletData.wallet.smsCreditsAvailable}
+                smsUsed={walletData.wallet.smsCreditsUsed}
+                whatsappAvailable={walletData.wallet.whatsappCreditsAvailable}
+                whatsappUsed={walletData.wallet.whatsappCreditsUsed}
+                transactions={walletData.wallet.transactions || []}
+              />
+            </div>
+          )}
+        </div>
 
-                    {isCurrentPlan ? (
-                      <Button variant="outline" className="w-full" disabled>
-                        Current Plan
-                      </Button>
-                    ) : subscription ? (
-                      <div className="space-y-2">
-                        {plan.price === 0 && subscription.status === 'ACTIVE' ? (
+        <Tabs defaultValue="available-plans" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="purchase-credits">Purchase Credits</TabsTrigger>
+            <TabsTrigger value="available-plans">Available Plans</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="purchase-credits" className="space-y-6">
+            {walletData?.twilioAccess?.twilioAccessStatus === "APPROVED" && creditPackages.length > 0 && (
+              <div>
+                <h2 className="text-2xl font-bold mb-4">Purchase Credits</h2>
+                <CreditPackagePicker
+                  packages={creditPackages}
+                  onSuccess={fetchBillingData}
+                />
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="available-plans" className="space-y-6">
+            {/* Available Plans */}
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Available Plans</h2>
+              <div className="grid gap-6 md:grid-cols-3">
+                {plans.filter(p => p.name !== 'FREE_TRIAL').map((plan) => {
+                  const isCurrentPlan = currentPlan?.id === plan.id || currentPlan?.name === plan.name;
+                  const canUpgrade = currentPlan && !isCurrentPlan && plan.price > Number(currentPlan.price);
+                  const isPopular = plan.price > 0 && plan.price < 5000;
+
+                  return (
+                    <Card
+                      key={plan.id}
+                      id={`plan-${plan.id}`}
+                      className={`relative ${isPopular ? "border-primary shadow-lg" : ""}`}
+                    >
+                      {isPopular && (
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                          <Badge className="bg-primary">Most Popular</Badge>
+                        </div>
+                      )}
+                      <CardHeader>
+                        <CardTitle>{plan.name === "FREE_TRIAL" ? "FREE TRIAL" : plan.name}</CardTitle>
+                        <div className="mt-4">
+                          <span className="text-4xl font-bold">
+                            {formatPrice(plan.price, "INR")}
+                          </span>
+                          <span className="text-muted-foreground">/{plan.billingCycle || 'month'}</span>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <ul className="space-y-2">
+                          {plan.features.map((feature, index) => (
+                            <li key={index} className="flex items-start gap-2">
+                              <Check className="size-5 text-primary shrink-0 mt-0.5" />
+                              <span className="text-sm">{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+
+                        {isCurrentPlan ? (
                           <Button variant="outline" className="w-full" disabled>
-                            Trial Unavailable
+                            Current Plan
                           </Button>
+                        ) : subscription ? (
+                          <div className="space-y-2">
+                            {plan.price === 0 && subscription.status === 'ACTIVE' ? (
+                              <Button variant="outline" className="w-full" disabled>
+                                Trial Unavailable
+                              </Button>
+                            ) : (
+                              <>
+                                <PlanChangeDialog
+                                  open={showPlanChangeDialog && selectedPlanForChange?.id === plan.id}
+                                  onOpenChange={setShowPlanChangeDialog}
+                                  currentPlanName={currentPlan?.name}
+                                  newPlanName={plan.name}
+                                  onConfirm={async (immediate) => {
+                                    setActivationTiming(immediate ? "IMMEDIATE" : "DEFERRED");
+                                    // Small delay to ensure state is updated before click
+                                    setTimeout(() => {
+                                      const btn = document.getElementById(`razorpay-btn-${plan.id}`);
+                                      btn?.click();
+                                    }, 100);
+                                  }}
+                                />
+                                <Button
+                                  variant={plan.price > (Number(currentPlan?.price) || 0) ? "default" : "outline"}
+                                  className="w-full"
+                                  onClick={() => {
+                                    setSelectedPlanForChange(plan);
+                                    setShowPlanChangeDialog(true);
+                                  }}
+                                >
+                                  {plan.price > (Number(currentPlan?.price) || 0) ? "Upgrade Plan" : "Change to " + plan.name}
+                                </Button>
+                                <div className="hidden">
+                                  <RazorpayButton
+                                    id={`razorpay-btn-${plan.id}`}
+                                    plan={plan.name}
+                                    amount={plan.price}
+                                    onSuccess={handlePaymentSuccess}
+                                    metadata={{ activationTiming }}
+                                  >
+                                    Buy
+                                  </RazorpayButton>
+                                </div>
+                              </>
+                            )}
+                          </div>
                         ) : (
-                          <>
-                            <PlanChangeDialog
-                              open={showPlanChangeDialog && selectedPlanForChange?.id === plan.id}
-                              onOpenChange={setShowPlanChangeDialog}
-                              currentPlanName={currentPlan?.name}
-                              newPlanName={plan.name}
-                              onConfirm={async (immediate) => {
-                                setActivationTiming(immediate ? "IMMEDIATE" : "DEFERRED");
-                                // Small delay to ensure state is updated before click
-                                setTimeout(() => {
-                                  const btn = document.getElementById(`razorpay-btn-${plan.id}`);
-                                  btn?.click();
-                                }, 100);
-                              }}
-                            />
-                            <Button
-                              variant={plan.price > (Number(currentPlan?.price) || 0) ? "default" : "outline"}
-                              className="w-full"
-                              onClick={() => {
-                                setSelectedPlanForChange(plan);
-                                setShowPlanChangeDialog(true);
-                              }}
-                            >
-                              {plan.price > (Number(currentPlan?.price) || 0) ? "Upgrade Plan" : "Change to " + plan.name}
-                            </Button>
-                            <div className="hidden">
+                          <div className="space-y-2">
+                            {plan.price === 0 ? (
+                              <Button variant="outline" className="w-full" disabled>
+                                Free Trial (One-time)
+                              </Button>
+                            ) : (
                               <RazorpayButton
-                                id={`razorpay-btn-${plan.id}`}
                                 plan={plan.name}
                                 amount={plan.price}
                                 onSuccess={handlePaymentSuccess}
-                                metadata={{ activationTiming }}
+                                className="w-full"
                               >
-                                Buy
+                                Get Started with {plan.name}
                               </RazorpayButton>
-                            </div>
-                          </>
+                            )}
+                          </div>
                         )}
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {plan.price === 0 ? (
-                          <Button variant="outline" className="w-full" disabled>
-                            Free Trial (One-time)
-                          </Button>
-                        ) : (
-                          <RazorpayButton
-                            plan={plan.name}
-                            amount={plan.price}
-                            onSuccess={handlePaymentSuccess}
-                            className="w-full"
-                          >
-                            Get Started with {plan.name}
-                          </RazorpayButton>
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
 
         {/* Payment History */}
         {payments.length > 0 && (

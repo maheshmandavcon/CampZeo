@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -56,12 +56,17 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import React from 'react'; // Import React for React.use
 import { AIContentAssistant } from '@/components/ai-content-assistant';
 import { uploadToServer } from '@/lib/upload-helper';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { isVideoUrl } from '@/lib/media-utils';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 
 export default function NewPostPage({ params }: { params: Promise<{ id: string }> }) {
@@ -98,6 +103,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [loadingTemplates, setLoadingTemplates] = useState(false);
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('none');
     const [campaign, setCampaign] = useState<any>(null);
+    const [wallet, setWallet] = useState<any>(null);
+    const [twilioStatus, setTwilioStatus] = useState<string>("NONE");
 
     const formatDateTimeLocal = (date: Date) => {
         const year = date.getFullYear();
@@ -293,9 +300,37 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             }
         };
 
+        const fetchTwilioStatus = async () => {
+            try {
+                const res = await fetch('/api/twilio/request-access');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.requests?.length > 0) {
+                        setTwilioStatus(data.requests[0].status);
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to fetch twilio status", error);
+            }
+        };
+
+        const fetchWallet = async () => {
+            try {
+                const res = await fetch('/api/wallet/balance');
+                if (res.ok) {
+                    const data = await res.json();
+                    setWallet(data.wallet);
+                }
+            } catch (error) {
+                console.error("Failed to fetch wallet", error);
+            }
+        };
+
         fetchOrgPlatforms();
         fetchSocialStatus();
         fetchSubscriptionStatus();
+        fetchTwilioStatus();
+        fetchWallet();
     }, []);
 
 
@@ -626,6 +661,32 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             setSaving(true);
             setIsSending(true);
 
+            // Twilio credit check
+            if (selectedPlatform === 'SMS' || selectedPlatform === 'WHATSAPP') {
+                if (twilioStatus !== "APPROVED") {
+                    toast.error(`You need admin approval to send ${selectedPlatform} messages. Please check your billing settings.`);
+                    setSaving(false);
+                    setIsSending(false);
+                    return;
+                }
+
+                const contactsCount = targetContactIds && targetContactIds.length > 0
+                    ? targetContactIds.length
+                    : campaignContacts.length;
+
+                const available = selectedPlatform === 'SMS'
+                    ? (wallet?.smsCreditsAvailable || 0)
+                    : (wallet?.whatsappCreditsAvailable || 0);
+
+                if (contactsCount > available) {
+                    toast.error(`You have requested ${contactsCount} ${selectedPlatform}, but only ${available} credits are available. Please add credits and try again.`);
+                    setSaving(false);
+                    setIsSending(false);
+                    setShowSendNowDialog(false);
+                    return;
+                }
+            }
+
             // 1. Create Post
             const response = await fetch(`/api/campaigns/${campaignId}/posts`, {
                 method: 'POST',
@@ -685,7 +746,17 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             if (!sendResponse.ok) {
                 const errorData = await sendResponse.json().catch(() => ({}));
                 // Post created but send failed.
-                toast.warning(`Post created but failed to send: ${errorData.error || 'Unknown error'}`);
+                const sendErrorMsg = errorData.error || 'Unknown error';
+                if (sendErrorMsg.toLowerCase().includes('credit')) {
+                    toast.warning(`Post created but failed to send: ${sendErrorMsg}`, {
+                        action: {
+                            label: 'Add Credits',
+                            onClick: () => router.push('/organisation/billing')
+                        },
+                    });
+                } else {
+                    toast.warning(`Post created but failed to send: ${sendErrorMsg}`);
+                }
             } else {
                 const sendData = await sendResponse.json();
                 toast.success(`Post sent successfully! Sent: ${sendData.sent}, Failed: ${sendData.failed}`);
@@ -695,7 +766,17 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
         } catch (error) {
             console.error('Error creating/sending post:', error);
-            toast.error(error instanceof Error ? error.message : 'Failed to create post');
+            const errorMessage = error instanceof Error ? error.message : 'Failed to create post';
+            if (errorMessage.toLowerCase().includes('credit')) {
+                toast.error(errorMessage, {
+                    action: {
+                        label: 'Add Credits',
+                        onClick: () => router.push('/organisation/billing')
+                    },
+                });
+            } else {
+                toast.error(errorMessage);
+            }
         } finally {
             setSaving(false);
             setIsSending(false);
@@ -1070,15 +1151,15 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                 // Check if assigned to organization
                                                 const isAssigned = organisationPlatforms.includes(platform);
 
-                                                // Paid plan required for SMS and WhatsApp
-                                                const isLocked = !hasPaidPlan && ['SMS', 'WHATSAPP'].includes(platform);
+                                                // Twilio platforms require APPROVED status
+                                                const isTwilioPlatform = ['SMS', 'WHATSAPP'].includes(platform);
+                                                const isLocked = isTwilioPlatform && twilioStatus !== 'APPROVED';
 
-                                                // Check if user has connected account (or if it's an admin platform like EMAIL/SMS)
+                                                // Check if user has connected account
                                                 let isConnected = false;
                                                 if (['EMAIL', 'SMS', 'WHATSAPP'].includes(platform)) {
                                                     isConnected = isAssigned;
                                                 } else {
-                                                    // For social platforms, must be assigned AND have token
                                                     const status = socialStatus?.[platform.toLowerCase()];
                                                     isConnected = isAssigned && !!status?.connected;
                                                 }
@@ -1086,59 +1167,85 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                 const isSelected = selectedPlatform === platform;
                                                 const Icon = getPlatformIcon(platform);
 
-                                                if (!isAssigned) return null;
+                                                // Always show SMS/WhatsApp, others only if assigned
+                                                if (!isAssigned && !isTwilioPlatform) return null;
+
+                                                const platformButton = (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (isLocked) {
+                                                                toast('Admin Approval Required', {
+                                                                    description: 'SMS and WhatsApp are available via Twilio after admin approval and credit purchase.',
+                                                                    action: {
+                                                                        label: 'Go to Billing',
+                                                                        onClick: () => router.push('/organisation/billing')
+                                                                    }
+                                                                });
+                                                                return;
+                                                            }
+                                                            if (!isConnected) {
+                                                                toast('Platform not connected', {
+                                                                    description: 'You need to connect this platform in your account settings.',
+                                                                    action: {
+                                                                        label: 'Connect',
+                                                                        onClick: () => router.push('/organisation/settings')
+                                                                    }
+                                                                });
+                                                                return;
+                                                            }
+                                                            togglePlatform(platform);
+                                                        }}
+                                                        className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] ${isLocked
+                                                            ? 'border-dashed border-muted-foreground/30 bg-muted/20 opacity-50 cursor-not-allowed'
+                                                            : isSelected
+                                                                ? 'border-primary bg-primary/10 shadow-sm'
+                                                                : 'border-border hover:border-primary/50 hover:bg-muted/50 cursor-pointer'
+                                                            } ${!isConnected && !isLocked ? 'opacity-50 grayscale' : ''}`}
+                                                    >
+                                                        <Icon className={`size-6 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                                                        <span className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                                                            {platform}
+                                                        </span>
+                                                        {isLocked && (
+                                                            <span className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 leading-tight text-center">
+                                                                Admin Approval
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                );
 
                                                 return (
                                                     <div key={platform} className="relative group">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                if (isLocked) {
-                                                                    toast('Paid plan required', {
-                                                                        description: 'SMS and WhatsApp are only available on paid plans. Please upgrade your plan to unlock these platforms.',
-                                                                        action: {
-                                                                            label: 'Upgrade',
-                                                                            onClick: () => router.push('/organisation/billing')
-                                                                        }
-                                                                    });
-                                                                    return;
-                                                                }
-                                                                if (!isConnected) {
-                                                                    toast('Platform not connected', {
-                                                                        description: 'You need to connect this platform in your account settings.',
-                                                                        action: {
-                                                                            label: 'Connect',
-                                                                            onClick: () => router.push('/organisation/settings')
-                                                                        }
-                                                                    });
-                                                                    return;
-                                                                }
-                                                                togglePlatform(platform);
-                                                            }}
-                                                            className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all min-w-[100px] ${isLocked
-                                                                ? 'border-dashed border-muted-foreground/30 bg-muted/20 opacity-50 cursor-not-allowed'
-                                                                : isSelected
-                                                                    ? 'border-primary bg-primary/10 shadow-sm'
-                                                                    : 'border-border hover:border-primary/50 hover:bg-muted/50 cursor-pointer'
-                                                                } ${!isConnected && !isLocked ? 'opacity-50 grayscale' : ''}`}
-                                                        >
-                                                            <Icon className={`size-6 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-                                                            <span className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
-                                                                {platform}
-                                                            </span>
-                                                            {isLocked && (
-                                                                <span className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 leading-tight text-center">
-                                                                    Paid only
-                                                                </span>
-                                                            )}
-                                                        </button>
-                                                        {/* Hover tooltip for locked platforms */}
-                                                        {isLocked && (
-                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-44 bg-popover text-popover-foreground text-xs rounded-md shadow-lg border px-3 py-2 hidden group-hover:block z-50 pointer-events-none text-center">
-                                                                SMS and WhatsApp require a paid plan.
-                                                                <br />
-                                                                <span className="text-primary font-medium">Upgrade your plan</span> to unlock.
-                                                            </div>
+                                                        {isLocked ? (
+                                                            <TooltipProvider>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <div className="inline-block">
+                                                                            {platformButton}
+                                                                        </div>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent className="p-3 w-64 space-y-2">
+                                                                        <p className="text-sm font-semibold">Admin Approval Required</p>
+                                                                        <p className="text-xs text-muted-foreground">
+                                                                            SMS and WhatsApp messaging requires admin approval and credit purchase.
+                                                                        </p>
+                                                                        <Button
+                                                                            size="sm"
+                                                                            className="w-full text-xs h-8"
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                router.push('/organisation/billing');
+                                                                            }}
+                                                                        >
+                                                                            Purchase Pack / Request Access
+                                                                        </Button>
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            </TooltipProvider>
+                                                        ) : (
+                                                            platformButton
                                                         )}
                                                     </div>
                                                 );

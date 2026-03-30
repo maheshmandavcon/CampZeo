@@ -60,6 +60,8 @@ model Organisation {
   trialEndDate          DateTime?
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
+  twilioAccessStatus    TwilioAccessStatus     @default(NONE)
+  twilioAccessReason    String?
   analyticsSnapshots    AnalyticsSnapshot[]
   audienceInsights      AudienceInsight[]
   campaigns             Campaign[]
@@ -74,6 +76,9 @@ model Organisation {
   socialMetricHistory   SocialMetricHistory[]
   subscriptions         Subscription[]
   users                 User[]
+  wallet                Wallet?
+  twilioAccessRequests  TwilioAccessRequest[]
+  invoices              Invoice[]
 }
 
 model AudienceInsight {
@@ -203,8 +208,10 @@ model Subscription {
 }
 
 model Invoice {
-  id             Int          @id @default(autoincrement())
-  subscriptionId Int
+  id             Int           @id @default(autoincrement())
+  subscriptionId Int?
+  organisationId Int?
+  paymentId      String?       @unique
   invoiceDate    DateTime
   dueDate        DateTime
   paidDate       DateTime?
@@ -221,8 +228,10 @@ model Invoice {
   pdfBytes       Bytes?
   createdBy      String?
   createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  updatedAt      DateTime      @updatedAt
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  payment        Payment?      @relation(fields: [paymentId], references: [id])
 }
 
 model Enquiry {
@@ -294,6 +303,7 @@ model Payment {
   organisationId    Int?
   status            String
   organisation      Organisation? @relation(fields: [organisationId], references: [id])
+  invoice           Invoice?
 }
 
 model PostInsight {
@@ -454,20 +464,61 @@ model SocialMetricHistory {
   @@index([metricName, recordedAt])
 }
 
-model SystemNotificationLog {
+model TwilioAccessRequest {
+  id             Int          @id @default(autoincrement())
+  organisationId Int
+  status         String       @default("PENDING") // PENDING, APPROVED, REJECTED
+  reason         String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+}
+
+model CreditPackage {
   id        Int      @id @default(autoincrement())
-  subject   String
-  recipient String
-  status    String
-  error     String?
+  name      String   @unique
+  price     Decimal
+  credits   Int
+  type      String   @default("SMS") // SMS, WHATSAPP, MIXED
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
-  metadata  Json?
+}
+
+model Wallet {
+  id                       Int                 @id @default(autoincrement())
+  organisationId           Int                 @unique
+  smsCreditsAvailable      Int                 @default(0)
+  smsCreditsUsed           Int                 @default(0)
+  whatsappCreditsAvailable Int                 @default(0)
+  whatsappCreditsUsed      Int                 @default(0)
+  organisation             Organisation        @relation(fields: [organisationId], references: [id])
+  transactions             WalletTransaction[]
+}
+
+model WalletTransaction {
+  id          Int      @id @default(autoincrement())
+  walletId    Int
+  amount      Int
+  type        String   // CREDIT (buy), DEBIT (send)
+  service     String   // SMS, WHATSAPP
+  description String?
+  campaignId  Int?
+  createdAt   DateTime @default(now())
+  wallet      Wallet   @relation(fields: [walletId], references: [id])
+}
+
+enum TwilioAccessStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum PostStatus {
   DRAFT
   SCHEDULED
   PUBLISHED
+  FAILED
 }
 
 enum UserRole {
