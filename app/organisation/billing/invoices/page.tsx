@@ -110,7 +110,7 @@ export default function InvoicesPage() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>Invoice #</TableHead>
+                                            <TableHead>Invoice</TableHead>
                                             <TableHead>Date</TableHead>
                                             <TableHead>Description</TableHead>
                                             <TableHead>Amount</TableHead>
