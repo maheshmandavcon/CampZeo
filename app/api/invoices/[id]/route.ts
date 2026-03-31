@@ -57,6 +57,7 @@ async function getHandler(
             }
         },
         include: {
+            payment: true,
             subscription: {
                 include: {
                     plan: true,

@@ -6,6 +6,8 @@ import { Loader2, Printer, Download, ArrowLeft, Share2 } from "lucide-react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { formatPrice } from "@/lib/plans";
 import { toast } from "sonner";
+import * as htmlToImage from "html-to-image";
+import { jsPDF } from "jspdf";
 
 export default function InvoicePage() {
     const router = useRouter();
@@ -28,7 +30,7 @@ export default function InvoicePage() {
             printTriggeredRef.current = true;
             // Short delay to ensure DOM is fully rendered
             setTimeout(() => {
-                handlePrint();
+                handleDownloadPdf();
             }, 1000);
         }
     }, [loading, invoice, searchParams]);
@@ -49,71 +51,38 @@ export default function InvoicePage() {
         }
     };
 
-    const handlePrint = async () => {
+    const handleDownloadPdf = async () => {
         const content = contentRef.current;
         if (!content) return;
 
         setIsPrinting(true);
 
-        const iframe = document.createElement("iframe");
-        iframe.style.position = "absolute";
-        iframe.style.width = "0";
-        iframe.style.height = "0";
-        iframe.style.border = "none";
-        document.body.appendChild(iframe);
+        try {
+            const dataUrl = await htmlToImage.toPng(content, {
+                pixelRatio: 2,
+                backgroundColor: "#ffffff",
+                filter: (node) => {
+                    return node.getAttribute?.('data-html2canvas-ignore') !== 'true';
+                }
+            });
 
-        const doc = iframe.contentWindow?.document;
-        if (!doc) {
+            const pdf = new jsPDF({
+                orientation: "portrait",
+                unit: "mm",
+                format: "a4",
+            });
+
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (content.offsetHeight * pdfWidth) / content.offsetWidth;
+
+            pdf.addImage(dataUrl, "PNG", 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`Invoice-${invoice.invoiceNumber}.pdf`);
+        } catch (error) {
+            console.error("Error generating PDF:", error);
+            toast.error("Failed to generate PDF");
+        } finally {
             setIsPrinting(false);
-            return;
         }
-
-        const styles = Array.from(document.styleSheets)
-            .map(styleSheet => {
-                try {
-                    return Array.from(styleSheet.cssRules)
-                        .map(rule => rule.cssText)
-                        .join('');
-                } catch (e) {
-                    return '';
-                }
-            })
-            .join('');
-
-        doc.open();
-        doc.write(`
-          <html>
-            <head>
-              <title>Invoice #${invoice.invoiceNumber}</title>
-              <style>
-                ${styles}
-                body { 
-                    background: white !important; 
-                    margin: 0;
-                    padding: 40px;
-                    -webkit-print-color-adjust: exact !important; 
-                    print-color-adjust: exact !important; 
-                }
-                .no-print { display: none !important; }
-              </style>
-              <script src="https://cdn.tailwindcss.com"></script>
-            </head>
-            <body>
-              ${content.innerHTML}
-            </body>
-          </html>
-        `);
-        doc.close();
-
-        setTimeout(() => {
-            iframe.contentWindow?.focus();
-            iframe.contentWindow?.print();
-
-            setTimeout(() => {
-                document.body.removeChild(iframe);
-                setIsPrinting(false);
-            }, 1000);
-        }, 500);
     };
 
     if (loading) {
@@ -142,15 +111,15 @@ export default function InvoicePage() {
                     </div>
                     <div className="flex items-center gap-2  sm:w-auto">
 
-                        <Button onClick={handlePrint} disabled={isPrinting} className="flex-1 sm:flex-none">
+                        <Button onClick={handleDownloadPdf} disabled={isPrinting} className="flex-1 sm:flex-none">
                             <Download className="size-4 mr-2" />
-                            Download PDF
+                            {isPrinting ? "Generating..." : "Download PDF"}
                         </Button>
                     </div>
                 </div>
 
                 {/* Invoice Content */}
-                <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+                <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-sm border overflow-hidden">
                     <div className="p-8 md:p-12" ref={contentRef}>
                         <div className=" mx-auto relative">
                             {/* Status Watermark */}
@@ -226,6 +195,12 @@ export default function InvoicePage() {
                                             <span className="font-medium capitalize">{invoice.paymentMethod.replace(/_/g, ' ').toLowerCase()}</span>
                                         </div>
                                     )}
+                                    {invoice.payment?.razorpayPaymentId && (
+                                        <div className="flex justify-between border-b border-slate-100 pb-2">
+                                            <span className="text-slate-500 text-sm">Transaction ID</span>
+                                            <span className="font-medium font-mono text-xs mt-0.5">{invoice.payment.razorpayPaymentId}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -271,14 +246,18 @@ export default function InvoicePage() {
                                         <span>Subtotal</span>
                                         <span className="font-mono">{formatPrice(Number(invoice.amount) - Number(invoice.taxAmount || 0), invoice.currency)}</span>
                                     </div>
-                                    <div className="flex justify-between text-slate-600 text-sm">
-                                        <span>Tax</span>
-                                        <span className="font-mono">{formatPrice(Number(invoice.taxAmount || 0), invoice.currency)}</span>
-                                    </div>
-                                    <div className="flex justify-between text-slate-600 text-sm">
-                                        <span>Discount</span>
-                                        <span className="font-mono text-green-600">-{formatPrice(Number(invoice.discountAmount || 0), invoice.currency)}</span>
-                                    </div>
+                                    {Number(invoice.taxAmount) > 0 && (
+                                        <div className="flex justify-between text-slate-600 text-sm">
+                                            <span>Tax</span>
+                                            <span className="font-mono">{formatPrice(Number(invoice.taxAmount), invoice.currency)}</span>
+                                        </div>
+                                    )}
+                                    {Number(invoice.discountAmount) > 0 && (
+                                        <div className="flex justify-between text-slate-600 text-sm">
+                                            <span>Discount</span>
+                                            <span className="font-mono text-green-600">-{formatPrice(Number(invoice.discountAmount), invoice.currency)}</span>
+                                        </div>
+                                    )}
                                     <div className="border-t border-slate-200 pt-3 mt-3 flex justify-between items-end">
                                         <span className="font-bold text-slate-900">Total</span>
                                         <span className="font-bold text-2xl text-indigo-600 font-mono">

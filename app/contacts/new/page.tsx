@@ -53,8 +53,13 @@ export default function NewContactPage() {
         e.preventDefault();
 
         // Client-side validation
-        if (!formData.contactName && !formData.contactEmail && !formData.contactMobile) {
-            toast.error('Please provide at least name, email, or mobile');
+        if (!formData.contactName || !formData.contactName.trim()) {
+            toast.error('Contact name is required');
+            return;
+        }
+
+        if (!formData.contactMobile || !formData.contactMobile.trim()) {
+            toast.error('Mobile number is required');
             return;
         }
 
@@ -66,19 +71,19 @@ export default function NewContactPage() {
         }
 
         // Phone validation
-        const phoneRegex = /^\+?[\d\s\-()]+$/;
+        const phoneRegex = /^\+[1-9]\d{0,2}[\d\s\-().]*$/;
         if (formData.contactMobile) {
             const digits = formData.contactMobile.replace(/\D/g, '');
-            if (!phoneRegex.test(formData.contactMobile) || digits.length < 10) {
-                toast.error('Please enter a valid mobile number (at least 10 digits)');
+            if (!phoneRegex.test(formData.contactMobile) || digits.length < 10 || digits.length > 15) {
+                toast.error('Invalid mobile number. Must start with + country code and contain 10-15 digits. Example: +919876543210');
                 return;
             }
         }
 
         if (formData.contactWhatsApp) {
             const digits = formData.contactWhatsApp.replace(/\D/g, '');
-            if (!phoneRegex.test(formData.contactWhatsApp) || digits.length < 10) {
-                toast.error('Please enter a valid WhatsApp number (at least 10 digits)');
+            if (!phoneRegex.test(formData.contactWhatsApp) || digits.length < 10 || digits.length > 15) {
+                toast.error('Invalid WhatsApp number. Must start with + country code and contain 10-15 digits. Example: +919876543210');
                 return;
             }
         }
@@ -181,7 +186,7 @@ export default function NewContactPage() {
                                     {/* Name */}
                                     <div className="space-y-2">
                                         <Label htmlFor="contactName">
-                                            Full Name <span className="text-muted-foreground text-xs">(recommended)</span>
+                                            Full Name <span className="text-destructive">*</span>
                                         </Label>
                                         <Input
                                             id="contactName"
@@ -194,7 +199,7 @@ export default function NewContactPage() {
                                     {/* Email */}
                                     <div className="space-y-2">
                                         <Label htmlFor="contactEmail">
-                                            Email Address <span className="text-muted-foreground text-xs">(recommended)</span>
+                                            Email Address <span className="text-muted-foreground text-xs">(optional)</span>
                                         </Label>
                                         <Input
                                             id="contactEmail"
@@ -208,7 +213,7 @@ export default function NewContactPage() {
                                     {/* Mobile */}
                                     <div className="space-y-2">
                                         <Label htmlFor="contactMobile">
-                                            Mobile Number <span className="text-muted-foreground text-xs">(recommended)</span>
+                                            Mobile Number <span className="text-destructive">*</span>
                                         </Label>
                                         <Input
                                             id="contactMobile"

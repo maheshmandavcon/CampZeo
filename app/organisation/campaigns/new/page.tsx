@@ -145,7 +145,7 @@ export default function NewCampaignPage() {
         }
 
         const now = new Date();
-        if (new Date(startDate) < now) {
+        if (new Date(startDate) < new Date(minDate)) {
             toast.error('Start date cannot be in the past');
             return;
         }
@@ -194,14 +194,15 @@ export default function NewCampaignPage() {
     const someOnPageSelected = contacts.some((c) => selectedContacts.includes(c.id)) && !allOnPageSelected;
 
     const now = new Date();
-    const minDate = (() => {
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
-        return `${year}-${month}-${day}T${hours}:${minutes}`;
-    })();
+   const minDate = (() => {
+    const oneMinuteBefore = new Date(now.getTime() - 60 * 1000); // subtract 1 minute
+    const year = oneMinuteBefore.getFullYear();
+    const month = String(oneMinuteBefore.getMonth() + 1).padStart(2, '0');
+    const day = String(oneMinuteBefore.getDate()).padStart(2, '0');
+    const hours = String(oneMinuteBefore.getHours()).padStart(2, '0');
+    const minutes = String(oneMinuteBefore.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+})();
 
     return (
         <div className="p-6">

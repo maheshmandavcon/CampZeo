@@ -107,6 +107,42 @@ async function patchHandler(
     const body = await request.json();
     const { contactName, contactEmail, contactMobile, contactWhatsApp, campaignIds } = body;
 
+    if (!contactName || !contactName.trim()) {
+        return NextResponse.json(
+            { error: 'Contact name is required' },
+            { status: 400 }
+        );
+    }
+
+    if (!contactMobile || !contactMobile.trim()) {
+        return NextResponse.json(
+            { error: 'Mobile number is required' },
+            { status: 400 }
+        );
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (contactEmail && !emailRegex.test(contactEmail)) {
+        return NextResponse.json(
+            { error: 'Invalid email format' },
+            { status: 400 }
+        );
+    }
+    const phoneRegex = /^\+[1-9]\d{0,2}[\d\s\-().]*$/;
+    if (contactMobile && (!phoneRegex.test(contactMobile) || contactMobile.replace(/\D/g, '').length < 10 || contactMobile.replace(/\D/g, '').length > 15)) {
+        return NextResponse.json(
+            { error: 'Invalid mobile number. Must start with + country code and contain 10-15 digits. Example: +919876543210' },
+            { status: 400 }
+        );
+    }
+
+    if (contactWhatsApp && (!phoneRegex.test(contactWhatsApp) || contactWhatsApp.replace(/\D/g, '').length < 10 || contactWhatsApp.replace(/\D/g, '').length > 15)) {
+        return NextResponse.json(
+            { error: 'Invalid WhatsApp number. Must start with + country code and contain 10-15 digits. Example: +919876543210' },
+            { status: 400 }
+        );
+    }
+
     // Update contact
     const contact = await prisma.contact.update({
         where: { id: parseInt(id) },

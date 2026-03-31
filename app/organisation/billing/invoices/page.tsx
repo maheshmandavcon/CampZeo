@@ -35,7 +35,6 @@ interface PaymentData {
 export default function InvoicesPage() {
     const router = useRouter();
     const [invoices, setInvoices] = useState<any[]>([]);
-    const [payments, setPayments] = useState<PaymentData[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -45,19 +44,11 @@ export default function InvoicesPage() {
     const fetchInvoices = async () => {
         try {
             setLoading(true);
-            const [invoicesResponse, paymentsResponse] = await Promise.all([
-                fetch("/api/invoices"),
-                fetch("/api/payments")
-            ]);
+            const response = await fetch("/api/invoices");
 
-            if (invoicesResponse.ok) {
-                const data = await invoicesResponse.json();
+            if (response.ok) {
+                const data = await response.json();
                 setInvoices(data.invoices || []);
-            }
-
-            if (paymentsResponse.ok) {
-                const data = await paymentsResponse.json();
-                setPayments(data.payments || []);
             }
         } catch (error) {
             console.error("Error fetching data:", error);
@@ -100,10 +91,10 @@ export default function InvoicesPage() {
                             <div className="flex items-center justify-center py-12">
                                 <Loader2 className="size-8 animate-spin text-muted-foreground" />
                             </div>
-                        ) : invoices.length === 0 && payments.length === 0 ? (
+                        ) : invoices.length === 0 ? (
                             <div className="text-center py-12">
                                 <FileText className="size-12 mx-auto text-muted-foreground mb-4" />
-                                <p className="text-muted-foreground">No billing history found</p>
+                                <p className="text-muted-foreground">No invoices found</p>
                             </div>
                         ) : (
                             <div className="rounded-md border">
@@ -164,39 +155,6 @@ export default function InvoicesPage() {
                                                         View
                                                     </Button>
                                                 </TableCell>
-                                            </TableRow>
-                                        ))}
-                                        {payments.map((payment) => (
-                                            <TableRow key={`pay-${payment.id}`}>
-                                                <TableCell className="font-medium text-muted-foreground text-xs">
-                                                    {(payment as any).razorpayPaymentId || (payment as any).razorpayOrderId || '—'}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {new Date(payment.createdAt).toLocaleDateString()}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {payment.plan} Plan
-                                                </TableCell>
-                                                <TableCell>
-                                                    {formatPrice(payment.amount, payment.currency)}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        variant={
-                                                            payment.status === "COMPLETED"
-                                                                ? "default"
-                                                                : payment.status === "PENDING"
-                                                                    ? "secondary"
-                                                                    : "destructive"
-                                                        }
-                                                        className={
-                                                            payment.status === "COMPLETED" ? "bg-red-600 hover:bg-red-700" : ""
-                                                        }
-                                                    >
-                                                        {payment.status}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell />
                                             </TableRow>
                                         ))}
                                     </TableBody>

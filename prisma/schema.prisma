@@ -60,13 +60,14 @@ model Organisation {
   trialEndDate          DateTime?
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
-  twilioAccessStatus    TwilioAccessStatus     @default(NONE)
   twilioAccessReason    String?
+  twilioAccessStatus    TwilioAccessStatus     @default(NONE)
   analyticsSnapshots    AnalyticsSnapshot[]
   audienceInsights      AudienceInsight[]
   campaigns             Campaign[]
   chatHistories         ChatHistory[]
   contacts              Contact[]
+  invoices              Invoice[]
   leads                 Lead[]
   messageTemplates      MessageTemplate[]
   MessageUsage          MessageUsage[]
@@ -75,10 +76,9 @@ model Organisation {
   payments              Payment[]
   socialMetricHistory   SocialMetricHistory[]
   subscriptions         Subscription[]
+  twilioAccessRequests  TwilioAccessRequest[]
   users                 User[]
   wallet                Wallet?
-  twilioAccessRequests  TwilioAccessRequest[]
-  invoices              Invoice[]
 }
 
 model AudienceInsight {
@@ -210,8 +210,6 @@ model Subscription {
 model Invoice {
   id             Int           @id @default(autoincrement())
   subscriptionId Int?
-  organisationId Int?
-  paymentId      String?       @unique
   invoiceDate    DateTime
   dueDate        DateTime
   paidDate       DateTime?
@@ -227,11 +225,13 @@ model Invoice {
   taxInformation String?
   pdfBytes       Bytes?
   createdBy      String?
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
-  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  organisationId Int?
+  paymentId      String?       @unique
   organisation   Organisation? @relation(fields: [organisationId], references: [id])
   payment        Payment?      @relation(fields: [paymentId], references: [id])
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
 }
 
 model Enquiry {
@@ -302,8 +302,8 @@ model Payment {
   updatedAt         DateTime      @updatedAt
   organisationId    Int?
   status            String
-  organisation      Organisation? @relation(fields: [organisationId], references: [id])
   invoice           Invoice?
+  organisation      Organisation? @relation(fields: [organisationId], references: [id])
 }
 
 model PostInsight {
@@ -467,7 +467,7 @@ model SocialMetricHistory {
 model TwilioAccessRequest {
   id             Int          @id @default(autoincrement())
   organisationId Int
-  status         String       @default("PENDING") // PENDING, APPROVED, REJECTED
+  status         String       @default("PENDING")
   reason         String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
@@ -479,7 +479,7 @@ model CreditPackage {
   name      String   @unique
   price     Decimal
   credits   Int
-  type      String   @default("SMS") // SMS, WHATSAPP, MIXED
+  type      String   @default("SMS")
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 }
@@ -499,8 +499,8 @@ model WalletTransaction {
   id          Int      @id @default(autoincrement())
   walletId    Int
   amount      Int
-  type        String   // CREDIT (buy), DEBIT (send)
-  service     String   // SMS, WHATSAPP
+  type        String
+  service     String
   description String?
   campaignId  Int?
   createdAt   DateTime @default(now())

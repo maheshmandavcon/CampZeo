@@ -35,6 +35,9 @@ interface CSVRow {
     campaigns?: string;
 }
 
+
+const TEMPLATE_HEADERS = ['contactname', 'contactemail', 'contactmobile', 'contactwhatsapp', 'campaigns'];
+
 interface ValidationError {
     row: number;
     field: string;
@@ -79,17 +82,49 @@ export default function ImportContactsPage() {
         }
     }, []);
 
+    const validateCSVHeaders = (csvText: string): { valid: boolean; message: string } => {
+        const lines = csvText.split('\n').filter(line => line.trim());
+        if (lines.length === 0) {
+            return { valid: false, message: 'CSV file is empty' };
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[\r"]/g, ''));
+
+        const missingHeaders = TEMPLATE_HEADERS.filter(th => !headers.includes(th));
+        if (missingHeaders.length > 0) {
+            return {
+                valid: false,
+                message: `Wrong CSV format. Missing required columns: ${missingHeaders.join(', ')}. Please use the template CSV.`
+            };
+        }
+
+        const extraHeaders = headers.filter(h => !TEMPLATE_HEADERS.includes(h));
+        if (extraHeaders.length > 0) {
+            return {
+                valid: false,
+                message: `Wrong CSV format. Unexpected columns found: ${extraHeaders.join(', ')}. Please use the template CSV.`
+            };
+        }
+
+        return { valid: true, message: '' };
+    };
+
     const handleFileSelect = async (selectedFile: File) => {
         if (!selectedFile.name.endsWith('.csv')) {
             toast.error('Please select a CSV file');
             return;
         }
 
-        setFile(selectedFile);
-
-        // Parse and preview first 10 rows
         try {
             const text = await selectedFile.text();
+
+            const validation = validateCSVHeaders(text);
+            if (!validation.valid) {
+                toast.error(validation.message);
+                return;
+            }
+
+            setFile(selectedFile);
             const rows = parseCSV(text);
             setPreview(rows.slice(0, 10));
             toast.success('File loaded successfully');

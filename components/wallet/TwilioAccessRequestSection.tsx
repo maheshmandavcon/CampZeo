@@ -123,7 +123,7 @@ export function TwilioAccessRequestSection({ status, reason, onSuccess }: Twilio
                 placeholder="e.g. I want to send promotional SMS and WhatsApp updates to my 5000+ customer base." 
                 value={requestReason}
                 onChange={(e) => setRequestReason(e.target.value)}
-                className="min-h-[100px] resize-none"
+                className="min-h-[100px] border-2 border-gray-200 rounded-md resize-none"
                 disabled={isSubmitting}
             />
         </div>

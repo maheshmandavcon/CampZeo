@@ -970,6 +970,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                                             value={message}
                                             onChange={(e) => setMessage(e.target.value)}
                                             rows={6}
+                                            maxLength={type === 'SMS' ? 160 : undefined}
                                             required={type !== 'EMAIL'}
                                             className="pr-12 border rounded-md border-dark"
                                         />
@@ -983,6 +984,11 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                                         >
                                             <Sparkles className="size-4" />
                                         </Button>
+                                    </div>
+                                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                                        <span>
+                                            {message.length} characters
+                                        </span>
                                     </div>
                                     <p className="text-xs text-muted-foreground">
                                         {type === 'SMS' && 'SMS messages are limited to 160 characters'}

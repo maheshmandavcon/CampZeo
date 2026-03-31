@@ -259,12 +259,20 @@ export default function Page() {
     // }
 
     // Mobile validation
-    if (form.mobile.length < 10) {
-      toast.error("Invalid Mobile Number", {
-        description: "Mobile number must be at least 10 digits.",
-      });
-      return;
-    }
+    //  const phoneRegex = /^\+[1-9]\d{0,2}[\d\s\-().]*$/;
+            const digits = form.mobile.replace(/\D/g, '');
+            if (digits.length < 10 || digits.length > 15) {
+                toast.error("Invalid Mobile Number", {
+                    description: "Must contain 10-15 digits.",
+                });
+                return;
+            }
+    // if (form.mobile.length < 10) {
+    //   toast.error("Invalid Mobile Number", {
+    //     description: "Mobile number must be at least 10 digits.",
+    //   });
+    //   return;
+    // }
 
     setLoading(true);
 

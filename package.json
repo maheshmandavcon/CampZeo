@@ -61,6 +61,7 @@
     "framer-motion": "^12.23.26",
     "googleapis": "^166.0.0",
     "groq-sdk": "^0.37.0",
+    "html-to-image": "^1.11.13",
     "html2canvas": "^1.4.1",
     "input-otp": "^1.4.2",
     "jspdf": "^4.0.0",

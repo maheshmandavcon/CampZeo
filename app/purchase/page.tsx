@@ -243,6 +243,15 @@ function PurchaseContent() {
             }
         }
 
+        // const phoneRegex = /^\+[1-9]\d{0,2}[\d\s\-().]*$/;
+        const digits = formData.mobile.replace(/\D/g, '');
+        if (digits.length < 10 || digits.length > 15) {
+            toast.error("Invalid Mobile Number", {
+                description: "Must contain 10-15 digits.",
+            });
+            return;
+        }
+
         if (!isSignedIn && formData.password !== formData.confirmPassword) {
             toast.error("Passwords do not match.");
             return;

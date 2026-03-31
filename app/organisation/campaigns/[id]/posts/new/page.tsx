@@ -382,7 +382,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     setLoadingFacebookPages(true);
                     const response = await fetch('/api/socialmedia/facebook/pages');
                     if (response.ok) {
-                        fetchAccounts();
+                        // fetchAccounts();
                         const data = await response.json();
                         setFacebookPages(data.pages || []);
 
@@ -486,11 +486,11 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
             for (const file of files) {
                 const isVideo = file.type.startsWith('video/');
-                
+
                 if (selectedPlatform === 'LINKEDIN' && isVideo) {
                     if (currentVideos + newlyAddedVideos >= 1) {
                         toast.error('LinkedIn only allows one video per post. Subsequent videos were skipped.');
-                        continue; 
+                        continue;
                     }
                     newlyAddedVideos++;
                 }
@@ -1331,6 +1331,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                 onChange={(e) => setMessage(e.target.value)}
                                                 rows={6}
                                                 required={true}
+                                                maxLength={160}
                                                 className="pr-12 border border-2 border-gray-300 rounded-2xl"
                                             />
                                             <Button
