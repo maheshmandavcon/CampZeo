@@ -23,6 +23,7 @@ import { SignedIn, UserButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { ExpiryBanner } from "@/components/ExpiryBanner";
+import { WalletHeader } from "@/components/wallet/WalletHeader";
 
 // Navigation items configuration
 const navItems = [
@@ -218,6 +219,9 @@ export function OrganisationLayoutWrapper({
           <Button variant="ghost" size="icon" onClick={() => router.push("/")}>
             <Home className="size-5" />
           </Button>
+          <SignedIn>
+            <WalletHeader />
+          </SignedIn>
           <NotificationBell />
           <SignedIn>
             <div suppressHydrationWarning>

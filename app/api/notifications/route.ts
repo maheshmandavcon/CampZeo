@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { logError, logInfo } from '@/lib/audit-logger';
+import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 
 import { withErrorHandling } from '@/lib/api-handler';
 async function getHandler(request: NextRequest) {
@@ -12,12 +13,25 @@ async function getHandler(request: NextRequest) {
         }
 
         // Get user and their organization
-        const user = await prisma.user.findUnique({
+        const dbUser = await prisma.user.findUnique({
             where: { clerkId: userId },
-            select: { organisationId: true }
+            select: { organisationId: true, role: true }
         });
 
-        if (!user || !user.organisationId) {
+        if (!dbUser) {
+            return NextResponse.json({ isSuccess: false, message: 'User not found' }, { status: 404 });
+        }
+
+        // Handle Admin Impersonation
+        let organisationId = dbUser.organisationId;
+        if (dbUser.role === 'ADMIN_USER') {
+            const impersonatedId = await getImpersonatedOrganisationId();
+            if (impersonatedId) {
+                organisationId = impersonatedId;
+            }
+        }
+
+        if (!organisationId) {
             return NextResponse.json({ isSuccess: false, message: 'User not associated with an organization' }, { status: 403 });
         }
 
@@ -31,7 +45,7 @@ async function getHandler(request: NextRequest) {
 
         // Build where clause
         const where: any = {
-            organisationId: user.organisationId,
+            organisationId: organisationId,
             isDelete: false
         };
 
@@ -62,7 +76,7 @@ async function getHandler(request: NextRequest) {
             prisma.notification.count({ where }),
             prisma.notification.count({
                 where: {
-                    organisationId: user.organisationId,
+                    organisationId: organisationId,
                     isDelete: false,
                     isRead: false
                 }
@@ -92,19 +106,32 @@ async function patchHandler(request: NextRequest) {
         }
 
         // Get user and their organization
-        const user = await prisma.user.findUnique({
+        const dbUser = await prisma.user.findUnique({
             where: { clerkId: userId },
-            select: { organisationId: true }
+            select: { organisationId: true, role: true }
         });
 
-        if (!user || !user.organisationId) {
+        if (!dbUser) {
+            return NextResponse.json({ isSuccess: false, message: 'User not found' }, { status: 404 });
+        }
+
+        // Handle Admin Impersonation
+        let organisationId = dbUser.organisationId;
+        if (dbUser.role === 'ADMIN_USER') {
+            const impersonatedId = await getImpersonatedOrganisationId();
+            if (impersonatedId) {
+                organisationId = impersonatedId;
+            }
+        }
+
+        if (!organisationId) {
             return NextResponse.json({ isSuccess: false, message: 'User not associated with an organization' }, { status: 403 });
         }
 
         // Mark all notifications as read for this organization
         const result = await prisma.notification.updateMany({
             where: {
-                organisationId: user.organisationId,
+                organisationId: organisationId,
                 isDelete: false,
                 isRead: false
             },
@@ -113,7 +140,7 @@ async function patchHandler(request: NextRequest) {
             }
         });
 
-        await logInfo('Marked all notifications as read', { userId, organisationId: user.organisationId, count: result.count });
+        await logInfo('Marked all notifications as read', { userId, organisationId: organisationId, count: result.count });
 
         return NextResponse.json({
             isSuccess: true,

@@ -361,6 +361,7 @@ export default function BillingPage() {
               status={walletData?.twilioAccess?.twilioAccessStatus || "NONE"}
               reason={walletData?.twilioAccess?.twilioAccessReason}
               onSuccess={fetchBillingData}
+              isTrial={subscriptionData?.trial?.isActive}
             />
           </div>
 

@@ -2,6 +2,7 @@ import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { logError, logWarning } from "@/lib/audit-logger";
+import { getImpersonatedOrganisationId } from "@/lib/admin-impersonation";
 
 import { withErrorHandling } from '@/lib/api-handler';
 async function getHandler() {
@@ -18,14 +19,25 @@ async function getHandler() {
             include: { organisation: true },
         });
 
-        if (!dbUser || !dbUser.organisationId) {
+        if (!dbUser) {
+            return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
+
+        // Handle Admin Impersonation
+        let organisationId = dbUser.organisationId;
+        if (dbUser.role === 'ADMIN_USER') {
+            const impersonatedId = await getImpersonatedOrganisationId();
+            if (impersonatedId) {
+                organisationId = impersonatedId;
+            }
+        }
+
+        if (!organisationId) {
             return NextResponse.json(
-                { error: "User not found or no organisation" },
+                { error: "No organisation associated" },
                 { status: 404 }
             );
         }
-
-        const organisationId = dbUser.organisationId;
 
         // Get active subscription to fetch plan limits
         const subscription = await prisma.subscription.findFirst({
@@ -41,7 +53,7 @@ async function getHandler() {
             },
         });
 
-        // Parse usage limits from plan
+         
         // Parse usage limits from plan
         let usageLimits;
         const defaultLimits = {

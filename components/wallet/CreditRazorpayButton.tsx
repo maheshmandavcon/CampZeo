@@ -105,6 +105,9 @@ export function CreditRazorpayButton({
             const verifyData = await verifyResponse.json();
             toast.success("Credits added successfully!");
             
+            // Trigger wallet update in header
+            window.dispatchEvent(new CustomEvent('wallet-updated'));
+            
             if (onSuccess) {
                 onSuccess(verifyData);
             } else {

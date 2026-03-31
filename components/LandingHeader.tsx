@@ -5,6 +5,7 @@ import { SignInButton, SignedOut, SignedIn, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { WalletHeader } from "./wallet/WalletHeader";
 
 export function LandingHeader() {
     const router = useRouter();
@@ -66,6 +67,7 @@ export function LandingHeader() {
                             </div>
                         </SignedOut>
                         <SignedIn>
+                            <WalletHeader />
                             <UserButton afterSignOutUrl="/" />
                             <Link href="/organisation">
                                 <Button variant="outline">Dashboard</Button>
