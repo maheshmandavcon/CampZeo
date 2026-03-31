@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import * as htmlToImage from "html-to-image";
+import { jsPDF } from "jspdf";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, Star, ArrowRight, Sparkles, Check } from "lucide-react";
+import { Loader2, CheckCircle2, Star, ArrowRight, Sparkles, Check, Download } from "lucide-react";
 import { useSignUp, useSignIn, useClerk, useUser } from "@clerk/nextjs";
 import { usePlans } from "@/hooks/use-plans";
 import { formatPrice } from "@/lib/plans";
@@ -58,6 +60,60 @@ function PurchaseContent() {
     const [showLocationSelector, setShowLocationSelector] = useState(false);
     const [postalOptions, setPostalOptions] = useState<LocationOption[]>([]);
 
+    const [isDownloading, setIsDownloading] = useState(false);
+    const invoiceRef = useRef<HTMLDivElement>(null);
+
+    const handleDownloadInvoice = async () => {
+        if (!invoiceRef.current) return;
+
+        try {
+            setIsDownloading(true);
+
+            const dataUrl = await htmlToImage.toPng(invoiceRef.current, {
+                pixelRatio: 2,
+                backgroundColor: "#ffffff",
+                filter: (node) => {
+                    return node.getAttribute?.('data-html2canvas-ignore') !== 'true';
+                }
+            });
+
+            const pdf = new jsPDF({
+                orientation: "portrait",
+                unit: "mm",
+                format: "a4",
+            });
+
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+
+            const margin = 10;
+            const contentWidth = pageWidth - margin * 2;
+            const contentHeight = pageHeight - margin * 2;
+
+            const elWidth = invoiceRef.current.offsetWidth;
+            const elHeight = invoiceRef.current.offsetHeight;
+            const elAspectRatio = elHeight / elWidth;
+
+            let imgWidth = contentWidth;
+            let imgHeight = contentWidth * elAspectRatio;
+
+            if (imgHeight > contentHeight) {
+                imgHeight = contentHeight;
+                imgWidth = contentHeight / elAspectRatio;
+            }
+
+            const xOffset = margin + (contentWidth - imgWidth) / 2;
+
+            pdf.addImage(dataUrl, "PNG", xOffset, margin, imgWidth, imgHeight);
+            pdf.save(`invoice-${invoice?.invoiceNumber || "purchase"}.pdf`);
+
+        } catch (error) {
+            console.error("Error downloading invoice:", error);
+            toast.error("Could not generate invoice. Please try again.");
+        } finally {
+            setIsDownloading(false);
+        }
+    };
     // Data for Organization Creation
     const [formData, setFormData] = useState({
         email: "",
@@ -445,7 +501,7 @@ function PurchaseContent() {
             </div>
 
             {/* Right Panel - Form */}
-            <div className="flex-1 flex flex-col items-center justify-center p-6 lg:p-12 overflow-y-auto w-full">
+            <div ref={invoiceRef} className="flex-1 flex flex-col items-center justify-center p-6 lg:p-12 overflow-y-auto w-full">
                 <div className="w-full max-w-xl space-y-8">
 
                     {/* Header */}
@@ -716,7 +772,7 @@ function PurchaseContent() {
                     )}
 
                     {step === "SUCCESS" && (
-                        <div className="space-y-6">
+                        <div ref={invoiceRef} className="space-y-6">
                             <div className="flex flex-col items-center justify-center text-center space-y-4 p-8 bg-green-50/50 dark:bg-green-900/10 rounded-xl border border-green-200 dark:border-green-800">
                                 <div className="h-16 w-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
                                     <Check className="h-8 w-8 text-green-600 dark:text-green-400" />
@@ -759,8 +815,15 @@ function PurchaseContent() {
                                     Go to Dashboard <ArrowRight className="ml-2 h-4 w-4" />
                                 </Button>
                                 {invoice && (
-                                    <Button variant="outline" className="flex-1" size="lg" onClick={() => window.print()}>
-                                        Download / Print Invoice
+                                    <Button
+                                        variant="outline"
+                                        className="flex-1"
+                                        size="lg"
+                                        onClick={handleDownloadInvoice}
+                                        disabled={isDownloading}
+                                    >
+                                        <Download className="mr-2 h-4 w-4" />
+                                        {isDownloading ? "Generating..." : "Download Invoice"}
                                     </Button>
                                 )}
                             </div>

@@ -248,8 +248,9 @@ export default function EditCampaignPage({ params }: { params: Promise<{ id: str
                 toast.error('End date cannot be in the past');
                 return;
             }
-
-            if (!hasScheduledPosts && new Date(startDate) < now) {
+            const submissionTime = new Date();
+            submissionTime.setSeconds(0, 0);
+            if (!hasScheduledPosts && new Date(startDate) < submissionTime) {
                 toast.error('Start date cannot be in the past');
                 return;
             }

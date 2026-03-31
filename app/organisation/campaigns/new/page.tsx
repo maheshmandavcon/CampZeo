@@ -144,13 +144,16 @@ export default function NewCampaignPage() {
             return;
         }
 
-        const now = new Date();
-        if (new Date(startDate) < new Date(minDate)) {
+        const submissionTime = new Date();
+        submissionTime.setSeconds(0, 0);
+        const fiveMinutesAgo = new Date(submissionTime.getTime());
+
+        if (new Date(startDate) < fiveMinutesAgo) {
             toast.error('Start date cannot be in the past');
             return;
         }
 
-        if (new Date(endDate) < now) {
+        if (new Date(endDate) < submissionTime) {
             toast.error('End date cannot be in the past');
             return;
         }
@@ -194,15 +197,15 @@ export default function NewCampaignPage() {
     const someOnPageSelected = contacts.some((c) => selectedContacts.includes(c.id)) && !allOnPageSelected;
 
     const now = new Date();
-   const minDate = (() => {
-    const oneMinuteBefore = new Date(now.getTime() - 60 * 1000); // subtract 1 minute
-    const year = oneMinuteBefore.getFullYear();
-    const month = String(oneMinuteBefore.getMonth() + 1).padStart(2, '0');
-    const day = String(oneMinuteBefore.getDate()).padStart(2, '0');
-    const hours = String(oneMinuteBefore.getHours()).padStart(2, '0');
-    const minutes = String(oneMinuteBefore.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-})();
+    const minDate = (() => {
+        const fiveMinutesBefore = new Date(now.getTime() - 2 * 60 * 1000);
+        const year = fiveMinutesBefore.getFullYear();
+        const month = String(fiveMinutesBefore.getMonth() + 1).padStart(2, '0');
+        const day = String(fiveMinutesBefore.getDate()).padStart(2, '0');
+        const hours = String(fiveMinutesBefore.getHours()).padStart(2, '0');
+        const minutes = String(fiveMinutesBefore.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    })();
 
     return (
         <div className="p-6">
