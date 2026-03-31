@@ -38,6 +38,7 @@ export function replaceVariables(text: string, variables: Record<string, string>
 
 /**
  * Deduct credits from the organization's wallet and log the transaction.
+ * Uses an atomic check+decrement to prevent race conditions under concurrent sends.
  */
 async function deductCredits(
     organisationId: number, 
@@ -46,40 +47,51 @@ async function deductCredits(
     campaignId?: number
 ): Promise<{ success: boolean; error?: string }> {
     try {
-        const wallet = await prisma.wallet.findUnique({
-            where: { organisationId }
-        });
+        const result = await prisma.$transaction(async (tx) => {
+            // Atomic: check balance + decrement in a single interactive transaction.
+            // updateMany with a WHERE condition ensures no over-deduction.
+            const creditField = service === 'SMS' ? 'smsCreditsAvailable' : 'whatsappCreditsAvailable';
 
-        if (!wallet) return { success: false, error: 'Wallet not found' };
-
-        const available = service === 'SMS' ? wallet.smsCreditsAvailable : wallet.whatsappCreditsAvailable;
-        if (available < amount) {
-            return { success: false, error: `Insufficient ${service} credits. Available: ${available}, Required: ${amount}` };
-        }
-
-        await prisma.$transaction([
-            prisma.wallet.update({
-                where: { organisationId },
+            const updated = await tx.wallet.updateMany({
+                where: {
+                    organisationId,
+                    [creditField]: { gte: amount }
+                },
                 data: {
                     smsCreditsAvailable: service === 'SMS' ? { decrement: amount } : undefined,
                     smsCreditsUsed: service === 'SMS' ? { increment: amount } : undefined,
                     whatsappCreditsAvailable: service === 'WHATSAPP' ? { decrement: amount } : undefined,
                     whatsappCreditsUsed: service === 'WHATSAPP' ? { increment: amount } : undefined,
                 }
-            }),
-            prisma.walletTransaction.create({
-                data: {
-                    walletId: wallet.id,
-                    amount,
-                    type: 'DEBIT',
-                    service,
-                    description: `Sent ${amount} ${service}${campaignId ? ` for campaign #${campaignId}` : ''}`,
-                    campaignId
-                }
-            })
-        ]);
+            });
 
-        return { success: true };
+            if (updated.count === 0) {
+                // Either wallet doesn't exist or insufficient credits
+                const wallet = await tx.wallet.findUnique({ where: { organisationId } });
+                if (!wallet) return { success: false as const, error: 'Wallet not found' };
+                const available = service === 'SMS' ? wallet.smsCreditsAvailable : wallet.whatsappCreditsAvailable;
+                return { success: false as const, error: `Insufficient ${service} credits. Available: ${available}, Required: ${amount}` };
+            }
+
+            // Log the transaction
+            const wallet = await tx.wallet.findUnique({ where: { organisationId } });
+            if (wallet) {
+                await tx.walletTransaction.create({
+                    data: {
+                        walletId: wallet.id,
+                        amount,
+                        type: 'DEBIT',
+                        service,
+                        description: `Sent ${amount} ${service}${campaignId ? ` for campaign #${campaignId}` : ''}`,
+                        campaignId
+                    }
+                });
+            }
+
+            return { success: true as const };
+        });
+
+        return result;
     } catch (error: any) {
         console.error(`Failed to deduct credits:`, error);
         return { success: false, error: error.message || 'Unknown error' };
@@ -88,6 +100,7 @@ async function deductCredits(
 
 /**
  * Refund credits back to the wallet if a send fails.
+ * Uses an interactive transaction for consistency.
  */
 async function refundCredits(
     organisationId: number, 
@@ -96,14 +109,14 @@ async function refundCredits(
     campaignId?: number
 ): Promise<{ success: boolean; error?: string }> {
     try {
-        const wallet = await prisma.wallet.findUnique({
-            where: { organisationId }
-        });
+        await prisma.$transaction(async (tx) => {
+            const wallet = await tx.wallet.findUnique({
+                where: { organisationId }
+            });
 
-        if (!wallet) return { success: false, error: 'Wallet not found' };
+            if (!wallet) throw new Error('Wallet not found');
 
-        await prisma.$transaction([
-            prisma.wallet.update({
+            await tx.wallet.update({
                 where: { organisationId },
                 data: {
                     smsCreditsAvailable: service === 'SMS' ? { increment: amount } : undefined,
@@ -111,8 +124,9 @@ async function refundCredits(
                     whatsappCreditsAvailable: service === 'WHATSAPP' ? { increment: amount } : undefined,
                     whatsappCreditsUsed: service === 'WHATSAPP' ? { decrement: amount } : undefined,
                 }
-            }),
-            prisma.walletTransaction.create({
+            });
+
+            await tx.walletTransaction.create({
                 data: {
                     walletId: wallet.id,
                     amount,
@@ -121,8 +135,8 @@ async function refundCredits(
                     description: `Refund for failed ${service}${campaignId ? ` in campaign #${campaignId}` : ''}`,
                     campaignId
                 }
-            })
-        ]);
+            });
+        });
 
         return { success: true };
     } catch (error: any) {

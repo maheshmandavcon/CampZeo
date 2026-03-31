@@ -76,7 +76,7 @@ export function OrganisationDashboard({ onLogout, onNavigate }: OrganisationDash
   return (
     <div className="min-h-screen bg-muted/30">
       {/* Header */}
-      <Header/>
+      <Header />
 
       <div className="flex">
         {/* Sidebar */}

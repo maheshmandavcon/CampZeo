@@ -843,7 +843,7 @@ export async function sendCampaignPost(
                 const error = `Twilio access not approved for this organisation (${org?.twilioAccessStatus || 'NONE'}).`;
                 await prisma.campaignPost.update({
                     where: { id: post.id },
-                    data: { status: 'PUBLISHED', failureReason: error }
+                    data: { status: 'FAILED', failureReason: error }
                 });
                 return { success: false, error, sent: 0, failed: contacts.length };
             }
@@ -858,7 +858,7 @@ export async function sendCampaignPost(
                 
                 await prisma.campaignPost.update({
                     where: { id: post.id },
-                    data: { status: 'PUBLISHED', failureReason: errorMessage }
+                    data: { status: 'FAILED', failureReason: errorMessage }
                 });
                 return { success: false, error: errorMessage, sent: 0, failed: required };
             }

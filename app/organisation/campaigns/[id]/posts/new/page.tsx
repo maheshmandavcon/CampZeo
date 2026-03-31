@@ -175,6 +175,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [loadingLeadForms, setLoadingLeadForms] = useState(false);
     const [selectedLeadFormId, setSelectedLeadFormId] = useState<string>('');
     const [hasPaidPlan, setHasPaidPlan] = useState(false); // Default to false (Secure by default - no flash)
+    const [isTrial, setIsTrial] = useState(false);
 
     // AI Assistant state
     const [showAIAssistant, setShowAIAssistant] = useState(false);
@@ -294,6 +295,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                         paidStatuses.includes(data.subscription.status) &&
                         !data.trial?.isActive;
                     setHasPaidPlan(hasPaidPlan);
+                    setIsTrial(!!data.trial?.isActive);
                 }
             } catch (error) {
                 console.error("Failed to fetch subscription status", error);
@@ -1164,9 +1166,15 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                 // Check if assigned to organization
                                                 const isAssigned = organisationPlatforms.includes(platform);
 
-                                                // Twilio platforms require APPROVED status
+                                                // Twilio platforms require APPROVED status and NOT being on trial
                                                 const isTwilioPlatform = ['SMS', 'WHATSAPP'].includes(platform);
-                                                const isLocked = isTwilioPlatform && twilioStatus !== 'APPROVED';
+                                                const isAdminLocked = isTwilioPlatform && twilioStatus !== 'APPROVED';
+                                                const isTrialLocked = isTwilioPlatform && isTrial;
+                                                const isCreditLocked = isTwilioPlatform && (
+                                                    (platform === 'SMS' && (wallet?.smsCreditsAvailable || 0) <= 0) ||
+                                                    (platform === 'WHATSAPP' && (wallet?.whatsappCreditsAvailable || 0) <= 0)
+                                                );
+                                                const isLocked = isAdminLocked || isTrialLocked || isCreditLocked;
 
                                                 // Check if user has connected account
                                                 let isConnected = false;
@@ -1188,13 +1196,31 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                         type="button"
                                                         onClick={() => {
                                                             if (isLocked) {
-                                                                toast('Admin Approval Required', {
-                                                                    description: 'SMS and WhatsApp are available via Twilio after admin approval and credit purchase.',
-                                                                    action: {
-                                                                        label: 'Go to Billing',
-                                                                        onClick: () => router.push('/organisation/billing')
-                                                                    }
-                                                                });
+                                                                if (isTrialLocked) {
+                                                                    toast('Not available for free trials', {
+                                                                        description: 'SMS and WhatsApp campaigns are restricted to paid plans. Please upgrade to use these features.',
+                                                                        action: {
+                                                                            label: 'Upgrade Now',
+                                                                            onClick: () => router.push('/organisation/billing')
+                                                                        }
+                                                                    });
+                                                                } else if (isAdminLocked) {
+                                                                    toast('Admin Approval Required', {
+                                                                        description: 'SMS and WhatsApp are available via Twilio after admin approval and credit purchase.',
+                                                                        action: {
+                                                                            label: 'Go to Billing',
+                                                                            onClick: () => router.push('/organisation/billing')
+                                                                        }
+                                                                    });
+                                                                } else if (isCreditLocked) {
+                                                                    toast('No Credits Available', {
+                                                                        description: `You have 0 ${platform} credits. Please purchase a pack to send ${platform} messages.`,
+                                                                        action: {
+                                                                            label: 'Add Credits',
+                                                                            onClick: () => router.push('/organisation/billing')
+                                                                        }
+                                                                    });
+                                                                }
                                                                 return;
                                                             }
                                                             if (!isConnected) {
@@ -1222,7 +1248,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                         </span>
                                                         {isLocked && (
                                                             <span className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 leading-tight text-center">
-                                                                Admin Approval
+                                                                {isTrialLocked ? "Trial Restricted" : isAdminLocked ? "Admin Approval" : "No Credits"}
                                                             </span>
                                                         )}
                                                     </button>
@@ -1239,9 +1265,13 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                         </div>
                                                                     </TooltipTrigger>
                                                                     <TooltipContent className="p-3 w-64 space-y-2">
-                                                                        <p className="text-sm font-semibold">Admin Approval Required</p>
+                                                                        <p className="text-sm font-semibold">{isTrialLocked ? "Trial Restriction Active" : isAdminLocked ? "Admin Approval Required" : "No Credits Available"}</p>
                                                                         <p className="text-xs text-muted-foreground">
-                                                                            SMS and WhatsApp messaging requires admin approval and credit purchase.
+                                                                            {isTrialLocked 
+                                                                              ? "SMS and WhatsApp campaigns are not available during the free trial period. Please upgrade to a paid plan to unlock these channels."
+                                                                              : isAdminLocked 
+                                                                              ? "SMS and WhatsApp messaging requires admin approval and credit purchase."
+                                                                              : `You have 0 ${platform} credits. Please purchase a pack to use this channel.`}
                                                                         </p>
                                                                         <Button
                                                                             size="sm"
@@ -1252,7 +1282,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                                 router.push('/organisation/billing');
                                                                             }}
                                                                         >
-                                                                            Purchase Pack / Request Access
+                                                                            {isTrialLocked ? "Upgrade Plan" : isAdminLocked ? "Purchase Pack / Request Access" : "Add Credits"}
                                                                         </Button>
                                                                     </TooltipContent>
                                                                 </Tooltip>

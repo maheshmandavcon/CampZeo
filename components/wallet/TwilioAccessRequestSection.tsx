@@ -12,9 +12,10 @@ interface TwilioAccessRequestSectionProps {
   status: "NONE" | "PENDING" | "APPROVED" | "REJECTED";
   reason?: string;
   onSuccess?: () => void;
+  isTrial?: boolean;
 }
 
-export function TwilioAccessRequestSection({ status, reason, onSuccess }: TwilioAccessRequestSectionProps) {
+export function TwilioAccessRequestSection({ status, reason, onSuccess, isTrial }: TwilioAccessRequestSectionProps) {
   const [requestReason, setRequestReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -45,6 +46,32 @@ export function TwilioAccessRequestSection({ status, reason, onSuccess }: Twilio
       setIsSubmitting(false);
     }
   };
+
+  if (isTrial) {
+    return (
+      <Card className="border-amber-100 bg-amber-50/30">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <AlertCircle className="size-5 text-amber-600" />
+            Access Restricted
+          </CardTitle>
+          <CardDescription>
+            SMS and WhatsApp messaging is not available for free trial accounts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-amber-800">
+            Please upgrade your plan to a paid subscription to request Add-ons access and start sending campaigns.
+          </p>
+        </CardContent>
+        <CardFooter>
+          {/* <Button className="w-full bg-amber-600 hover:bg-amber-700" onClick={() => (window.location.hash = "available-plans")}>
+            View Paid Plans
+          </Button> */}
+        </CardFooter>
+      </Card>
+    );
+  }
 
   if (status === "APPROVED") {
     return (
@@ -84,9 +111,9 @@ export function TwilioAccessRequestSection({ status, reason, onSuccess }: Twilio
             Our team is reviewing your request for Twilio access. You'll be notified once it's approved.
           </p>
           {reason && (
-             <div className="mt-3 p-2 bg-white/50 rounded text-xs italic text-blue-600 border border-blue-100">
-                "{reason}"
-             </div>
+            <div className="mt-3 p-2 bg-white/50 rounded text-xs italic text-blue-600 border border-blue-100">
+              "{reason}"
+            </div>
           )}
         </CardContent>
       </Card>
@@ -97,11 +124,11 @@ export function TwilioAccessRequestSection({ status, reason, onSuccess }: Twilio
     <Card className={status === "REJECTED" ? "border-red-100" : ""}>
       <CardHeader>
         <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-                <Send className="size-5 text-primary" />
-                Request Twilio Access
-            </CardTitle>
-            {status === "REJECTED" && <Badge variant="destructive">Rejected</Badge>}
+          <CardTitle className="flex items-center gap-2">
+            <Send className="size-5 text-primary" />
+            Request Twilio Access
+          </CardTitle>
+          {status === "REJECTED" && <Badge variant="destructive">Rejected</Badge>}
         </div>
         <CardDescription>
           Apply for SMS and WhatsApp campaign access. Please describe your use case briefly.
@@ -109,30 +136,30 @@ export function TwilioAccessRequestSection({ status, reason, onSuccess }: Twilio
       </CardHeader>
       <CardContent className="space-y-4">
         {status === "REJECTED" && (
-            <div className="flex items-start gap-3 p-3 bg-red-50 text-red-800 rounded-lg text-sm mb-2 border border-red-100">
-                <AlertCircle className="size-4 mt-0.5 shrink-0" />
-                <div>
-                   <p className="font-semibold">Request Rejected</p>
-                   <p className="text-xs">{reason || "No reason provided by admin."}</p>
-                </div>
+          <div className="flex items-start gap-3 p-3 bg-red-50 text-red-800 rounded-lg text-sm mb-2 border border-red-100">
+            <AlertCircle className="size-4 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-semibold">Request Rejected</p>
+              <p className="text-xs">{reason || "No reason provided by admin."}</p>
             </div>
+          </div>
         )}
         <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground uppercase">Reason for Request</label>
-            <Textarea 
-                placeholder="e.g. I want to send promotional SMS and WhatsApp updates to my 5000+ customer base." 
-                value={requestReason}
-                onChange={(e) => setRequestReason(e.target.value)}
-                className="min-h-[100px] border-2 border-gray-200 rounded-md resize-none"
-                disabled={isSubmitting}
-            />
+          <label className="text-xs font-medium text-muted-foreground uppercase">Reason for Request</label>
+          <Textarea
+            placeholder="e.g. I want to send promotional SMS and WhatsApp updates to my 5000+ customer base."
+            value={requestReason}
+            onChange={(e) => setRequestReason(e.target.value)}
+            className="min-h-[100px] resize-none border-red-600"
+            disabled={isSubmitting}
+          />
         </div>
       </CardContent>
       <CardFooter>
-        <Button 
-            className="w-full" 
-            onClick={handleSubmit} 
-            disabled={isSubmitting || !requestReason.trim()}
+        <Button
+          className="w-full"
+          onClick={handleSubmit}
+          disabled={isSubmitting || !requestReason.trim()}
         >
           {isSubmitting ? "Submitting..." : "Submit Request"}
         </Button>

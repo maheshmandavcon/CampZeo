@@ -89,18 +89,18 @@ async function getHandler(
         })
     ]);
 
-    if (!updatedTransaction || !updatedCampaignPost) {
-        return NextResponse.json({ error: "Post lost during sync" }, { status: 404 });
-    }
+        if (!updatedTransaction || !updatedCampaignPost) {
+            return NextResponse.json({ error: "Post lost during sync" }, { status: 404 });
+        }
 
-    const formattedPost = {
-        id: updatedTransaction.id,
-        postId: updatedTransaction.postId,
-        platform: updatedTransaction.platform,
-        message: updatedTransaction.message,
-        subject: updatedCampaignPost.subject || '',
-        postType: updatedTransaction.postType,
-        mediaUrls: updatedTransaction.mediaUrls,
+        const formattedPost = {
+            id: updatedTransaction.id,
+            postId: updatedTransaction.postId,
+            platform: updatedTransaction.platform,
+            message: updatedTransaction.message,
+            subject: updatedCampaignPost.subject || '',
+            postType: updatedTransaction.postType,
+            mediaUrls: updatedTransaction.mediaUrls,
         campaignName: updatedCampaignPost.campaign?.name || 'No Campaign',
         insight: {
             likes: insight?.likes || 0,

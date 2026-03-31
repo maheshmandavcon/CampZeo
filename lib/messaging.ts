@@ -10,6 +10,8 @@ interface SendEmailParams {
     subject: string;
     html: string;
     from?: string;
+    organisationId?: number;
+    campaignId?: number;
 }
 
 export async function sendEmail(params: SendEmailParams): Promise<void> {
@@ -19,18 +21,22 @@ export async function sendEmail(params: SendEmailParams): Promise<void> {
 interface SendSMSParams {
     to: string;
     message: string;
+    organisationId?: number;
+    campaignId?: number;
 }
 
 export async function sendSMS(params: SendSMSParams): Promise<void> {
-    await sendSms(params.to, params.message);
+    await sendSms(params.to, params.message, params.organisationId, params.campaignId);
 }
 
 interface SendWhatsAppParams {
     to: string;
     message: string;
     mediaUrls?: string[];
+    organisationId?: number;
+    campaignId?: number;
 }
 
 export async function sendWhatsApp(params: SendWhatsAppParams): Promise<void> {
-    await sendWhatsapp(params.to, params.message, params.mediaUrls);
+    await sendWhatsapp(params.to, params.message, params.mediaUrls, params.organisationId, params.campaignId);
 }
