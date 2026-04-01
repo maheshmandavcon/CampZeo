@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 const META_API_VERSION = 'v24.0';
 
 export async function GET(request: NextRequest) {
+    let platform = "unknown";
     try {
         const searchParams = request.nextUrl.searchParams;
         const code = searchParams.get("code");
@@ -10,14 +11,14 @@ export async function GET(request: NextRequest) {
         const error = searchParams.get("error");
 
         if (error) {
-            return NextResponse.redirect(new URL("/organisation/settings?error=" + error, request.url));
+            return NextResponse.redirect(new URL(`/auth-complete?status=error&error=${error}`, request.url));
         }
 
         if (!code || !state) {
-            return NextResponse.redirect(new URL("/organisation/settings?error=missing_params", request.url));
+            return NextResponse.redirect(new URL("/auth-complete?status=error&error=missing_params", request.url));
         }
 
-        const platform = state.split("_")[0];
+        platform = state.split("_")[0];
         const stateUserId = state.substring(platform.length + 1);
 
         console.log("🔵 OAuth Callback Received:", {
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
 
         if (!stateUserId) {
             console.error("❌ No user ID in state parameter");
-            return NextResponse.redirect(new URL("/organisation/settings?error=invalid_state", request.url));
+            return NextResponse.redirect(new URL(`/auth-complete?status=error&error=invalid_state&platform=${platform}`, request.url));
         }
 
         let user = await prisma.user.findUnique({
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
 
                 if (!clerkUser) {
                     console.error("❌ User not found in Clerk either:", { stateUserId });
-                    return NextResponse.redirect(new URL("/organisation/settings?error=user_not_found", request.url));
+                    return NextResponse.redirect(new URL(`/auth-complete?status=error&error=user_not_found&platform=${platform}`, request.url));
                 }
 
                 user = await prisma.user.create({
@@ -61,27 +62,30 @@ export async function GET(request: NextRequest) {
                 console.log(" User created in database:", { email: user.email });
             } catch (createError: any) {
                 console.error(" Failed to create user:", createError);
-                return NextResponse.redirect(new URL("/organisation/settings?error=user_creation_failed", request.url));
+                return NextResponse.redirect(new URL(`/auth-complete?status=error&error=user_creation_failed&platform=${platform}`, request.url));
             }
         }
 
         console.log(" User verified:", { email: user.email });
 
-        // Get config
+        const isDirect = platform === 'INSTAGRAM_DIRECT';
         const clientIdConfig = await prisma.adminPlatformConfiguration.findFirst({
-            where: { key: `${platform}_CLIENT_ID` }
+            where: { key: isDirect ? 'INSTAGRAM_DIRECT_ID' : `${platform}_CLIENT_ID` }
         });
         const clientSecretConfig = await prisma.adminPlatformConfiguration.findFirst({
-            where: { key: `${platform}_CLIENT_SECRET` }
+            where: { key: isDirect ? 'INSTAGRAM_DIRECT_SECRET' : `${platform}_CLIENT_SECRET` }
         });
         const redirectUriConfig = await prisma.adminPlatformConfiguration.findFirst({
-            where: { key: `${platform}_REDIRECT_URI` }
+            where: { key: isDirect ? 'INSTAGRAM_DIRECT_REDIRECT_URI' : `${platform}_REDIRECT_URI` }
         });
 
-        const redirectUri = redirectUriConfig?.value || `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth-callback`;
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        const clientId = clientIdConfig?.value || process.env.INSTAGRAM_DIRECT_ID;
+        const clientSecret = clientSecretConfig?.value || process.env.INSTAGRAM_DIRECT_SECRET;
+        const redirectUri = redirectUriConfig?.value || `${appUrl}/auth-callback`;
 
-        if (!clientIdConfig?.value || !clientSecretConfig?.value) {
-            return NextResponse.redirect(new URL("/organisation/settings?error=config_missing", request.url));
+        if (!clientId || !clientSecret) {
+            return NextResponse.redirect(new URL(`/auth-complete?status=error&error=config_missing&platform=${platform}`, request.url));
         }
 
         let accessToken = "";
@@ -89,11 +93,13 @@ export async function GET(request: NextRequest) {
         let expiresIn = 0;
 
         // Exchange code for token
-        if (platform === "FACEBOOK" || platform === "INSTAGRAM") {
-            const tokenUrl = `https://graph.facebook.com/${META_API_VERSION}/oauth/access_token?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${clientSecretConfig.value}&code=${code}`;
+        if (platform === "FACEBOOK" || platform === "INSTAGRAM" || platform === "INSTAGRAM_DIRECT") {
+            const tokenBaseUrl = platform === "INSTAGRAM_DIRECT" ? 'https://graph.instagram.com/v18.0' : 'https://graph.facebook.com';
+            const tokenUrl = `${tokenBaseUrl}${platform === "INSTAGRAM_DIRECT" ? '/access_token' : `/${META_API_VERSION}/oauth/access_token`}?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${clientSecret}&code=${code}`;
+            
             const res = await fetch(tokenUrl);
             const data = await res.json();
-            if (data.error) throw new Error(data.error.message);
+            if (data.error) throw new Error(data.error.message || data.error);
             accessToken = data.access_token;
             expiresIn = data.expires_in;
         } else if (platform === "LINKEDIN") {
@@ -102,8 +108,8 @@ export async function GET(request: NextRequest) {
             params.append("grant_type", "authorization_code");
             params.append("code", code);
             params.append("redirect_uri", redirectUri);
-            params.append("client_id", clientIdConfig.value);
-            params.append("client_secret", clientSecretConfig.value);
+            params.append("client_id", clientId);
+            params.append("client_secret", clientSecret);
 
             const res = await fetch(tokenUrl, {
                 method: "POST",
@@ -118,15 +124,15 @@ export async function GET(request: NextRequest) {
             const tokenUrl = "https://oauth2.googleapis.com/token";
             const params = new URLSearchParams();
             params.append("code", code);
-            params.append("client_id", clientIdConfig.value);
-            params.append("client_secret", clientSecretConfig.value);
+            params.append("client_id", clientId);
+            params.append("client_secret", clientSecret);
             params.append("redirect_uri", redirectUri);
             params.append("grant_type", "authorization_code");
 
             console.log("🔵 YouTube Token Exchange - Request:", {
                 tokenUrl,
                 redirectUri,
-                clientId: clientIdConfig.value.substring(0, 10) + "...",
+                clientId: clientId.substring(0, 10) + "...",
             });
 
             const res = await fetch(tokenUrl, {
@@ -322,6 +328,27 @@ export async function GET(request: NextRequest) {
                 updateData.instagramAccessToken = accessToken;
                 updateData.instagramUserId = "no-business-account";
             }
+        } else if (platform === "INSTAGRAM_DIRECT") {
+            // New Instagram Login Product (v18.0+)
+            updateData.instagramAccessToken = accessToken;
+            updateData.instagramTokenExpiresIn = expiresIn;
+            updateData.instagramTokenCreatedAt = new Date();
+
+            try {
+                // Fetch the Instagram account details directly
+                const meRes = await fetch(`https://graph.instagram.com/v18.0/me?fields=id,username,name&access_token=${accessToken}`);
+                const meData = await meRes.json();
+                
+                if (meData.id) {
+                    updateData.instagramUserId = meData.id;
+                    console.log("✅ Instagram Direct (Business Login) Connected:", {
+                        instagramId: meData.id,
+                        username: meData.username
+                    });
+                }
+            } catch (e) {
+                console.error("❌ Failed to fetch Instagram Direct profile:", e);
+            }
         } else if (platform === "LINKEDIN") {
             updateData.linkedInAccessToken = accessToken;
             // LinkedIn tokens are usually 60 days
@@ -375,9 +402,9 @@ export async function GET(request: NextRequest) {
             youtubeAuthUrn: updatedUser.youtubeAuthUrn ? "SET" : "NULL",
         });
 
-        return NextResponse.redirect(new URL("/organisation/settings?success=connected", request.url));
-    } catch (error) {
+        return NextResponse.redirect(new URL(`/auth-complete?status=success&platform=${platform}`, request.url));
+    } catch (error: any) {
         console.error("❌ Error in callback:", error);
-        return NextResponse.redirect(new URL("/organisation/settings?error=connection_failed", request.url));
+        return NextResponse.redirect(new URL(`/auth-complete?status=error&error=${encodeURIComponent(error.message || 'connection_failed')}&platform=${platform}`, request.url));
     }
 }

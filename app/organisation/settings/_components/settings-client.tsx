@@ -178,7 +178,18 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
       }
 
       if (data.url) {
-        window.location.href = data.url;
+        // window.location.href = data.url;
+        
+        const width = 600;
+        const height = 700;
+        const left = window.screenX + (window.outerWidth - width) / 2;
+        const top = window.screenY + (window.outerHeight - height) / 2;
+        
+        window.open(
+          data.url, 
+          `Connect ${platform}`, 
+          `width=${width},height=${height},left=${left},top=${top},status=no,locations=no,toolbar=no,menubar=no`
+        );
       }
     } catch (error) {
       console.error(error);
@@ -300,6 +311,24 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
       }
     };
     fetchSocialStatus();
+
+    const handleAuthMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+
+      if (event.data?.type === 'AUTH_COMPLETE') {
+        const { status, platform, error } = event.data;
+        
+        if (status === 'success') {
+          toast.success(`Successfully connected ${platform}!`);
+          window.location.reload();
+        } else {
+          toast.error(`Failed to connect ${platform}: ${error || 'Unknown error'}`);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleAuthMessage);
+    return () => window.removeEventListener('message', handleAuthMessage);
   }, []);
 
   useEffect(() => {
@@ -797,24 +826,43 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
               </div>
             </div>
 
-            {/* Option 2: Instagram Basic Display (Limited) */}
+            {/* Option 2: Instagram Basic Display (Direct) */}
             <div
-              className="flex items-start gap-4 p-4 border-2 rounded-lg cursor-pointer hover:border-primary hover:bg-accent transition-colors opacity-60"
-              onClick={() => {
-                toast.info('Instagram Basic Display is coming soon. Please use Facebook connection for now.');
+              className="flex items-start gap-4 p-4 border-2 rounded-lg cursor-pointer hover:border-primary hover:bg-accent transition-colors"
+              onClick={async () => {
+                setShowInstagramDialog(false);
+                try {
+                  const res = await fetch(`/api/socialmedia/auth-url?platform=INSTAGRAM_DIRECT`);
+                  const data = await res.json();
+                  if (data.url) {
+                    const width = 600;
+                    const height = 700;
+                    const left = window.screenX + (window.outerWidth - width) / 2;
+                    const top = window.screenY + (window.outerHeight - height) / 2;
+                    
+                    window.open(
+                      data.url, 
+                      'Connect Instagram', 
+                      `width=${width},height=${height},left=${left},top=${top},status=no,locations=no,toolbar=no,menubar=no`
+                    );
+                  }
+                } catch (error) {
+                  toast.error('Failed to connect');
+                }
               }}
             >
               <div className="p-2 rounded-full bg-pink-100">
                 <Instagram className="h-6 w-6 text-pink-600" />
               </div>
               <div className="flex-1">
-                <h4 className="font-semibold text-sm">Instagram Basic Display</h4>
+                <h4 className="font-semibold text-sm">Instagram Direct Login</h4>
                 <p className="text-xs text-muted-foreground mt-1">
                   Connect personal Instagram account. Limited to viewing posts and profile info only.
                 </p>
                 <div className="mt-2">
-                  <Badge variant="outline" className="text-xs">
-                    Coming Soon
+                  <Badge variant="secondary" className="text-xs">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Direct Login
                   </Badge>
                 </div>
               </div>

@@ -40,18 +40,27 @@ async function getHandler(request: NextRequest) {
         }
 
         // Get config from DB
+        const isDirect = platform === 'INSTAGRAM_DIRECT';
         const clientIdConfig = await prisma.adminPlatformConfiguration.findFirst({
-            where: { key: `${platform}_CLIENT_ID` }
+            where: { key: isDirect ? 'INSTAGRAM_DIRECT_ID' : `${platform}_CLIENT_ID` }
+        });
+
+        const clientSecretConfig = await prisma.adminPlatformConfiguration.findFirst({
+            where: { key: isDirect ? 'INSTAGRAM_DIRECT_SECRET' : `${platform}_CLIENT_SECRET` }
         });
 
         const redirectUriConfig = await prisma.adminPlatformConfiguration.findFirst({
-            where: { key: `${platform}_REDIRECT_URI` }
+            where: { key: isDirect ? 'INSTAGRAM_DIRECT_REDIRECT_URI' : `${platform}_REDIRECT_URI` }
         });
 
         // Fallback or default redirect URI if not set
-        const redirectUri = redirectUriConfig?.value || `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth-callback`;
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        const redirectUri = redirectUriConfig?.value || `${appUrl}/auth-callback`;
 
-        if (!clientIdConfig?.value) {
+        const clientId = clientIdConfig?.value || process.env.INSTAGRAM_DIRECT_ID;
+        const clientSecret = clientSecretConfig?.value || process.env.INSTAGRAM_DIRECT_SECRET;
+
+        if (!clientId) {
             return NextResponse.json({ error: `Configuration for ${platform} is missing (Client ID)` }, { status: 404 });
         }
 
@@ -68,8 +77,7 @@ async function getHandler(request: NextRequest) {
             authUrl = `https://www.facebook.com/v24.0/dialog/oauth?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,instagram_manage_insights,business_management,instagram_manage_messages,public_profile`;
             break;
         case "INSTAGRAM_DIRECT":
-            // Direct Instagram app authentication (not via Facebook)
-            authUrl = `https://api.instagram.com/oauth/authorize?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user_profile,user_media&response_type=code&state=${state}`;
+            authUrl = `https://www.instagram.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=business_basic,business_content_publish,business_manage_insights,business_manage_comments,business_manage_messages&response_type=code&state=${state}`;
             break;
 
             case "LINKEDIN":
