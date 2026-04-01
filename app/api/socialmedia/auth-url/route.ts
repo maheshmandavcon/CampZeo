@@ -77,7 +77,7 @@ async function getHandler(request: NextRequest) {
             authUrl = `https://www.facebook.com/v24.0/dialog/oauth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,instagram_manage_insights,business_management,instagram_manage_messages,public_profile`;
             break;
         case "INSTAGRAM_DIRECT":
-            authUrl = `https://www.instagram.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=business_basic,business_content_publish,business_manage_insights,business_manage_comments,business_manage_messages&response_type=code&state=${state}`;
+            authUrl = `https://www.instagram.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=instagram_business_basic,instagram_business_content_publish,instagram_business_manage_insights,instagram_business_manage_comments,instagram_business_manage_messages&response_type=code&state=${state}&force_reauth=true`;
             break;
 
             case "LINKEDIN":
