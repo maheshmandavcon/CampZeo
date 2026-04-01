@@ -329,7 +329,7 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
       icon: Facebook,
       color: "text-blue",
       connected: userData.facebookConnected,
-      accountName: socialStatus?.facebook?.name,
+      accountName: socialStatus?.facebook?.userName || socialStatus?.facebook?.name,
       description: "Connect your Facebook Page to share posts and view analytics.",
     },
     {
@@ -548,7 +548,7 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                                 <div className="mt-2 pt-1 border-t border-muted/50">
                                   {userData.facebookPageId ? (
                                     <p className="text-xs text-green-600 font-medium">
-                                      Linked Page: {socialStatus?.facebook?.name || userData.facebookPageId}
+                                      Linked Page: {socialStatus?.facebook?.pageName || socialStatus?.facebook?.name || userData.facebookPageId}
                                     </p>
                                   ) : (
                                     <p className="text-xs text-red-500 font-medium flex items-center gap-1">

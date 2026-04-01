@@ -60,10 +60,12 @@ async function getHandler(request: NextRequest) {
 
     switch (platform) {
         case "FACEBOOK":
+            // Permissions needed for Facebook Pages, Ads, Leads, etc.
+            authUrl = `https://www.facebook.com/v24.0/dialog/oauth?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=pages_show_list,pages_read_engagement,pages_read_user_content,read_insights,pages_manage_posts,pages_manage_ads,ads_management,ads_read,leads_retrieval,business_management,pages_messaging,public_profile`;
+            break;
         case "INSTAGRAM": // Instagram Graph API uses Facebook Login
-            // Permissions needed:
-            // ...
-            authUrl = `https://www.facebook.com/v24.0/dialog/oauth?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=pages_show_list,pages_read_engagement,pages_read_user_content,read_insights,pages_manage_posts,pages_manage_ads,ads_management,ads_read,leads_retrieval,instagram_basic,instagram_content_publish,instagram_manage_insights,business_management,instagram_manage_messages,pages_messaging,public_profile`;
+            // Permissions needed specifically for Instagram Business accounts
+            authUrl = `https://www.facebook.com/v24.0/dialog/oauth?client_id=${clientIdConfig.value}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,instagram_manage_insights,business_management,instagram_manage_messages,public_profile`;
             break;
         case "INSTAGRAM_DIRECT":
             // Direct Instagram app authentication (not via Facebook)

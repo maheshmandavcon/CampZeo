@@ -97,35 +97,37 @@ async function getHandler() {
 
         // Facebook
         if (dbUser.facebookAccessToken || dbUser.facebookPageAccessToken) {
-            // Priority 1: Try Page Access Token with Page ID if we have them
-            let fbStatus = null;
+            let fbStatus: any = { connected: true, pageId: dbUser.facebookPageId };
+            let hasError = false;
 
-            if (dbUser.facebookPageAccessToken) {
-                fbStatus = await getFacebookStatus(dbUser.facebookPageAccessToken, dbUser.facebookPageId);
-            }
-
-            // Priority 2: Try User Access Token if Page token wasn't enough or failed
-            if ((!fbStatus || !fbStatus.connected || fbStatus.error) && dbUser.facebookAccessToken) {
+            if (dbUser.facebookAccessToken) {
                 const userStatus = await getFacebookStatus(dbUser.facebookAccessToken);
-
-                // If user status is healthier (no error), or if we didn't have a page status yet, use it
-                if (userStatus && userStatus.connected && (!userStatus.error || !fbStatus)) {
-                    fbStatus = userStatus;
+                if (userStatus.connected && !userStatus.error) {
+                    fbStatus.userName = userStatus.name;
+                    fbStatus.name = userStatus.name; 
+                } else if (userStatus.error) {
+                    fbStatus.error = userStatus.error;
+                    hasError = true;
                 }
             }
 
-            if (fbStatus) {
-                status.facebook = {
-                    ...fbStatus,
-                    pageId: dbUser.facebookPageId
-                };
-                // If it's a session expired error, override name for UI clarity
-                if (fbStatus.error === "Session Expired") {
-                    status.facebook.name = "Session Expired (Re-connect)";
+            if (dbUser.facebookPageAccessToken && dbUser.facebookPageId) {
+                const pageStatus = await getFacebookStatus(dbUser.facebookPageAccessToken, dbUser.facebookPageId);
+                if (pageStatus.connected && !pageStatus.error) {
+                    fbStatus.pageName = pageStatus.name;
                 }
-            } else {
-                status.facebook = { connected: true, name: "Connection Restricted" };
             }
+
+            // Error formatting
+            if (fbStatus.error === "Session Expired") {
+                fbStatus.name = "Session Expired (Re-connect)";
+                fbStatus.userName = "Session Expired";
+                fbStatus.pageName = "Session Expired";
+            } else if (!fbStatus.userName && !hasError) {
+                fbStatus.name = "Connection Restricted";
+            }
+
+            status.facebook = fbStatus;
         } else {
             status.facebook = { connected: false };
         }

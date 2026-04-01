@@ -82,8 +82,15 @@ export function validateMediaUrl(url: string): { valid: boolean; message?: strin
  * @returns File extension (e.g., 'jpg', 'mp4')
  */
 export function getFileExtension(url: string): string {
-    const match = url.match(/\.([^./?]+)(?:\?|$)/);
-    return match ? match[1].toLowerCase() : '';
+    if (!url) return '';
+    try {
+        const path = new URL(url).pathname;
+        const parts = path.split('.');
+        return parts.length > 1 ? parts.pop()?.toLowerCase() || '' : '';
+    } catch {
+        const match = url.match(/\.([^./?]+)(?:\?|$)/);
+        return match ? match[1].toLowerCase() : '';
+    }
 }
 
 /**
@@ -93,7 +100,8 @@ export function getFileExtension(url: string): string {
  */
 export function isVideoUrl(url: string): boolean {
     const ext = getFileExtension(url);
-    return ['mp4', 'mov', 'webm', 'avi', 'quicktime'].includes(ext);
+    return ['mp4', 'mov', 'webm', 'avi', 'mkv', 'flv', 'wmv', 'm4v', 'quicktime'].includes(ext);
+   
 }
 
 /**

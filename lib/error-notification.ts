@@ -186,6 +186,7 @@ export async function notifyAdminOfError(apiName: string, error: any, context?: 
 
                 // Log success
                 console.log(`✅ Admin alert sent to ${recipient}`);
+                /* 
                 try {
                     await prisma.systemNotificationLog.create({
                         data: {
@@ -198,10 +199,12 @@ export async function notifyAdminOfError(apiName: string, error: any, context?: 
                 } catch (dbError) {
                     console.error(`⚠️ Failed to log successful email to database for ${recipient}:`, dbError);
                 }
+                */
             } catch (sendError: any) {
                 const detailedError = `Error Code: ${sendError.code || 'N/A'}, Message: ${sendError.message}`;
                 console.error(`❌ Failed to send admin alert to ${recipient}:`, detailedError);
                 // Log failure
+                /*
                 try {
                     await prisma.systemNotificationLog.create({
                         data: {
@@ -221,6 +224,7 @@ export async function notifyAdminOfError(apiName: string, error: any, context?: 
                 } catch (dbError) {
                     console.error(`⚠️ Failed to log failed email to database for ${recipient}:`, dbError);
                 }
+                */
             }
         }
 

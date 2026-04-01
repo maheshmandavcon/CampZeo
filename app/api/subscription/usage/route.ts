@@ -130,7 +130,8 @@ async function getHandler() {
 
         const hasLinkedIn = orgUsers.some(u => !!u.linkedInAccessToken);
         const hasFacebook = orgUsers.some(u => !!(u.facebookAccessToken || u.facebookPageAccessToken));
-        const hasInstagram = orgUsers.some(u => !!(u.instagramAccessToken && u.instagramUserId && u.instagramUserId !== 'no-business-account'));
+        const hasInstagram = orgUsers.some(u => !!(u.instagramAccessToken && u.instagramUserId ));
+        // && u.instagramUserId !== 'no-business-account'
         const hasYouTube = orgUsers.some(u => !!u.youtubeAccessToken);
         const hasPinterest = orgUsers.some(u => !!u.pinterestAccessToken);
 
