@@ -79,13 +79,18 @@ interface UsageMetric {
   isNearLimit: boolean;
 }
 
+interface PostsComparison {
+  current: number;
+  lastMonth: number;
+  growth: number;
+}
+
 interface UsageData {
   usage: {
     campaigns: UsageMetric;
     contacts: UsageMetric;
-    users: UsageMetric;
     platforms: UsageMetric & { connectedNames?: string[] };
-    postsThisMonth: UsageMetric;
+    postsThisMonth: PostsComparison;
   };
 }
 

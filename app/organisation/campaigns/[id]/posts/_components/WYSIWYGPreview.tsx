@@ -16,8 +16,22 @@ import {
     Play,
     Video,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    FileText,
+    FileSpreadsheet,
+    File,
+    Download,
+    ExternalLink,
+    Eye,
+    FileIcon,
+    FileQuestion
 } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 
 interface WYSIWYGPreviewProps {
     platform: string;
@@ -47,6 +61,7 @@ export function WYSIWYGPreview({
 }: WYSIWYGPreviewProps) {
     const [isPlayingVideo, setIsPlayingVideo] = React.useState(false);
     const [currentSlideIndex, setCurrentSlideIndex] = React.useState(0);
+    const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
 
     // Reset slide index when media or platform changes
     React.useEffect(() => {
@@ -54,6 +69,26 @@ export function WYSIWYGPreview({
     }, [mediaUrls, platform]);
 
     const isVideo = (url: string) => url.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
+    const isImage = (url: string) => url.match(/\.(jpg|jpeg|png|gif|webp|avif|bmp|tiff)(\?.*)?$/i);
+    const isDocument = (url: string) => url.match(/\.(pdf|csv|xlsx|xls|doc|docx|txt|ppt|pptx)(\?.*)?$/i);
+
+    const getFileIcon = (url: string) => {
+        const ext = url.split('.').pop()?.split('?')[0].toLowerCase() || '';
+        if (['csv', 'xlsx', 'xls'].includes(ext)) return <FileSpreadsheet className="size-10 text-green-600" />;
+        if (ext === 'pdf') return <FileText className="size-10 text-red-500" />;
+        if (['doc', 'docx'].includes(ext)) return <FileText className="size-10 text-blue-600" />;
+        return <File className="size-10 text-gray-500" />;
+    };
+
+    const getFileName = (url: string) => {
+        try {
+            const decoded = decodeURIComponent(url);
+            return decoded.split('/').pop()?.split('?')[0] || 'Attachment';
+        } catch {
+            return 'Attachment';
+        }
+    };
+
     const userName = user?.name || "Your Brand";
     const userImage = user?.image;
     const userInitials = userName.substring(0, 2).toUpperCase();
@@ -72,8 +107,21 @@ export function WYSIWYGPreview({
 
         const renderMediaItem = (url: string, className?: string) => {
             const isVid = isVideo(url);
+            const isImg = isImage(url);
+            const isDoc = isDocument(url);
+
             return (
-                <div className={cn("relative overflow-hidden bg-black", className)}>
+                <div
+                    className={cn(
+                        "relative overflow-hidden bg-muted/20 cursor-pointer group/media",
+                        className
+                    )}
+                    onClick={() => {
+                        if (isDoc || isVid || !isImg) {
+                            setSelectedFile(url);
+                        }
+                    }}
+                >
                     {isVid ? (
                         <video
                             src={url}
@@ -83,7 +131,7 @@ export function WYSIWYGPreview({
                             loop
                             playsInline
                         />
-                    ) : (
+                    ) : isImg ? (
                         <Image
                             src={url}
                             alt="Preview"
@@ -91,6 +139,16 @@ export function WYSIWYGPreview({
                             className="object-fill"
                             unoptimized
                         />
+                    ) : (
+                        <div className="flex size-full flex-col items-center justify-center gap-2 bg-gray-50 p-4">
+                            {getFileIcon(url)}
+                            <p className="max-w-full truncate text-[10px] font-medium text-gray-600 px-2">
+                                {getFileName(url)}
+                            </p>
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover/media:bg-black/5 transition-colors">
+                                <Eye className="size-5 text-gray-400 opacity-0 group-hover/media:opacity-100 transition-opacity" />
+                            </div>
+                        </div>
                     )}
                     {isVid && (
                         <div className="absolute top-2 right-2 opacity-50">
@@ -646,6 +704,72 @@ export function WYSIWYGPreview({
                     {renderPlatformPreview()}
                 </div>
             </div>
+
+            <Dialog open={!!selectedFile}  onOpenChange={() => setSelectedFile(null)}>
+                <DialogContent className="gap-0 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-0 border-none bg-transparent shadow-none">
+                    <DialogHeader className="p-4 bg-white rounded-t-lg border-b">
+                        <DialogTitle className="text-gray-900 truncate pr-8">
+                            {selectedFile ? getFileName(selectedFile) : 'File Preview'}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="flex-1 bg-gray-100/50 backdrop-blur-md overflow-hidden relative ">
+                        {selectedFile && (
+                            <>
+                                {isVideo(selectedFile) ? (
+                                    <video src={selectedFile} className="size-full" controls autoPlay />
+                                ) : isImage(selectedFile) ? (
+                                    <div className="relative size-full flex items-center justify-center p-4">
+                                        <Image
+                                            src={selectedFile}
+                                            alt="Preview"
+                                            fill
+                                            className="object-contain"
+                                            unoptimized
+                                        />
+                                    </div>
+                                ) : isDocument(selectedFile) && selectedFile.toLowerCase().includes('.pdf') ? (
+                                    <iframe
+                                        src={selectedFile}
+                                        className="size-full border-0 min-h-[600px] overflow-hidden"
+                                        title="PDF Preview"
+                                    />
+                                ) : (
+                                    <div className="flex h-full flex-col items-center justify-center p-12 text-center bg-white">
+                                        <div className="mb-6 rounded-2xl bg-muted p-8">
+                                            {getFileIcon(selectedFile)}
+                                        </div>
+                                        <h3 className="mb-2 text-lg font-semibold text-gray-900">
+                                            {getFileName(selectedFile)}
+                                        </h3>
+                                        <p className="mb-8 max-w-md text-sm text-gray-500">
+                                            This file type cannot be previewed directly in the browser. You can download it to view the content.
+                                        </p>
+                                        <div className="flex gap-3">
+                                            <a
+                                                href={selectedFile}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-2 rounded-full bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-blue-700 shadow-md"
+                                            >
+                                                <ExternalLink className="size-4" />
+                                                Open in New Tab
+                                            </a>
+                                            <a
+                                                href={selectedFile}
+                                                download
+                                                className="flex items-center gap-2 rounded-full border bg-white px-6 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 shadow-sm"
+                                            >
+                                                <Download className="size-4" />
+                                                Download File
+                                            </a>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
