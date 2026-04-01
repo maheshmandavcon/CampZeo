@@ -892,10 +892,14 @@ export async function sendCampaignPost(
                     message = message.replace(new RegExp(key, 'g'), value);
                 });
 
+                const formattedMessage = message
+                    .replace(/\n/g, '<br />')
+                    .replace(/  /g, '&nbsp; ');
+
                 const sent = await sendCampaignEmail({
                     to: contact.contactEmail,
                     subject: subject,
-                    html: message,
+                    html: `<div style="font-family: sans-serif; line-height: 1.5;">${formattedMessage}</div>`,
                     replyTo: post.senderEmail || undefined,
                     tags: [campaignTag],
                     attachments: post.mediaUrls
