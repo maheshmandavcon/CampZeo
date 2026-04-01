@@ -89,9 +89,11 @@ export async function GET(request: NextRequest) {
         });
 
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        const isLocal = appUrl.includes('localhost');
+        const redirectUri = (isLocal ? null : redirectUriConfig?.value) || `${appUrl}/auth-callback`;
+
         const clientId = clientIdConfig?.value || process.env.INSTAGRAM_DIRECT_ID;
         const clientSecret = clientSecretConfig?.value || process.env.INSTAGRAM_DIRECT_SECRET;
-        const redirectUri = redirectUriConfig?.value || `${appUrl}/auth-callback`;
 
         if (!clientId || !clientSecret) {
             return NextResponse.redirect(new URL(`/auth-complete?status=error&error=config_missing&platform=${platform}`, request.url));
@@ -102,16 +104,51 @@ export async function GET(request: NextRequest) {
         let expiresIn = 0;
 
         // Exchange code for token
-        if (platform === "FACEBOOK" || platform === "INSTAGRAM" || platform === "INSTAGRAM_DIRECT" || platform === "INSTAGRAM_BASIC") {
-            const isInstagramDirect = platform === "INSTAGRAM_DIRECT" || platform === "INSTAGRAM_BASIC";
-            const tokenBaseUrl = isInstagramDirect ? 'https://graph.instagram.com/v18.0' : 'https://graph.facebook.com';
-            const tokenUrl = `${tokenBaseUrl}${isInstagramDirect ? '/access_token' : `/${META_API_VERSION}/oauth/access_token`}?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${clientSecret}&code=${code}`;
+        if (platform === "FACEBOOK" || platform === "INSTAGRAM") {
+            const tokenUrl = `https://graph.facebook.com/${META_API_VERSION}/oauth/access_token?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${clientSecret}&code=${code}`;
             
             const res = await fetch(tokenUrl);
             const data = await res.json();
             if (data.error) throw new Error(data.error.message || data.error);
             accessToken = data.access_token;
             expiresIn = data.expires_in;
+        } else if (platform === "INSTAGRAM_DIRECT" || platform === "INSTAGRAM_BASIC") {
+            const tokenUrl = "https://api.instagram.com/oauth/access_token";
+            const params = new URLSearchParams();
+            params.append("client_id", clientId);
+            params.append("client_secret", clientSecret);
+            params.append("grant_type", "authorization_code");
+            params.append("redirect_uri", redirectUri);
+            params.append("code", code);
+
+            const res = await fetch(tokenUrl, {
+                method: "POST",
+                body: params,
+            });
+            const data = await res.json();
+            
+            if (data.error || data.error_message) throw new Error(data.error_message || data.error || "Token exchange failed");
+            
+            const shortLivedToken = data.access_token;
+            
+            try {
+                const longLivedRes = await fetch(`https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${clientSecret}&access_token=${shortLivedToken}`);
+                const longLivedData = await longLivedRes.json();
+                
+                if (longLivedData.access_token) {
+                    accessToken = longLivedData.access_token;
+                    expiresIn = longLivedData.expires_in || 5184000; 
+                    console.log(" Instagram Long-Lived Token obtained");
+                } else {
+                    accessToken = shortLivedToken;
+                    expiresIn = 3600;
+                    console.warn(" Failed to obtain Instagram Long-Lived Token, using short-lived.");
+                }
+            } catch (exchangeError) {
+                console.error(" Error exchanging Instagram token:", exchangeError);
+                accessToken = shortLivedToken;
+                expiresIn = 3600;
+            }
         } else if (platform === "LINKEDIN") {
             const tokenUrl = "https://www.linkedin.com/oauth/v2/accessToken";
             const params = new URLSearchParams();
@@ -169,7 +206,7 @@ export async function GET(request: NextRequest) {
             // Authorization: Basic <base64(client_id:client_secret)>
             // grant_type=authorization_code&code=...&redirect_uri=...
             const tokenUrl = "https://api.pinterest.com/v5/oauth/token";
-            const authHeader = Buffer.from(`${clientIdConfig.value}:${clientSecretConfig.value}`).toString('base64');
+            const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
             const params = new URLSearchParams();
             params.append("grant_type", "authorization_code");
             params.append("code", code);

@@ -101,7 +101,7 @@ async function getHandler(request: NextRequest) {
             platform,
             userId: userId.substring(0, 10) + "...",
             redirectUri,
-            hasClientId: !!clientIdConfig.value,
+            hasClientId: !!clientIdConfig?.value,
             state,
         });
 
