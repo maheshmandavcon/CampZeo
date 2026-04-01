@@ -309,6 +309,7 @@ export async function GET(request: NextRequest) {
 
                             updateData.instagramTokenExpiresIn = expiresIn;
                             updateData.instagramTokenCreatedAt = new Date();
+                            updateData.instagramConnectionType = "FACEBOOK";
 
                             console.log("✅ Instagram Business Account Connected:", {
                                 instagramId: page.instagram_business_account.id,
@@ -340,6 +341,7 @@ export async function GET(request: NextRequest) {
                                     updateData.instagramAccessToken = page.access_token;
                                     updateData.instagramTokenExpiresIn = expiresIn;
                                     updateData.instagramTokenCreatedAt = new Date();
+                                    updateData.instagramConnectionType = "FACEBOOK";
 
                                     console.log("✅ Instagram Business Account Connected (Method 2):", {
                                         instagramId: igData.instagram_business_account.id,
@@ -380,6 +382,7 @@ export async function GET(request: NextRequest) {
             updateData.instagramAccessToken = accessToken;
             updateData.instagramTokenExpiresIn = expiresIn;
             updateData.instagramTokenCreatedAt = new Date();
+            updateData.instagramConnectionType = "DIRECT";
 
             try {
                 // Fetch the Instagram account details directly

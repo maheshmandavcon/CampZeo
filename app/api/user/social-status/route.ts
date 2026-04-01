@@ -132,79 +132,96 @@ async function getHandler() {
             status.facebook = { connected: false };
         }
 
-        // Instagram (via Facebook Graph API for Business Accounts)
         if (dbUser.instagramAccessToken && dbUser.instagramUserId) {
-            // Check if we need to try and heal a "no-business-account" state
-            if (dbUser.instagramUserId === 'no-business-account') {
-                let healed = false;
+            const connectionType = dbUser?.instagramConnectionType;
+
+            if (connectionType === 'DIRECT') {
                 try {
-                    // Start Recovery: Try to find the business account again
-                    console.log("[Social Status] Attempting to heal Instagram 'no-business-account' state...");
-                    const pagesRes = await fetchWithTimeout(
-                        `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,name}&access_token=${dbUser.instagramAccessToken}`
-                    );
-
-                    if (pagesRes.ok) {
-                        const pagesData = await pagesRes.json();
-                        if (pagesData.data && Array.isArray(pagesData.data)) {
-                            for (const page of pagesData.data) {
-                                if (page.instagram_business_account?.id) {
-                                    // Found one! Update the DB
-                                    const businessId = page.instagram_business_account.id;
-                                    const pageToken = page.access_token;
-                                    const username = page.instagram_business_account.username;
-
-                                    await prisma.user.update({
-                                        where: { clerkId: targetUserId },
-                                        data: {
-                                            instagramUserId: businessId,
-                                            instagramAccessToken: pageToken
-                                        }
-                                    });
-
-                                    status.instagram = { connected: true, name: username ? `@${username}` : page.instagram_business_account.name || "Connected" };
-                                    healed = true;
-                                    console.log(`[Social Status] Successfully healed Instagram connection for user. Found: ${businessId}`);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                } catch (healError) {
-                    console.error("[Social Status] Heal attempt failed:", healError);
-                }
-
-                if (!healed) {
-                    status.instagram = { connected: true, name: "No Business Account Linked" };
-                }
-            } else {
-                // Normal fetching
-                try {
-                    // Use Facebook Graph API with the Instagram Business Account ID
-                    // Note: dbUser.instagramAccessToken is likely the Page Token here (best practice) or User Token
                     const res = await fetchWithTimeout(
-                        `https://graph.facebook.com/v18.0/${dbUser.instagramUserId}?fields=username,name&access_token=${dbUser.instagramAccessToken}`
+                        `https://graph.instagram.com/v18.0/me?fields=username,name&access_token=${dbUser.instagramAccessToken}`
                     );
                     if (res.ok) {
                         const data = await res.json();
-                        // Prefer username, fallback to name
                         const displayName = data.username ? `@${data.username}` : data.name || "Connected";
                         status.instagram = { connected: true, name: displayName, username: data.username };
                     } else {
-                        // Try to get error details
                         const errorData = await res.json().catch(() => ({}));
-                        console.error("[Social Status] Instagram fetch error:", errorData);
-
-                        // If invalid session, maybe token expired?
-                        if (errorData.error?.code === 190) {
+                        console.error("[Social Status] Instagram Direct fetch error:", errorData);
+                        if (errorData.error?.code === 190 || errorData.error?.type === 'OAuthException') {
                             status.instagram = { connected: false, error: "Session Expired" };
                         } else {
                             status.instagram = { connected: true, name: "Connected" };
                         }
                     }
                 } catch (e) {
-                    console.error("[Social Status] Instagram error:", e);
+                    console.error("[Social Status] Instagram Direct error:", e);
                     status.instagram = { connected: true, name: "Connected" };
+                }
+            } else {
+                // Check if we need to try and heal a "no-business-account" state
+                if (dbUser.instagramUserId === 'no-business-account') {
+                    let healed = false;
+                    try {
+                        console.log("[Social Status] Attempting to heal Instagram 'no-business-account' state...");
+                        const pagesRes = await fetchWithTimeout(
+                            `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,name}&access_token=${dbUser.instagramAccessToken}`
+                        );
+
+                        if (pagesRes.ok) {
+                            const pagesData = await pagesRes.json();
+                            if (pagesData.data && Array.isArray(pagesData.data)) {
+                                for (const page of pagesData.data) {
+                                    if (page.instagram_business_account?.id) {
+                                        const businessId = page.instagram_business_account.id;
+                                        const pageToken = page.access_token;
+                                        const username = page.instagram_business_account.username;
+
+                                        await prisma.user.update({
+                                            where: { clerkId: targetUserId },
+                                            data: {
+                                                instagramUserId: businessId,
+                                                instagramAccessToken: pageToken,
+                                                instagramConnectionType: 'FACEBOOK'
+                                            }
+                                        });
+
+                                        status.instagram = { connected: true, name: username ? `@${username}` : page.instagram_business_account.name || "Connected" };
+                                        healed = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (healError) {
+                        console.error("[Social Status] Heal attempt failed:", healError);
+                    }
+
+                    if (!healed) {
+                        status.instagram = { connected: true, name: "No Business Account Linked" };
+                    }
+                } else {
+                    // Normal Facebook-based fetching
+                    try {
+                        const res = await fetchWithTimeout(
+                            `https://graph.facebook.com/v18.0/${dbUser.instagramUserId}?fields=username,name&access_token=${dbUser.instagramAccessToken}`
+                        );
+                        if (res.ok) {
+                            const data = await res.json();
+                            const displayName = data.username ? `@${data.username}` : data.name || "Connected";
+                            status.instagram = { connected: true, name: displayName, username: data.username };
+                        } else {
+                            const errorData = await res.json().catch(() => ({}));
+                            console.error("[Social Status] Instagram Business fetch error:", errorData);
+                            if (errorData.error?.code === 190) {
+                                status.instagram = { connected: false, error: "Session Expired" };
+                            } else {
+                                status.instagram = { connected: true, name: "Connected" };
+                            }
+                        }
+                    } catch (e) {
+                        console.error("[Social Status] Instagram Business error:", e);
+                        status.instagram = { connected: true, name: "Connected" };
+                    }
                 }
             }
         } else if (dbUser.instagramAccessToken) {

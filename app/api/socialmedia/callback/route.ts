@@ -19,6 +19,7 @@ async function getHandler(request: NextRequest) {
         }
 
         const platform = state.split("_")[0];
+        const isInstagramDirect = platform === 'INSTAGRAM_DIRECT' || platform === 'INSTAGRAM_BASIC';
         const stateUserId = state.substring(platform.length + 1);
 
         if (!stateUserId) {
@@ -60,7 +61,7 @@ async function getHandler(request: NextRequest) {
             where: { key: `${platform}_CLIENT_SECRET` }
         });
         const redirectUriConfig = await prisma.adminPlatformConfiguration.findFirst({
-            where: { key: `${platform}_REDIRECT_URI` }
+            where: { key: isInstagramDirect ? 'INSTAGRAM_DIRECT_REDIRECT_URI' : `${platform}_REDIRECT_URI` }
         });
 
         const redirectUri = redirectUriConfig?.value || `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth-callback`;
@@ -80,6 +81,28 @@ async function getHandler(request: NextRequest) {
             if (data.error) throw new Error(data.error.message);
             accessToken = data.access_token;
             expiresIn = data.expires_in;
+        } else if (isInstagramDirect) {
+            const tokenUrl = 'https://api.instagram.com/oauth/access_token';
+            const res = await fetch(tokenUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    client_id: clientIdConfig.value,
+                    client_secret: clientSecretConfig.value,
+                    grant_type: 'authorization_code',
+                    redirect_uri: redirectUri,
+                    code: code
+                }).toString()
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error_message || 'Instagram token exchange failed');
+            accessToken = data.access_token;
+            const longLivedUrl = `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${clientSecretConfig.value}&access_token=${accessToken}`;
+            const llRes = await fetch(longLivedUrl);
+            const llData = await llRes.json();
+            if (!llRes.ok) throw new Error(llData.error?.message || 'Failed to exchange for long-lived token');
+            accessToken = llData.access_token;
+            expiresIn = llData.expires_in;
         } else if (platform === "LINKEDIN") {
             const tokenUrl = "https://www.linkedin.com/oauth/v2/accessToken";
             const params = new URLSearchParams();
@@ -159,6 +182,7 @@ async function getHandler(request: NextRequest) {
             updateData.instagramAccessToken = accessToken;
             updateData.instagramTokenExpiresIn = expiresIn;
             updateData.instagramTokenCreatedAt = new Date();
+            updateData.instagramConnectionType = isInstagramDirect ? 'DIRECT' : 'FACEBOOK';
 
         try {
             // Fetch user's pages to find the connected Instagram Business Account

@@ -25,6 +25,7 @@ model User {
   instagramTokenCreatedAt DateTime?
   instagramTokenExpiresIn Int?
   instagramUserId         String?
+  instagramConnectionType String?
   isApproved              Boolean       @default(false)
   isFirstLogin            Boolean       @default(true)
   linkedInAccessToken     String?
@@ -505,6 +506,19 @@ model WalletTransaction {
   campaignId  Int?
   createdAt   DateTime @default(now())
   wallet      Wallet   @relation(fields: [walletId], references: [id])
+}
+
+model SystemNotificationLog {
+  id        Int      @id @default(autoincrement())
+  subject   String
+  recipient String
+  status    String
+  error     String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([recipient])
+  @@index([status])
 }
 
 enum TwilioAccessStatus {

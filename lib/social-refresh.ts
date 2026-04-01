@@ -14,6 +14,8 @@ export async function refreshUserTokens(clerkId: string) {
             pinterestAccessToken: true,
             pinterestAuthUrn: true, // Stores Refresh Token
             linkedInAccessToken: true,
+            instagramAccessToken: true,
+            instagramConnectionType: true,
             // Note: linkedInAuthUrn currently stores the Member ID, not the refresh token.
             // We would need a new field for linkedInRefreshToken if we want to fully automate it.
             // For now, we'll keep the logic ready.
@@ -141,6 +143,39 @@ export async function refreshUserTokens(clerkId: string) {
         } catch (error: any) {
             console.error(`[Refresh] LinkedIn refresh failed for ${clerkId}:`, error.message);
             results.linkedin = { refreshed: false, error: error.message };
+        }
+    }
+
+    if (user.instagramAccessToken && user.instagramConnectionType === 'DIRECT') {
+        try {
+            console.log(`[Refresh] Refreshing Instagram Direct token for user: ${clerkId}`);
+            
+            const refreshRes = await fetch(
+                `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${user.instagramAccessToken}`
+            );
+
+            if (refreshRes.ok) {
+                const data = await refreshRes.json();
+                if (data.access_token) {
+                    await prisma.user.update({
+                        where: { clerkId },
+                        data: {
+                            instagramAccessToken: data.access_token,
+                            instagramTokenExpiresIn: data.expires_in,
+                            instagramTokenCreatedAt: new Date()
+                        }
+                    });
+                    results.instagram = { refreshed: true, expires_in: data.expires_in };
+                    await logInfo("Instagram Direct token auto-refreshed", { userId: clerkId });
+                }
+            } else {
+                const error = await refreshRes.json();
+                console.error(`[Refresh] Instagram refresh failed for ${clerkId}:`, error);
+                results.instagram = { refreshed: false, error: error.error?.message || "Failed to refresh" };
+            }
+        } catch (error: any) {
+            console.error(`[Refresh] Instagram refresh error for ${clerkId}:`, error.message);
+            results.instagram = { refreshed: false, error: error.message };
         }
     }
 

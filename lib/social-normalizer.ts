@@ -80,7 +80,8 @@ export class SocialNormalizerService {
             promises.push(
                 this.syncInstagram(orgId, {
                     accessToken: user.instagramAccessToken,
-                    userId: user.instagramUserId
+                    userId: user.instagramUserId,
+                    connectionType: user.instagramConnectionType as 'FACEBOOK' | 'DIRECT' | undefined
                 }).then(res => { result.instagram = res; })
             );
         }
@@ -173,7 +174,7 @@ export class SocialNormalizerService {
         return { success, failed };
     }
 
-    private static async syncInstagram(orgId: number, creds: { accessToken: string, userId: string }) {
+    private static async syncInstagram(orgId: number, creds: { accessToken: string, userId: string, connectionType?: 'FACEBOOK' | 'DIRECT' }) {
         let success = 0;
         let failed = 0;
         try {
@@ -316,7 +317,7 @@ export class SocialNormalizerService {
                     break;
                 case 'INSTAGRAM':
                     if (user.instagramAccessToken) {
-                        insights = await getInstagramPostInsights(post.postId, user.instagramAccessToken);
+                        insights = await getInstagramPostInsights(post.postId, user.instagramAccessToken, user.instagramConnectionType as 'FACEBOOK' | 'DIRECT');
                     }
                     break;
                 case 'LINKEDIN':
@@ -456,7 +457,7 @@ export class SocialNormalizerService {
                             break;
                         case 'INSTAGRAM':
                             if (user.instagramAccessToken) {
-                                insights = await getInstagramPostInsights(post.postId, user.instagramAccessToken);
+                                insights = await getInstagramPostInsights(post.postId, user.instagramAccessToken, user.instagramConnectionType as 'FACEBOOK' | 'DIRECT');
                             }
                             break;
                         case 'LINKEDIN':

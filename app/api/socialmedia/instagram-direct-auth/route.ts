@@ -104,7 +104,8 @@ async function postHandler(request: NextRequest) {
                     instagramAccessToken: accessToken,
                     instagramUserId: userData.id || userId_ig,
                     instagramTokenCreatedAt: new Date(),
-                    instagramTokenExpiresIn: tokenData.expires_in || 5184000
+                    instagramTokenExpiresIn: tokenData.expires_in || 5184000,
+                    instagramConnectionType: 'DIRECT'
                 }
             });
 

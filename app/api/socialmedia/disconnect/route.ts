@@ -41,6 +41,7 @@ async function postHandler(request: NextRequest) {
         } else if (platform === "INSTAGRAM") {
             updateData.instagramAccessToken = null;
             updateData.instagramUserId = null;
+            updateData.instagramConnectionType = null;
         } else if (platform === "LINKEDIN") {
             updateData.linkedInAccessToken = null;
             updateData.linkedInAuthUrn = null;

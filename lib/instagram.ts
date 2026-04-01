@@ -4,6 +4,15 @@ import { validateMediaUrl, isVideoUrl } from './media-utils';
 interface InstagramCredentials {
     accessToken: string;
     userId: string;
+    connectionType?: 'FACEBOOK' | 'DIRECT';
+}
+
+
+function getBaseUrl(credentials: InstagramCredentials): string {
+    if (credentials.connectionType === 'DIRECT') {
+        return "https://graph.instagram.com/v18.0";
+    }
+    return "https://graph.facebook.com/v24.0";
 }
 
 export async function postToInstagram(
@@ -19,6 +28,7 @@ export async function postToInstagram(
   }
 ) {
   const { accessToken, userId } = credentials;
+  const baseUrl = getBaseUrl(credentials);
 
   const mediaList = Array.isArray(media) ? media : [media];
   const isCarousel = mediaList.length > 1;
@@ -55,7 +65,7 @@ export async function postToInstagram(
         }
 
         const res = await fetch(
-          `https://graph.facebook.com/v24.0/${userId}/media`,
+          `${baseUrl}/${userId}/media`,
           { method: "POST", body: params }
         );
 
@@ -89,7 +99,7 @@ export async function postToInstagram(
       }
 
       const containerRes = await fetch(
-        `https://graph.facebook.com/v24.0/${userId}/media`,
+        `${baseUrl}/${userId}/media`,
         { method: "POST", body: containerParams }
       );
 
@@ -147,7 +157,7 @@ export async function postToInstagram(
       }
 
       const res = await fetch(
-        `https://graph.facebook.com/v24.0/${userId}/media`,
+        `${baseUrl}/${userId}/media`,
         { method: "POST", body: params }
       );
 
@@ -180,7 +190,7 @@ export async function postToInstagram(
     console.log(`[Instagram] Publishing: ${creationId}`);
 
     const publishRes = await fetch(
-      `https://graph.facebook.com/v24.0/${userId}/media_publish`,
+      `${baseUrl}/${userId}/media_publish`,
       {
         method: "POST",
         body: new URLSearchParams({
@@ -269,13 +279,13 @@ export interface InstagramPostInsights {
 
 export async function getInstagramPostInsights(
     mediaId: string,
-    accessToken: string
+    accessToken: string,
+    connectionType?: 'FACEBOOK' | 'DIRECT'
 ): Promise<InstagramPostInsights> {
-    // BUG 7 FIX: Re-throw genuine API errors rather than swallowing them as zero-engagement results.
-    // Only the "deleted/not found" case should return zero data — everything else should propagate.
     const mediaFields = 'like_count,comments_count,media_type,caption,media_url,permalink';
+    const baseUrl = connectionType === 'DIRECT' ? "https://graph.instagram.com/v18.0" : "https://graph.facebook.com/v24.0";
     const mediaResponse = await fetch(
-        `https://graph.facebook.com/v24.0/${mediaId}?fields=${mediaFields}&access_token=${accessToken}`
+        `${baseUrl}/${mediaId}?fields=${mediaFields}&access_token=${accessToken}`
     );
 
     if (!mediaResponse.ok) {
@@ -320,7 +330,7 @@ export async function getInstagramPostInsights(
         const metrics = metricsArr.join(',');
 
         const insightsResponse = await fetch(
-            `https://graph.facebook.com/v24.0/${mediaId}/insights?metric=${metrics}&access_token=${accessToken}`
+            `${baseUrl}/${mediaId}/insights?metric=${metrics}&access_token=${accessToken}`
         );
 
         if (insightsResponse.ok) {
@@ -357,7 +367,7 @@ export async function getInstagramPostInsights(
 
         } else {
             const fallbackResponse = await fetch(
-                `https://graph.facebook.com/v24.0/${mediaId}/insights?metric=impressions,reach,saved&access_token=${accessToken}`
+                `${baseUrl}/${mediaId}/insights?metric=impressions,reach,saved&access_token=${accessToken}`
             );
             if (fallbackResponse.ok) {
                 const fallbackData = await fallbackResponse.json();
@@ -420,10 +430,11 @@ export async function getInstagramUserMedia(
     limit: number = 20
 ): Promise<InstagramMedia[]> {
     const { accessToken, userId } = credentials;
+    const baseUrl = getBaseUrl(credentials);
     try {
         const fields = 'id,caption,media_type,media_url,permalink,timestamp,thumbnail_url';
         const response = await fetch(
-            `https://graph.facebook.com/v24.0/${userId}/media?fields=${fields}&limit=${limit}&access_token=${accessToken}`
+            `${baseUrl}/${userId}/media?fields=${fields}&limit=${limit}&access_token=${accessToken}`
         );
         if (!response.ok) throw new Error('Failed to fetch Instagram media');
         const data = await response.json();
@@ -464,10 +475,11 @@ export async function getInstagramAudienceInsights(
         }
     };
 
+    const baseUrl = getBaseUrl(credentials);
     const { accessToken, userId } = credentials;
     try {
         // Fetch total followers count
-        const profileRes = await fetch(`https://graph.facebook.com/v24.0/${userId}?fields=followers_count&access_token=${accessToken}`);
+        const profileRes = await fetch(`${baseUrl}/${userId}?fields=followers_count&access_token=${accessToken}`);
         await capture(profileRes, 'profile');
         let totalFollowers = 0;
         if (profileRes.ok) {
@@ -484,7 +496,7 @@ export async function getInstagramAudienceInsights(
         const breakdowns = ['city', 'country', 'gender', 'age'];
         for (const breakdown of breakdowns) {
             try {
-                const url = `https://graph.facebook.com/v24.0/${userId}/insights?metric=follower_demographics&period=lifetime&metric_type=total_value&breakdown=${breakdown}&access_token=${accessToken}`;
+                const url = `${baseUrl}/${userId}/insights?metric=follower_demographics&period=lifetime&metric_type=total_value&breakdown=${breakdown}&access_token=${accessToken}`;
                 const res = await fetch(url);
                 await capture(res, `follower_demographics_${breakdown}`);
 
@@ -578,9 +590,10 @@ export async function getInstagramAccountInsights(
         let profileViews = 0;
         let websiteClicks = 0;
         let followerCount = 0;
+        const baseUrl = getBaseUrl(credentials);
 
         // 1. Fetch Follower Count via profile field (verified working)
-        const profileRes = await fetch(`https://graph.facebook.com/v24.0/${userId}?fields=followers_count&access_token=${accessToken}`);
+        const profileRes = await fetch(`${baseUrl}/${userId}?fields=followers_count&access_token=${accessToken}`);
         await capture(profileRes, 'profile_followers_direct');
         if (profileRes.ok) {
             const profileData = await profileRes.json();
@@ -591,7 +604,7 @@ export async function getInstagramAccountInsights(
         const until = Math.floor(Date.now() / 1000);
         const since = until - (30 * 24 * 60 * 60);
 
-        const dailyUrl = `https://graph.facebook.com/v24.0/${userId}/insights?metric=reach,profile_views,website_clicks&period=day&metric_type=total_value&since=${since}&until=${until}&access_token=${accessToken}`;
+        const dailyUrl = `${baseUrl}/${userId}/insights?metric=reach,profile_views,website_clicks&period=day&metric_type=total_value&since=${since}&until=${until}&access_token=${accessToken}`;
         const dailyRes = await fetch(dailyUrl);
         await capture(dailyRes, 'account_insights_daily_reach_views');
 
@@ -615,7 +628,7 @@ export async function getInstagramAccountInsights(
         }
 
         // 3. Optional: Follows and Unfollows for growth metrics
-        const growthUrl = `https://graph.facebook.com/v24.0/${userId}/insights?metric=follows_and_unfollows&period=day&metric_type=total_value&since=${since}&until=${until}&access_token=${accessToken}`;
+        const growthUrl = `${baseUrl}/${userId}/insights?metric=follows_and_unfollows&period=day&metric_type=total_value&since=${since}&until=${until}&access_token=${accessToken}`;
         const growthRes = await fetch(growthUrl);
         await capture(growthRes, 'account_insights_daily_growth');
 

@@ -103,6 +103,7 @@ export async function sendCampaignPost(
                     facebookPageId: true,
                     instagramAccessToken: true,
                     instagramUserId: true,
+                    instagramConnectionType: true,
                     youtubeAccessToken: true,
                     pinterestAccessToken: true,
                 }
@@ -406,6 +407,7 @@ export async function sendCampaignPost(
                         {
                             accessToken: igToken!,
                             userId: igUserId!,
+                            connectionType: dbUser.instagramConnectionType as 'FACEBOOK' | 'DIRECT' | undefined,
                         },
                         post.message || post.subject || "",
                         mediaToUse, // Pass the full array or string
