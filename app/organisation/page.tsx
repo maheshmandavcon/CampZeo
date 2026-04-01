@@ -452,7 +452,7 @@ export default function OrganisationDashboard() {
 
                         <div>
                           <div className="flex justify-between mb-2">
-                            <span className="text-sm font-medium">Platform Connections</span>
+                            <span className="text-sm font-medium">Connected Platforms</span>
                             <span className="text-sm text-muted-foreground">{usage.platforms.current} / {usage.platforms.limit}</span>
                           </div>
                           <Progress value={usage.platforms.percentage} />
