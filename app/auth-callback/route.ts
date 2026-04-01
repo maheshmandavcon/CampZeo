@@ -18,8 +18,17 @@ export async function GET(request: NextRequest) {
             return NextResponse.redirect(new URL("/auth-complete?status=error&error=missing_params", request.url));
         }
 
-        platform = state.split("_")[0];
-        const stateUserId = state.substring(platform.length + 1);
+        const stateParts = state.split("_");
+        const userIndex = stateParts.findIndex(p => p === "user");
+        
+        let stateUserId = "";
+        if (userIndex !== -1) {
+            platform = stateParts.slice(0, userIndex).join("_");
+            stateUserId = stateParts.slice(userIndex).join("_");
+        } else {
+            platform = stateParts[0];
+            stateUserId = state.substring(platform.length + 1);
+        }
 
         console.log("🔵 OAuth Callback Received:", {
             platform,
@@ -68,7 +77,7 @@ export async function GET(request: NextRequest) {
 
         console.log(" User verified:", { email: user.email });
 
-        const isDirect = platform === 'INSTAGRAM_DIRECT';
+        const isDirect = platform === 'INSTAGRAM_DIRECT' || platform === 'INSTAGRAM_BASIC';
         const clientIdConfig = await prisma.adminPlatformConfiguration.findFirst({
             where: { key: isDirect ? 'INSTAGRAM_DIRECT_ID' : `${platform}_CLIENT_ID` }
         });
@@ -93,9 +102,10 @@ export async function GET(request: NextRequest) {
         let expiresIn = 0;
 
         // Exchange code for token
-        if (platform === "FACEBOOK" || platform === "INSTAGRAM" || platform === "INSTAGRAM_DIRECT") {
-            const tokenBaseUrl = platform === "INSTAGRAM_DIRECT" ? 'https://graph.instagram.com/v18.0' : 'https://graph.facebook.com';
-            const tokenUrl = `${tokenBaseUrl}${platform === "INSTAGRAM_DIRECT" ? '/access_token' : `/${META_API_VERSION}/oauth/access_token`}?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${clientSecret}&code=${code}`;
+        if (platform === "FACEBOOK" || platform === "INSTAGRAM" || platform === "INSTAGRAM_DIRECT" || platform === "INSTAGRAM_BASIC") {
+            const isInstagramDirect = platform === "INSTAGRAM_DIRECT" || platform === "INSTAGRAM_BASIC";
+            const tokenBaseUrl = isInstagramDirect ? 'https://graph.instagram.com/v18.0' : 'https://graph.facebook.com';
+            const tokenUrl = `${tokenBaseUrl}${isInstagramDirect ? '/access_token' : `/${META_API_VERSION}/oauth/access_token`}?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${clientSecret}&code=${code}`;
             
             const res = await fetch(tokenUrl);
             const data = await res.json();
@@ -328,7 +338,7 @@ export async function GET(request: NextRequest) {
                 updateData.instagramAccessToken = accessToken;
                 updateData.instagramUserId = "no-business-account";
             }
-        } else if (platform === "INSTAGRAM_DIRECT") {
+        } else if (platform === "INSTAGRAM_DIRECT" || platform === "INSTAGRAM_BASIC") {
             // New Instagram Login Product (v18.0+)
             updateData.instagramAccessToken = accessToken;
             updateData.instagramTokenExpiresIn = expiresIn;
