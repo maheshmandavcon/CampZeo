@@ -131,6 +131,13 @@ async function createContactHandler(request: NextRequest, context: any) {
     const body = await request.json();
     const { contactName, contactEmail, contactMobile, contactWhatsApp, campaignIds } = body;
 
+    // Check usage limits
+    const { checkLimit } = await import('@/lib/subscription-limits');
+    const limitCheck = await checkLimit(effectiveOrganisationId!, 'contacts');
+    if (!limitCheck.allowed) {
+        return NextResponse.json({ error: limitCheck.message }, { status: 403 });
+    }
+
 
     if (!contactName || !contactName.trim()) {
         return NextResponse.json(

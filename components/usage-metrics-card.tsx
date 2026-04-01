@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertCircle, Facebook, Instagram, Linkedin, Youtube, Pin } from "lucide-react";
+import { AlertCircle, Facebook, Instagram, Linkedin, Youtube, Pin, TrendingUp, TrendingDown } from "lucide-react";
 
 interface UsageMetric {
     current: number;
@@ -12,20 +12,24 @@ interface PlatformsMetric extends UsageMetric {
     connectedNames?: string[];
 }
 
+interface PostsComparison {
+    current: number;
+    lastMonth: number;
+    growth: number;
+}
+
 interface UsageMetricsCardProps {
     usage: {
         campaigns: UsageMetric;
         contacts: UsageMetric;
-        users: UsageMetric;
         platforms: PlatformsMetric;
-        postsThisMonth: UsageMetric;
+        postsThisMonth: PostsComparison;
     };
 }
 
 const metricLabels = {
     campaigns: "Campaigns",
     contacts: "Contacts",
-    users: "Team Members",
     platforms: "Connected Platforms",
     postsThisMonth: "Posts This Month",
 };
@@ -57,15 +61,50 @@ export function UsageMetricsCard({ usage }: UsageMetricsCardProps) {
         <Card>
             <CardHeader>
                 <CardTitle>Usage Metrics</CardTitle>
-                <CardDescription>Current usage vs plan limits</CardDescription>
+                <CardDescription>Current usage and performance</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="space-y-5">
                     {Object.entries(usage).map(([key, metric]) => {
                         const label = metricLabels[key as keyof typeof metricLabels];
-                        const progressColor = getProgressColor(metric.percentage);
-                        const cappedPercentage = Math.min(100, metric.percentage);
+                        const isPosts = key === "postsThisMonth";
                         const isPlatforms = key === "platforms";
+
+                        if (isPosts) {
+                            const postMetric = metric as PostsComparison;
+                            const isPositive = postMetric.growth > 0;
+                            const isNegative = postMetric.growth < 0;
+                            
+                            return (
+                                <div key={key} className="space-y-2">
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="font-medium">{label}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-2xl font-bold">{postMetric.current}</span>
+                                            <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                                isPositive ? "bg-green-100 text-green-700" : 
+                                                isNegative ? "bg-red-100 text-red-700" : 
+                                                "bg-muted text-muted-foreground"
+                                            }`}>
+                                                {isPositive && <TrendingUp className="size-3" />}
+                                                {isNegative && <TrendingDown className="size-3" />}
+                                                {Math.abs(postMetric.growth) || 0}%
+                                                <span className="ml-0.5 font-medium opacity-80">
+                                                    {isPositive ? "up" : isNegative ? "down" : ""}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        vs {postMetric.lastMonth} posts last month
+                                    </p>
+                                </div>
+                            );
+                        }
+
+                        const usualMetric = metric as UsageMetric;
+                        const progressColor = getProgressColor(usualMetric.percentage);
+                        const cappedPercentage = Math.min(100, usualMetric.percentage);
                         const connectedNames = isPlatforms
                             ? (metric as PlatformsMetric).connectedNames ?? []
                             : [];
@@ -75,16 +114,16 @@ export function UsageMetricsCard({ usage }: UsageMetricsCardProps) {
                                 <div className="flex items-center justify-between text-sm">
                                     <div className="flex items-center gap-2">
                                         <span className="font-medium">{label}</span>
-                                        {metric.isNearLimit && (
+                                        {usualMetric.isNearLimit && (
                                             <AlertCircle className="size-4 text-yellow-600" />
                                         )}
                                     </div>
                                     <span className="text-muted-foreground">
                                         {isPlatforms
-                                            ? `${metric.current} / 5 connected`
-                                            : metric.limit === 99999
-                                                ? `${metric.current} used`
-                                                : `${metric.current} / ${metric.limit} (${metric.percentage}% used)`}
+                                            ? `${usualMetric.current} / 5 connected`
+                                            : usualMetric.limit === 99999
+                                                ? `${usualMetric.current} used`
+                                                : `${usualMetric.current} / ${usualMetric.limit} (${usualMetric.percentage}% used)`}
                                     </span>
                                 </div>
 

@@ -125,6 +125,12 @@ async function createCampaignHandler(request: NextRequest) {
     const body = await request.json();
     const { name, description, startDate, endDate, contactIds } = body;
 
+    const { checkLimit } = await import('@/lib/subscription-limits');
+    const limitCheck = await checkLimit(effectiveOrganisationId!, 'campaigns');
+    if (!limitCheck.allowed) {
+        return NextResponse.json({ error: limitCheck.message }, { status: 403 });
+    }
+
     // Validation
     if (!name || !startDate || !endDate) {
         return NextResponse.json(

@@ -59,12 +59,17 @@ interface UsageMetric {
   isNearLimit: boolean;
 }
 
+interface PostsComparison {
+  current: number;
+  lastMonth: number;
+  growth: number;
+}
+
 interface UsageData {
   campaigns: UsageMetric;
   contacts: UsageMetric;
-  users: UsageMetric;
-  platforms: UsageMetric;
-  postsThisMonth: UsageMetric;
+  platforms: UsageMetric & { connectedNames?: string[] };
+  postsThisMonth: PostsComparison;
 }
 
 export default function OrganisationDashboard() {
@@ -198,6 +203,12 @@ export default function OrganisationDashboard() {
     return cleaned;
   };
 
+  const getProgressColor = (percentage: number) => {
+    if (percentage >= 90) return "bg-red-500";
+    if (percentage >= 70) return "bg-yellow-500";
+    return "bg-green-500";
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
@@ -308,20 +319,16 @@ export default function OrganisationDashboard() {
               <Card className="cursor-pointer hover:bg-yellow-50/50 transition-colors">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">
-                    {isOwnerNameSameAsOrg ? "Connected Accounts" : "Team Size"}
+                    Connected Accounts
                   </CardTitle>
-                  {isOwnerNameSameAsOrg ? (
-                    <Share2 className="size-8 bg-blue-500 p-2 rounded-full text-white" />
-                  ) : (
-                    <Users className="size-8 bg-yellow-400 p-2 rounded-full text-white" />
-                  )}
+                  <Share2 className="size-8 bg-blue-500 p-2 rounded-full text-white" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {isOwnerNameSameAsOrg ? (usage?.platforms.current || 0) : (usage?.users.current || 1)}
+                    {usage?.platforms.current || 0}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {isOwnerNameSameAsOrg ? "Active social connections" : "Active team members"}
+                    Active social connections
                   </p>
                 </CardContent>
               </Card>
@@ -331,7 +338,6 @@ export default function OrganisationDashboard() {
             <Tabs defaultValue="activity" className="space-y-4">
               <TabsList>
                 <TabsTrigger className="cursor-pointer" value="activity">Recent Activity</TabsTrigger>
-                <TabsTrigger className="cursor-pointer" value="team">Team Members</TabsTrigger>
                 <TabsTrigger className="cursor-pointer" value="usage">Usage Details</TabsTrigger>
               </TabsList>
 
@@ -378,42 +384,6 @@ export default function OrganisationDashboard() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="team" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle>Team Members</CardTitle>
-                        <CardDescription>
-                          Manage your team members and their roles
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {user && (
-                        <div className="flex items-center justify-between py-3 border-b last:border-0">
-                          <div className="flex items-center gap-3">
-                            <Avatar>
-                              <AvatarFallback>{getUserInitials(user.firstName, user.lastName)}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="font-medium">
-                                {[user.firstName, user.lastName].filter(Boolean).join(" ") || "User"}
-                              </p>
-                              <p className="text-sm text-muted-foreground">{user.email}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary">{user.role.replace('_', ' ')}</Badge>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
 
               <TabsContent value="usage" className="space-y-4">
                 <Card>
@@ -429,9 +399,14 @@ export default function OrganisationDashboard() {
                         <div>
                           <div className="flex justify-between mb-2">
                             <span className="text-sm font-medium">Monthly Posts</span>
-                            <span className="text-sm text-muted-foreground">{usage.postsThisMonth.current} / {usage.postsThisMonth.limit}</span>
+                            <span className="text-sm text-muted-foreground">{usage.postsThisMonth.current} (vs {usage.postsThisMonth.lastMonth} last month)</span>
                           </div>
-                          <Progress value={usage.postsThisMonth.percentage} className={usage.postsThisMonth.isNearLimit ? "bg-red-100" : ""} />
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-bold">{usage.postsThisMonth.current}</span>
+                            <span className={`text-xs font-medium ${usage.postsThisMonth.growth >= 0 ? "text-green-600" : "text-red-600"}`}>
+                              {usage.postsThisMonth.growth >= 0 ? "↑" : "↓"} {Math.abs(usage.postsThisMonth.growth)}%
+                            </span>
+                          </div>
                         </div>
 
                         <div>
@@ -439,7 +414,7 @@ export default function OrganisationDashboard() {
                             <span className="text-sm font-medium">Total Contacts</span>
                             <span className="text-sm text-muted-foreground">{usage.contacts.current} / {usage.contacts.limit}</span>
                           </div>
-                          <Progress value={usage.contacts.percentage} />
+                          <Progress value={usage.contacts.percentage} indicatorClassName={getProgressColor(usage.contacts.percentage)} />
                         </div>
 
                         <div>
@@ -447,7 +422,7 @@ export default function OrganisationDashboard() {
                             <span className="text-sm font-medium">Campaigns</span>
                             <span className="text-sm text-muted-foreground">{usage.campaigns.current} / {usage.campaigns.limit}</span>
                           </div>
-                          <Progress value={usage.campaigns.percentage} />
+                          <Progress value={usage.campaigns.percentage} indicatorClassName={getProgressColor(usage.campaigns.percentage)} />
                         </div>
 
                         <div>
@@ -455,14 +430,9 @@ export default function OrganisationDashboard() {
                             <span className="text-sm font-medium">Connected Platforms</span>
                             <span className="text-sm text-muted-foreground">{usage.platforms.current} / {usage.platforms.limit}</span>
                           </div>
-                          <Progress value={usage.platforms.percentage} />
+                          <Progress value={usage.platforms.percentage} indicatorClassName={getProgressColor(usage.platforms.percentage)} />
                         </div>
 
-                        {usage.postsThisMonth.isNearLimit && (
-                          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-                            You've used {usage.postsThisMonth.percentage}% of your monthly post limit. Consider upgrading for more.
-                          </div>
-                        )}
                       </div>
                     ) : (
                       <div className="p-4 bg-muted/50 rounded-lg text-sm text-center text-muted-foreground">
