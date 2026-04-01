@@ -617,10 +617,11 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
             const campaignEnd = new Date(campaign.endDate);
 
             // User's logic: must be within campaign and not in the past
-            const effectiveStart = campaignStart > now ? campaignStart : now;
-
-            if (scheduledDate < effectiveStart) {
-                if (scheduledDate < now) {
+            // Add a 1-minute grace period to 'now' to allow selecting the current minute
+             const submissionTime = new Date();
+            submissionTime.setSeconds(0, 0);
+            if (!scheduledDate && new Date(scheduledDate) < submissionTime)  {
+                if (new Date(scheduledDate) < submissionTime) {
                     toast.error('Scheduled time cannot be in the past');
                 } else {
                     toast.error(`Scheduled time must be after campaign start (${campaignStart.toLocaleString()})`);

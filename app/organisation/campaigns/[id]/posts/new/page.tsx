@@ -881,10 +881,11 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             const campaignEnd = new Date(campaign.endDate);
 
             // User's logic: must be within campaign and not in the past
-            const effectiveStart = campaignStart > now ? campaignStart : now;
-
-            if (scheduledDate < effectiveStart) {
-                if (scheduledDate < now) {
+            // Add a 1-minute grace period to 'now' to allow selecting the current minute
+            const submissionTime = new Date();
+            submissionTime.setSeconds(0, 0);
+            if (!scheduledDate && new Date(scheduledDate) < submissionTime) {
+                if (new Date(scheduledDate) < submissionTime) {
                     toast.error('Scheduled time cannot be in the past');
                 } else {
                     toast.error(`Scheduled time must be after campaign start (${campaignStart.toLocaleString()})`);
@@ -1267,11 +1268,11 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                     <TooltipContent className="p-3 w-64 space-y-2">
                                                                         <p className="text-sm font-semibold">{isTrialLocked ? "Trial Restriction Active" : isAdminLocked ? "Admin Approval Required" : "No Credits Available"}</p>
                                                                         <p className="text-xs text-muted-foreground">
-                                                                            {isTrialLocked 
-                                                                              ? "SMS and WhatsApp campaigns are not available during the free trial period. Please upgrade to a paid plan to unlock these channels."
-                                                                              : isAdminLocked 
-                                                                              ? "SMS and WhatsApp messaging requires admin approval and credit purchase."
-                                                                              : `You have 0 ${platform} credits. Please purchase a pack to use this channel.`}
+                                                                            {isTrialLocked
+                                                                                ? "SMS and WhatsApp campaigns are not available during the free trial period. Please upgrade to a paid plan to unlock these channels."
+                                                                                : isAdminLocked
+                                                                                    ? "SMS and WhatsApp messaging requires admin approval and credit purchase."
+                                                                                    : `You have 0 ${platform} credits. Please purchase a pack to use this channel.`}
                                                                         </p>
                                                                         <Button
                                                                             size="sm"
@@ -1426,7 +1427,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
                                     <div className="space-y-2">
                                         <Label htmlFor="message">Message *</Label>
-                                        <div className="relative">
+                                        <div className="relative ">
                                             <Textarea
                                                 id="message"
                                                 placeholder="Enter your email message (HTML supported)"
@@ -1434,7 +1435,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                 onChange={(e) => setMessage(e.target.value)}
                                                 rows={10}
                                                 required={selectedPlatform === 'EMAIL'}
-                                                className="pr-12 border border-2 border-gray-300 rounded-2xl"
+                                                className="pr-12 border border-2 border-gray-300 rounded-2xl whitespace-pre-wrap"
                                             />
                                             <Button
                                                 type="button"

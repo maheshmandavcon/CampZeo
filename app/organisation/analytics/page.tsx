@@ -341,7 +341,32 @@ export default function AnalyticsPage() {
             setSyncing(null);
         }
     };
+    const handleSyncAllPosts = async () => {
+        if (posts.length === 0) return;
 
+        setSyncing(-1); // All posts syncing indicator
+        try {
+            const syncPromises = posts.map(post =>
+                fetch(`/api/analytics/post-details/${post.id}?fresh=true&platform=${post.platform}&postId=${post.postId}`)
+                    .then(res => res.json())
+                    .catch(err => null)
+            );
+
+            const results = await Promise.all(syncPromises);
+
+            const updatedPosts = posts.map((post, idx) =>
+                results[idx]?.post || post
+            );
+
+            setPosts(updatedPosts);
+            toast.success(`Synced ${posts.length} posts - metrics updated`);
+        } catch (error) {
+            console.error('Error syncing all posts:', error);
+            toast.error('Failed to sync posts metrics');
+        } finally {
+            setSyncing(null);
+        }
+    };
     const viewDetails = (post: Post) => {
         router.push(`/organisation/analytics/posts/${post.id}?platform=${post.platform}&postId=${post.postId}`);
     };
@@ -1010,10 +1035,12 @@ export default function AnalyticsPage() {
                                             className='cursor-pointer'
                                             variant="outline"
                                             size="sm"
-                                            onClick={() => fetchPosts(true)}
-                                            disabled={loadingPosts}
+                                            onClick={async () => {
+                                                await fetchPosts(true);
+                                                await handleSyncAllPosts(); // Sync all posts metrics
+                                            }}
                                         >
-                                            <RefreshCw className={`mr-2 size-3 ${loadingPosts ? 'animate-spin' : ''}`} />
+                                            <RefreshCw className={`mr-2 size-3 ${loadingPosts || syncing === -1 ? 'animate-spin' : ''}`} />
                                             Refresh
                                         </Button>
                                     </div>
