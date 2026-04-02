@@ -35,7 +35,7 @@ export default function ExportView() {
                 preview: 'true'
             });
 
-            const response = await fetch(`/api/Organisation/posts/export?${params.toString()}`);
+            const response = await fetch(`/api/organisation/posts/export?${params.toString()}`);
             if (!response.ok) throw new Error('Failed to fetch preview');
 
             const data = await response.json();
@@ -68,7 +68,7 @@ export default function ExportView() {
                 endDate
             });
 
-            const response = await fetch(`/api/Organisation/posts/export?${params.toString()}`);
+            const response = await fetch(`/api/organisation/posts/export?${params.toString()}`);
             if (!response.ok) throw new Error('Export failed');
 
             const contentDisposition = response.headers.get('Content-Disposition');

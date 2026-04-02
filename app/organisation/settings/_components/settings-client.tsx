@@ -802,7 +802,18 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                 try {
                   const res = await fetch(`/api/socialmedia/auth-url?platform=INSTAGRAM`);
                   const data = await res.json();
-                  if (data.url) window.location.href = data.url;
+                  if (data.url) {
+                    const width = 600;
+                    const height = 700;
+                    const left = window.screenX + (window.outerWidth - width) / 2;
+                    const top = window.screenY + (window.outerHeight - height) / 2;
+                    
+                    window.open(
+                      data.url, 
+                      'Connect Instagram', 
+                      `width=${width},height=${height},left=${left},top=${top},status=no,locations=no,toolbar=no,menubar=no`
+                    );
+                  }
                 } catch (error) {
                   toast.error('Failed to connect');
                 }

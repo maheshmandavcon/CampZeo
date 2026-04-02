@@ -72,8 +72,7 @@ async function getHandler(request: NextRequest) {
             // Permissions needed for Facebook Pages, Ads, Leads, etc.
             authUrl = `https://www.facebook.com/v24.0/dialog/oauth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=pages_show_list,pages_read_engagement,pages_read_user_content,read_insights,pages_manage_posts,pages_manage_ads,ads_management,ads_read,leads_retrieval,business_management,pages_messaging,public_profile`;
             break;
-        case "INSTAGRAM": // Instagram Graph API uses Facebook Login
-            // Permissions needed specifically for Instagram Business accounts
+        case "INSTAGRAM": 
             authUrl = `https://www.facebook.com/v24.0/dialog/oauth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,instagram_manage_insights,business_management,instagram_manage_messages,public_profile`;
             break;
         case "INSTAGRAM_DIRECT":

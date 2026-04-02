@@ -28,7 +28,7 @@ export async function postToInstagram(
   }
 ) {
   const { accessToken, userId } = credentials;
-  const baseUrl = getBaseUrl(credentials);
+  const baseUrl = "https://graph.facebook.com/v24.0";
 
   const mediaList = Array.isArray(media) ? media : [media];
   const isCarousel = mediaList.length > 1;
@@ -283,7 +283,7 @@ export async function getInstagramPostInsights(
     connectionType?: 'FACEBOOK' | 'DIRECT'
 ): Promise<InstagramPostInsights> {
     const mediaFields = 'like_count,comments_count,media_type,caption,media_url,permalink';
-    const baseUrl = connectionType === 'DIRECT' ? "https://graph.instagram.com/v18.0" : "https://graph.facebook.com/v24.0";
+    const baseUrl = "https://graph.facebook.com/v24.0";
     const mediaResponse = await fetch(
         `${baseUrl}/${mediaId}?fields=${mediaFields}&access_token=${accessToken}`
     );
@@ -590,7 +590,7 @@ export async function getInstagramAccountInsights(
         let profileViews = 0;
         let websiteClicks = 0;
         let followerCount = 0;
-        const baseUrl = getBaseUrl(credentials);
+        const baseUrl = "https://graph.facebook.com/v24.0";
 
         // 1. Fetch Follower Count via profile field (verified working)
         const profileRes = await fetch(`${baseUrl}/${userId}?fields=followers_count&access_token=${accessToken}`);
