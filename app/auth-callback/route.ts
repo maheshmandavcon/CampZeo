@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
         const stateParts = state.split("_");
         const userIndex = stateParts.findIndex(p => p === "user");
-        
+
         let stateUserId = "";
         if (userIndex !== -1) {
             platform = stateParts.slice(0, userIndex).join("_");
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
         // Exchange code for token
         if (platform === "FACEBOOK" || platform === "INSTAGRAM") {
             const tokenUrl = `https://graph.facebook.com/${META_API_VERSION}/oauth/access_token?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${clientSecret}&code=${code}`;
-            
+
             const res = await fetch(tokenUrl);
             const data = await res.json();
             if (data.error) throw new Error(data.error.message || data.error);
@@ -126,18 +126,18 @@ export async function GET(request: NextRequest) {
                 body: params,
             });
             const data = await res.json();
-            
+
             if (data.error || data.error_message) throw new Error(data.error_message || data.error || "Token exchange failed");
-            
+
             const shortLivedToken = data.access_token;
-            
+
             try {
                 const longLivedRes = await fetch(`https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${clientSecret}&access_token=${shortLivedToken}`);
                 const longLivedData = await longLivedRes.json();
-                
+
                 if (longLivedData.access_token) {
                     accessToken = longLivedData.access_token;
-                    expiresIn = longLivedData.expires_in || 5184000; 
+                    expiresIn = longLivedData.expires_in || 5184000;
                     console.log(" Instagram Long-Lived Token obtained");
                 } else {
                     accessToken = shortLivedToken;
@@ -388,7 +388,7 @@ export async function GET(request: NextRequest) {
                 // Fetch the Instagram account details directly
                 const meRes = await fetch(`https://graph.instagram.com/v18.0/me?fields=id,username,name&access_token=${accessToken}`);
                 const meData = await meRes.json();
-                
+
                 if (meData.id) {
                     updateData.instagramUserId = meData.id;
                     console.log("✅ Instagram Direct (Business Login) Connected:", {
