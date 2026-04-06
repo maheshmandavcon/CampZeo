@@ -17,6 +17,8 @@ export type NotificationType =
     | 'SUBSCRIPTION_UPDATED'
     | 'SYSTEM_BROADCAST'
     | 'SYSTEM_ALERT'
+    | 'SERVICE_RESTORED'
+    | 'USAGE_ALERT'
     | null;
 
 export interface NotificationIconConfig {
@@ -36,6 +38,12 @@ export function getNotificationIcon(type: NotificationType): NotificationIconCon
         case 'POST_PUBLISHED':
             return {
                 icon: Send,
+                color: 'text-green-600',
+                bgColor: 'bg-green-100'
+            };
+        case 'SERVICE_RESTORED':
+            return {
+                icon: CheckCircle,
                 color: 'text-green-600',
                 bgColor: 'bg-green-100'
             };
@@ -62,6 +70,12 @@ export function getNotificationIcon(type: NotificationType): NotificationIconCon
                 icon: AlertCircle,
                 color: 'text-red-600',
                 bgColor: 'bg-red-100'
+            };
+        case 'USAGE_ALERT':
+            return {
+                icon: AlertCircle,
+                color: 'text-orange-600',
+                bgColor: 'bg-orange-100'
             };
         default:
             return {

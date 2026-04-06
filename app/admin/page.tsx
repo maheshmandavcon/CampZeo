@@ -38,7 +38,8 @@ import {
   Trash,
   FileJson,
   Bell,
-  Siren
+  Siren,
+  CreditCard
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -57,7 +58,8 @@ import { SecretInput } from "@/components/ui/secret-input";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { constants } from "buffer";
 import { JSX } from "react/jsx-runtime";
 import { AdminBroadcastNotification } from "@/components/admin/admin-broadcast-notification";
@@ -240,7 +242,34 @@ export default function AdminDashboard() {
   const [selectedMigrationPlan, setSelectedMigrationPlan] = useState<string>("");
   const [deleteConfirmationChecked, setDeleteConfirmationChecked] = useState(false);
   const [isDeletingPlan, setIsDeletingPlan] = useState(false);
+  const [isUpdatingService, setIsUpdatingService] = useState(false);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactionsPage, setTransactionsPage] = useState(1);
+  const [transactionsPageSize] = useState(10);
+  const [transactionsTotalCount, setTransactionsTotalCount] = useState(0);
+  const [transactionsSearch, setTransactionsSearch] = useState("");
+  const [transactionsTypeFilter, setTransactionsTypeFilter] = useState("all");
+  const [debouncedTransactionsSearch, setDebouncedTransactionsSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setTransactionsPage(1);
+      setDebouncedTransactionsSearch(transactionsSearch);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [transactionsSearch]);
+  const [isSuspensionDialogOpen, setIsSuspensionDialogOpen] = useState(false);
+  const [suspensionOrgId, setSuspensionOrgId] = useState<number | null>(null);
+  const [suspensionPlatform, setSuspensionPlatform] = useState("");
+  const [suspensionCurrentPlatforms, setSuspensionCurrentPlatforms] = useState<string[]>([]);
+  const [suspensionReason, setSuspensionReason] = useState("");
+  const [isDisableBoth, setIsDisableBoth] = useState(false);
 
+  const SUSPENSION_REASONS = [
+    "Violation of messaging terms and conditions.",
+    "Suspicious account activity detected.",
+    "Outstanding balance or payment failure.",
+    "Temporary suspension for security review."
+  ];
 
   // Add/Edit Org Form State
   const [isAddingOrg, setIsAddingOrg] = useState(false);
@@ -363,8 +392,28 @@ export default function AdminDashboard() {
         }
       }
     } catch (error) {
-      console.error("Failed to fetch other data", error);
-      toast.error("Failed to load admin data");
+      console.error("Failed to load admin data");
+    }
+  };
+
+  const fetchTransactions = async () => {
+    try {
+      const params = new URLSearchParams({
+        page: transactionsPage.toString(),
+        pageSize: transactionsPageSize.toString(),
+        searchText: debouncedTransactionsSearch,
+        type: transactionsTypeFilter
+      });
+
+      const res = await fetch(`/api/admin/transactions?${params}`);
+      const data = await res.json();
+
+      if (data.isSuccess) {
+        setTransactions(data.data.list);
+        setTransactionsTotalCount(data.data.totalCount);
+      }
+    } catch (error) {
+      toast.error("Failed to fetch transactions");
     }
   };
 
@@ -373,10 +422,13 @@ export default function AdminDashboard() {
       fetchOrganisations();
     } else if (activeTab === 'logs') {
       fetchOtherData();
+    } else if (activeTab === 'addons-wallet') {
+      fetchOrganisations(); // Need orgs for balances and toggles
+      fetchTransactions();
     } else {
       fetchOtherData();
     }
-  }, [activeTab, pageNumber, pageSize, statusFilter, logsPage, logsKeyword, logsLevel, logsDateFrom, logsDateTo, debouncedSearchText]);
+  }, [activeTab, pageNumber, pageSize, statusFilter, logsPage, logsKeyword, logsLevel, logsDateFrom, logsDateTo, debouncedSearchText, transactionsPage, transactionsTypeFilter, debouncedTransactionsSearch]);
 
   // Handle Search Enter
   const handleSearch = (e: React.KeyboardEvent) => {
@@ -411,6 +463,14 @@ export default function AdminDashboard() {
       return matchesSearch && matchesDateFrom && matchesDateTo;
     });
   }, [enquiries, enquirySearch, dateFrom, dateTo]);
+
+  const walletOrganisations = useMemo(() => {
+    return organisations.filter(org => {
+      const hasBalance = (org.wallet?.smsCreditsAvailable || 0) > 0 || (org.wallet?.whatsappCreditsAvailable || 0) > 0;
+      const hasAddons = org.platforms && (org.platforms.includes('sms') || org.platforms.includes('whatsapp') || org.platforms.includes('SMS') || org.platforms.includes('WHATSAPP'));
+      return hasBalance || hasAddons;
+    });
+  }, [organisations]);
 
   // Organisation Actions
   const handleCreateOrg = async (e: React.FormEvent) => {
@@ -526,6 +586,85 @@ export default function AdminDashboard() {
       isFreeTrial: org.plan === 'FREE_TRIAL'
     });
     setIsAddingOrg(true);
+  };
+
+  const handleToggleService = (orgId: number, platform: string, currentPlatforms: string[]) => {
+    const isEnabled = currentPlatforms.includes(platform.toLowerCase());
+    
+    if (!isEnabled) {
+      executeServiceToggle(orgId, platform.toLowerCase(), currentPlatforms, false);
+      return;
+    }
+
+    setSuspensionOrgId(orgId);
+    setSuspensionPlatform(platform.toLowerCase());
+    setSuspensionCurrentPlatforms(currentPlatforms);
+    setSuspensionReason(SUSPENSION_REASONS[0]); // Default reason
+    setIsDisableBoth(false);
+    setIsSuspensionDialogOpen(true);
+  };
+
+  const executeServiceToggle = async (orgId: number, platform: string, currentPlatforms: string[], disableBoth = false, reason = "") => {
+    setIsUpdatingService(true);
+    try {
+      let newPlatforms: string[];
+      let deactivatedPlatforms: string[] = [];
+      let activatedPlatforms: string[] = [];
+      
+      if (disableBoth) {
+        newPlatforms = currentPlatforms.filter(p => p !== 'sms' && p !== 'whatsapp');
+        deactivatedPlatforms = currentPlatforms.filter(p => p === 'sms' || p === 'whatsapp');
+      } else {
+        const isEnabled = currentPlatforms.includes(platform);
+        if (isEnabled) {
+          newPlatforms = currentPlatforms.filter(p => p !== platform);
+          deactivatedPlatforms = [platform];
+        } else {
+          newPlatforms = [...currentPlatforms, platform];
+          activatedPlatforms = [platform];
+        }
+      }
+
+      const payload: any = { platforms: newPlatforms };
+      if (deactivatedPlatforms.length > 0 && reason) {
+          payload.deactivatedPlatforms = deactivatedPlatforms;
+          payload.suspensionReason = reason;
+      }
+      if (activatedPlatforms.length > 0) {
+          payload.activatedPlatforms = activatedPlatforms;
+      }
+
+      const res = await fetch(`/api/admin/organisations/${orgId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.isSuccess) {
+        toast.success(`Service(s) updated successfully`);
+        fetchOrganisations();
+      } else {
+        throw new Error(data.message || "Failed to update service");
+      }
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setIsUpdatingService(false);
+    }
+  };
+
+  const confirmSuspension = async () => {
+    if (!suspensionOrgId || !suspensionReason) return;
+    
+    setIsSuspensionDialogOpen(false);
+    await executeServiceToggle(
+      suspensionOrgId, 
+      suspensionPlatform, 
+      suspensionCurrentPlatforms, 
+      isDisableBoth,
+      suspensionReason
+    );
   };
 
   const handleApproveClick = (org: any) => {
@@ -1150,6 +1289,9 @@ export default function AdminDashboard() {
               <TabsTrigger value="system-alerts" className="justify-start px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-white hover:bg-red-800 hover:text-slate-200 transition-all rounded-md mx-2">
                 <Siren className="mr-3 size-4" /> System Alerts
               </TabsTrigger>
+              <TabsTrigger value="addons-wallet" className="justify-start px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-white hover:bg-red-800 hover:text-slate-200 transition-all rounded-md mx-2">
+                <CreditCard className="mr-3 size-4" /> Addons & Wallet
+              </TabsTrigger>
             </TabsList>
           </div>
         </div>
@@ -1422,6 +1564,7 @@ export default function AdminDashboard() {
                             <TableHead className="font-semibold text-slate-700  lg:table-cell">Email</TableHead>
                             <TableHead className="font-semibold text-slate-700  xl:table-cell">Address</TableHead>
                             <TableHead className="font-semibold text-slate-700">Owner</TableHead>
+                            <TableHead className="font-semibold text-slate-700">Wallet (SMS/WA)</TableHead>
                             <TableHead className="font-semibold text-slate-700">Status</TableHead>
                             <TableHead className="font-semibold text-slate-700">Action</TableHead>
                           </TableRow>
@@ -1444,6 +1587,12 @@ export default function AdminDashboard() {
                                 <TableCell className=" lg:table-cell">{org.email || org.users?.[0]?.email || 'N/A'}</TableCell>
                                 <TableCell className="max-w-[200px] truncate  xl:table-cell" title={org.address}>{org.address || 'N/A'}</TableCell>
                                 <TableCell>{org.ownerName || org.users?.[0]?.firstName || 'N/A'}</TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col text-xs gap-1">
+                                    <span className="flex items-center gap-1"><Smartphone className="size-3" /> {org.wallet?.smsCreditsAvailable || 0}</span>
+                                    <span className="flex items-center gap-1"><MessageSquare className="size-3" /> {org.wallet?.whatsappCreditsAvailable || 0}</span>
+                                  </div>
+                                </TableCell>
                                 <TableCell>
                                   <div className="flex gap-1">
                                     <Badge variant={org.isApproved ? 'default' : 'secondary'} className="rounded-md font-normal">
@@ -2011,8 +2160,191 @@ export default function AdminDashboard() {
             </TabsContent>
 
             {/* Notification Settings */}
-            <TabsContent value="notifications" className="m-0 focus-visible:outline-none">
+            <TabsContent value="notifications" className="m-0 space-y-6 focus-visible:outline-none">
               <AdminNotificationSettings />
+            </TabsContent>
+       
+           <TabsContent value="addons-wallet" className="m-0 space-y-6 focus-visible:outline-none">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight text-slate-900">SMS & WhatsApp Addons</h2>
+                  <p className="text-muted-foreground">Manage organization credits and Twilio-based services.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 space-y-6">
+                  <Card className="border shadow-sm bg-white">
+                    <CardHeader>
+                      <CardTitle>Organisation Services & Balances</CardTitle>
+                      <CardDescription>Toggle platform access for organisations and view current balances.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader className="bg-slate-50">
+                          <TableRow>
+                            <TableHead className="font-semibold text-slate-700">Organisation</TableHead>
+                            <TableHead className="font-semibold text-slate-700">Credit Balances</TableHead>
+                            <TableHead className="font-semibold text-slate-700">Active Services</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {walletOrganisations.map((org) => (
+                            <TableRow key={org.id}>
+                              <TableCell className="align-top py-4">
+                                <div className="font-medium">{org.name}</div>
+                                <div className="text-xs text-muted-foreground">{org.ownerName || 'No Owner'}</div>
+                              </TableCell>
+                              <TableCell className="align-top py-4">
+                                <div className="space-y-1">
+                                  <div className="flex justify-between text-xs w-32 border-b pb-1">
+                                    <span>SMS:</span>
+                                    <span className="font-mono font-bold">{org.wallet?.smsCreditsAvailable || 0}</span>
+                                  </div>
+                                  <div className="flex justify-between text-xs w-32 border-b pb-1 pt-1">
+                                    <span>WhatsApp:</span>
+                                    <span className="font-mono font-bold">{org.wallet?.whatsappCreditsAvailable || 0}</span>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="py-4">
+                                <div className="flex items-center gap-6">
+                                  <div className="flex flex-wrap gap-4">
+                                    {[
+                                      { id: 'sms', label: 'SMS', icon: Smartphone },
+                                      { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
+                                    ].map((svc) => (
+                                      <div key={svc.id} className="flex flex-col items-center gap-1.5 p-2 border rounded-md min-w-[70px] bg-slate-50">
+                                        <svc.icon className="size-4 text-muted-foreground" />
+                                        <span className="text-[10px] font-medium uppercase tracking-tighter">{svc.label}</span>
+                                        <Switch
+                                          className="data-[state=unchecked]:bg-slate-300 data-[state=checked]:bg-blue-600 scale-125"
+                                          checked={(org.platforms || []).includes(svc.id)}
+                                          disabled={isUpdatingService}
+                                          onCheckedChange={() => handleToggleService(org.id, svc.id, org.platforms || [])}
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                  
+                                  {((org.platforms || []).includes('sms') || (org.platforms || []).includes('whatsapp')) && (
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm" 
+                                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-8 px-2 flex items-center shrink-0"
+                                      disabled={isUpdatingService}
+                                      onClick={() => {
+                                        setSuspensionOrgId(org.id);
+                                        setSuspensionPlatform('both');
+                                        setSuspensionCurrentPlatforms(org.platforms || []);
+                                        setSuspensionReason(SUSPENSION_REASONS[0]);
+                                        setIsDisableBoth(true);
+                                        setIsSuspensionDialogOpen(true);
+                                      }}
+                                    >
+                                    
+                                    
+                                      Disable Both
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="lg:col-span-1 space-y-6">
+                  <Card className="border shadow-sm bg-white h-full max-h-[800px] flex flex-col">
+                    <CardHeader className="shrink-0 border-b">
+                      <div className="flex items-center justify-between mb-2">
+                        <CardTitle>Recent Transactions</CardTitle>
+                        <Badge variant="outline" className="font-mono uppercase text-[10px]">ALL</Badge>
+                      </div>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search transactions..."
+                          className="pl-8 h-9 text-xs"
+                          value={transactionsSearch}
+                          onChange={(e) => setTransactionsSearch(e.target.value)}
+                        />
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex-1 overflow-y-auto p-0 scrollbar-thin">
+                      <div className="space-y-0">
+                        {transactions.map((tx) => (
+                          <div key={tx.id} className="p-4 border-b last:border-0 hover:bg-slate-50 transition-colors">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="space-y-1 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant={tx.type === 'PURCHASE' ? 'default' : 'secondary'} className="text-[10px] px-1.5 h-4">
+                                    {tx.type}
+                                  </Badge>
+                                  <span className="text-xs font-bold text-slate-900">{tx.service}</span>
+                                </div>
+                                <div className="text-[11px] font-medium text-slate-600 line-clamp-1">{tx.wallet?.organisation?.name}</div>
+                                <div className="text-[10px] text-muted-foreground italic">Owner: {tx.wallet?.organisation?.ownerName || 'N/A'}</div>
+                                <p className="text-[11px] text-muted-foreground leading-tight">{tx.description}</p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <div className={`text-sm font-bold ${tx.type === 'REFUND' || tx.type === 'CREDIT'   ? 'text-green-600' : 'text-slate-900'}`}>
+                                  {tx.type === 'REFUND' || tx.type === 'CREDIT' ? '+' : '-'}{tx.amount}
+                                </div>
+                                <div className="text-[10px] text-muted-foreground">
+                                  {new Date(tx.createdAt).toLocaleDateString()}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {transactions.length === 0 && (
+                          <div className="p-8 text-center text-xs text-muted-foreground">
+                            No transactions found.
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                    <div className="shrink-0 p-4 border-t bg-slate-50">
+                      <div className="flex items-center justify-between gap-4">
+                        <p className="text-[10px] text-muted-foreground">
+                          Showing {transactions.length} of {transactionsTotalCount}
+                        </p>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2"
+                            disabled={transactionsPage <= 1}
+                            onClick={() => setTransactionsPage(p => p - 1)}
+                          >
+                            <ChevronLeft className="size-3" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2"
+                            disabled={transactionsPage * transactionsPageSize >= transactionsTotalCount}
+                            onClick={() => setTransactionsPage(p => p + 1)}
+                          >
+                            <ChevronRight className="size-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              </div>
+              
+              {/* Show empty state if no orgs match */}
+              {walletOrganisations.length === 0 && !isLoading && (
+                  <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">
+                      <p>No organisations have addons or wallet balances.</p>
+                  </div>
+              )}
             </TabsContent>
 
             {/* System Alerts */}
@@ -2841,6 +3173,61 @@ export default function AdminDashboard() {
       <footer className="flex-shrink-0 border-t bg-background p-4 text-center text-sm text-muted-foreground">
         &copy; {new Date().getFullYear()} CampZeo. All rights reserved.
       </footer>
+
+      {/* Suspension Reason Dialog */}
+      <Dialog open={isSuspensionDialogOpen} onOpenChange={setIsSuspensionDialogOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-600">
+              <Siren className="size-5" />
+              Confirm Service Suspension
+            </DialogTitle>
+            <DialogDescription>
+              {isDisableBoth 
+                ? "You are about to suspend BOTH SMS and WhatsApp services for this organisation. Please provide a reason to include in the notification email."
+                : `You are about to suspend the ${suspensionPlatform.toUpperCase()} service for this organisation. Please provide a reason to include in the notification email.`}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Select Standard Reason</Label>
+              <Select value={suspensionReason} onValueChange={setSuspensionReason}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SUSPENSION_REASONS.map((reason, idx) => (
+                    <SelectItem key={idx} value={reason}>{reason}</SelectItem>
+                  ))}
+                  <SelectItem value="custom">Other (Type custom reason below)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+               <Label className="text-sm font-semibold">Message Detail (Optional)</Label>
+               <Textarea 
+                 placeholder="Type additional details or custom reason here..."
+                 value={suspensionReason === 'custom' || !SUSPENSION_REASONS.includes(suspensionReason) ? suspensionReason : ''}
+                 onChange={(e) => setSuspensionReason(e.target.value)}
+                 className="min-h-[100px]"
+                 disabled={SUSPENSION_REASONS.includes(suspensionReason)}
+               />
+               <p className="text-xs text-muted-foreground mt-2">
+                 This message will be sent directly to the organisation owner in an official email.
+               </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-4">
+            <Button variant="outline" onClick={() => setIsSuspensionDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmSuspension} disabled={isUpdatingService || !suspensionReason}>
+              {isUpdatingService ? "Processing..." : "Confirm Suspension"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

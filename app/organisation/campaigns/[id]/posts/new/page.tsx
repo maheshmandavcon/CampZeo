@@ -1177,11 +1177,12 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                 const isTwilioPlatform = ['SMS', 'WHATSAPP'].includes(platform);
                                                 const isAdminLocked = isTwilioPlatform && twilioStatus !== 'APPROVED';
                                                 const isTrialLocked = isTwilioPlatform && isTrial;
+                                                const isSuspended = isTwilioPlatform && !isAssigned;
                                                 const isCreditLocked = isTwilioPlatform && (
                                                     (platform === 'SMS' && (wallet?.smsCreditsAvailable || 0) <= 0) ||
                                                     (platform === 'WHATSAPP' && (wallet?.whatsappCreditsAvailable || 0) <= 0)
                                                 );
-                                                const isLocked = isAdminLocked || isTrialLocked || isCreditLocked;
+                                                const isLocked = isAdminLocked || isTrialLocked || isSuspended || isCreditLocked;
 
                                                 // Check if user has connected account
                                                 let isConnected = false;
@@ -1195,7 +1196,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                 const isSelected = selectedPlatform === platform;
                                                 const Icon = getPlatformIcon(platform);
 
-                                                // Always show SMS/WhatsApp, others only if assigned
+                                                // Always show SMS/WhatsApp regardless of assignment so users can see lock status
                                                 if (!isAssigned && !isTwilioPlatform) return null;
 
                                                 const platformButton = (
@@ -1209,6 +1210,14 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                         action: {
                                                                             label: 'Upgrade Now',
                                                                             onClick: () => router.push('/organisation/billing')
+                                                                        }
+                                                                    });
+                                                                } else if (isSuspended) {
+                                                                    toast('Platform Suspended', {
+                                                                        description: `Your ${platform} access has been suspended. Please contact us or check billing.`,
+                                                                        action: {
+                                                                            label: 'Contact Support',
+                                                                            onClick: () => window.location.href="mailto:surya@mandavconsultancy.com"
                                                                         }
                                                                     });
                                                                 } else if (isAdminLocked) {
@@ -1255,7 +1264,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                         </span>
                                                         {isLocked && (
                                                             <span className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 leading-tight text-center">
-                                                                {isTrialLocked ? "Trial Restricted" : isAdminLocked ? "Admin Approval" : "No Credits"}
+                                                                {isTrialLocked ? "Trial Restricted" : isSuspended ? "Suspended" : isAdminLocked ? "Admin Approval" : "No Credits"}
                                                             </span>
                                                         )}
                                                     </button>
@@ -1271,11 +1280,13 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                             {platformButton}
                                                                         </div>
                                                                     </TooltipTrigger>
-                                                                    <TooltipContent className="p-3 w-64 space-y-2">
-                                                                        <p className="text-sm font-semibold">{isTrialLocked ? "Trial Restriction Active" : isAdminLocked ? "Admin Approval Required" : "No Credits Available"}</p>
+                                                                    <TooltipContent className="bg-popover text-popover-foreground border shadow-md p-3 w-64 space-y-2">
+                                                                        <p className="text-sm font-semibold">{isTrialLocked ? "Trial Restriction Active" : isSuspended ? "Addon Suspended" : isAdminLocked ? "Admin Approval Required" : "No Credits Available"}</p>
                                                                         <p className="text-xs text-muted-foreground">
                                                                             {isTrialLocked
                                                                                 ? "SMS and WhatsApp campaigns are not available during the free trial period. Please upgrade to a paid plan to unlock these channels."
+                                                                                : isSuspended
+                                                                                    ? `Your access to ${platform} has been temporarily suspended by the administrator.`
                                                                                 : isAdminLocked
                                                                                     ? "SMS and WhatsApp messaging requires admin approval and credit purchase."
                                                                                     : `You have 0 ${platform} credits. Please purchase a pack to use this channel.`}
@@ -1286,10 +1297,14 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                             onClick={(e) => {
                                                                                 e.preventDefault();
                                                                                 e.stopPropagation();
-                                                                                router.push('/organisation/billing');
+                                                                                if (isSuspended) {
+                                                                                    window.location.href="mailto:surya@mandavconsultancy.com";
+                                                                                } else {
+                                                                                    router.push('/organisation/billing');
+                                                                                }
                                                                             }}
                                                                         >
-                                                                            {isTrialLocked ? "Upgrade Plan" : isAdminLocked ? "Purchase Pack / Request Access" : "Add Credits"}
+                                                                            {isTrialLocked ? "Upgrade Plan" : isSuspended ? "Contact Support" : isAdminLocked ? "Purchase Pack / Request Access" : "Add Credits"}
                                                                         </Button>
                                                                     </TooltipContent>
                                                                 </Tooltip>

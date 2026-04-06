@@ -45,8 +45,7 @@ async function getHandler() {
     // Extract platform types
     const platforms = orgPlatforms.map((op: { platform: string }) => op.platform);
 
-    // Always include EMAIL, SMS, WHATSAPP as they're admin-configured
-    const allPlatforms = ['EMAIL', 'SMS', 'WHATSAPP', ...platforms];
+    const allPlatforms = ['EMAIL', ...platforms];
 
     // Remove duplicates
     const uniquePlatforms = [...new Set(allPlatforms)];
