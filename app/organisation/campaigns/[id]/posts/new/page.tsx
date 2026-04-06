@@ -187,6 +187,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [selectedSendContacts, setSelectedSendContacts] = useState<string[]>([]);
     const [contactSearchQuery, setContactSearchQuery] = useState('');
     const [isSending, setIsSending] = useState(false);
+    const [showSocialPublishConfirm, setShowSocialPublishConfirm] = useState(false);
     // Meta ad account balance/payment status
     const [balanceLow, setBalanceLow] = useState(false);
     const [metaHasPaymentMethod, setMetaHasPaymentMethod] = useState<boolean | null>(null);
@@ -792,8 +793,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     };
 
     // Handle form submit
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = async (e?: React.FormEvent, skipSocialCheck = false) => {
+        if (e) e.preventDefault();
 
         // Validation
         if (!selectedPlatform) {
@@ -846,6 +847,11 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         if (['EMAIL', 'SMS', 'WHATSAPP'].includes(selectedPlatform) && !scheduledPostTime) {
             setShowSendNowDialog(true);
             setSendNowStep('initial');
+            return;
+        }
+
+        if (isSocialPlatform && !scheduledPostTime && !skipSocialCheck) {
+            setShowSocialPublishConfirm(true);
             return;
         }
 
@@ -2283,6 +2289,52 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                         existingContent: message,
                     }}
                 /> {/* Send/Schedule Popup */}
+                <Dialog open={showSocialPublishConfirm} onOpenChange={setShowSocialPublishConfirm}>
+                    <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <Rocket className="size-5 text-primary" />
+                                Confirm Publication
+                            </DialogTitle>
+                            <DialogDescription className="py-4">
+                                You haven&apos;t scheduled a post date for this {selectedPlatform?.toLowerCase()} post.
+                                <br /><br />
+                                <strong>Without a scheduled date, this post will be published automatically (immediately) once created.</strong>
+                                <br /><br />
+                                Do you want to proceed and publish now?
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter className="flex gap-2 sm:gap-4">
+                            <Button
+                                variant="outline"
+                                onClick={() => setShowSocialPublishConfirm(false)}
+                                disabled={saving}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={() => {
+                                    setShowSocialPublishConfirm(false);
+                                    handleSubmit(undefined, true);
+                                }}
+                                disabled={saving}
+                            >
+                                {saving ? (
+                                    <>
+                                        <Loader2 className="mr-2 size-4 animate-spin" />
+                                        Creating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Check className="mr-2 size-4" />
+                                        Confirm & Publish Now
+                                    </>
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
                 <Dialog open={showSendNowDialog} onOpenChange={setShowSendNowDialog}>
                     <DialogContent className="sm:max-w-md">
                         <DialogHeader>

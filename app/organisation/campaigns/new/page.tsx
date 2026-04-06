@@ -144,11 +144,13 @@ export default function NewCampaignPage() {
             return;
         }
 
+        const now = new Date();
         const submissionTime = new Date();
         submissionTime.setSeconds(0, 0);
-        const fiveMinutesAgo = new Date(submissionTime.getTime());
 
-        if (new Date(startDate) < fiveMinutesAgo) {
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        if (new Date(startDate) < today) {
             toast.error('Start date cannot be in the past');
             return;
         }
@@ -198,13 +200,10 @@ export default function NewCampaignPage() {
 
     const now = new Date();
     const minDate = (() => {
-        const fiveMinutesBefore = new Date(now.getTime() - 2 * 60 * 1000);
-        const year = fiveMinutesBefore.getFullYear();
-        const month = String(fiveMinutesBefore.getMonth() + 1).padStart(2, '0');
-        const day = String(fiveMinutesBefore.getDate()).padStart(2, '0');
-        const hours = String(fiveMinutesBefore.getHours()).padStart(2, '0');
-        const minutes = String(fiveMinutesBefore.getMinutes()).padStart(2, '0');
-        return `${year}-${month}-${day}T${hours}:${minutes}`;
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}T00:00`;
     })();
 
     return (

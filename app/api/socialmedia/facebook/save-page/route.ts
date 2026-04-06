@@ -26,4 +26,4 @@ async function postHandler(request: NextRequest) {
     return NextResponse.json({ success: true });
 }
 
-export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/facebook/save-page", "postHandler");
+export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/facebook/save-page");

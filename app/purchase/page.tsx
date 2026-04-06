@@ -26,6 +26,84 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+const BLOCKED_DOMAINS = new Set([
+  "yopmail.com", "yopmail.fr", "cool.fr.nf", "jetable.fr.nf",
+  "nospam.ze.tc", "nomail.xl.cx", "mega.zik.dj", "speed.1s.fr",
+  "courriel.fr.nf", "moncourrier.fr.nf", "monemail.fr.nf",
+
+  "mailinator.com", "mailinator2.com", "trashmail.com",
+  "trashmail.me", "trashmail.net", "trashmail.at",
+  "trashmail.io", "trashmail.xyz",
+
+  "guerrillamail.com", "guerrillamail.net", "guerrillamail.org",
+  "guerrillamail.biz", "guerrillamail.de", "guerrillamail.info",
+  "grr.la", "spam4.me",
+
+  "10minutemail.com", "10minutemail.net", "10minutemail.org",
+  "10minemail.com", "tempr.email", "discard.email",
+
+  "throwam.com", "throwaway.email", "throwam.com",
+  "spamgourmet.com", "spamgourmet.net", "spamgourmet.org",
+
+  "tempmail.com", "tempmail.net", "tempmail.org",
+  "temp-mail.org", "temp-mail.ru", "tempinbox.com",
+  "tempemail.com", "tempemail.net", "fakeinbox.com",
+  "fakeinbox.net", "mailnull.com", "spamex.com",
+  "mailexpire.com", "spamfree24.org", "spamfree.eu",
+
+  "sharklasers.com", "guerrillamailblock.com", "grr.la",
+  "guerrillamail.info", "spam4.me", "yopmail.pp.ua",
+
+  "maildrop.cc", "dispostable.com", "mailnesia.com",
+  "spamgob.com", "mailzilla.com", "trashdevil.com",
+  "trashdevil.de", "wegwerfmail.de", "wegwerfmail.net",
+  "wegwerfmail.org", "spamzy.com", "spamspot.com",
+]);
+
+const BLOCKED_TLDS = new Set([
+  "xyz", "gq", "ml", "cf", "tk", "ga",
+]);
+
+export function validateEmail(email: string): {
+  valid: boolean;
+  error?: string;
+} {
+  if (!email || typeof email !== "string") {
+    return { valid: false, error: "Email is required" };
+  }
+
+  const trimmed = email.trim().toLowerCase();
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!emailRegex.test(trimmed)) {
+    return { valid: false, error: "Invalid email format" };
+  }
+
+  const [localPart, domain] = trimmed.split("@");
+
+  if (localPart.length < 2) {
+    return { valid: false, error: "Invalid email address" };
+  }
+
+  const tld = domain.split(".").pop() ?? "";
+
+  if (BLOCKED_TLDS.has(tld)) {
+    return { valid: false, error: "Email domain not allowed" };
+  }
+
+  if (BLOCKED_DOMAINS.has(domain)) {
+    return { valid: false, error: "Disposable email addresses are not allowed" };
+  }
+
+  const isBlockedSubdomain = [...BLOCKED_DOMAINS].some(
+    (blocked) => domain.endsWith(`.${blocked}`) || domain === blocked
+  );
+  if (isBlockedSubdomain) {
+    return { valid: false, error: "Disposable email addresses are not allowed" };
+  }
+
+  return { valid: true };
+}
 function PurchaseContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -291,7 +369,13 @@ function PurchaseContent() {
             requiredFields.organisationName = "Organisation Name";
             requiredFields.taxNumber = "GST / Tax Number";
         }
-
+const emailValidation = validateEmail(formData.email);
+    if (!emailValidation.valid) {
+      toast.error("Invalid Email", {
+        description: emailValidation.error || "Please enter a valid email address.",
+      });
+      return;
+    }
         for (const [field, label] of Object.entries(requiredFields)) {
             if (!formData[field as keyof typeof formData] || String(formData[field as keyof typeof formData]).trim() === "") {
                 toast.error(`${label} is required.`);
@@ -325,6 +409,7 @@ function PurchaseContent() {
             const checkData = await checkRes.json();
             if (checkData.isSuccess && checkData.exists) {
                 setEmailError(checkData.message);
+
                 toast.error("Email Already In Use", {
 
                     description: checkData.message,

@@ -59,4 +59,4 @@ async function getHandler() {
 
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/Organisation/GetPlatforms", "getHandler");
+export const GET = withErrorHandling(getHandler, "GET /api/Organisation/GetPlatforms");
