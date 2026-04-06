@@ -72,7 +72,7 @@ async function postHandler(req: Request) {
     }
 
     // Step 2: Create or link Clerk user
-    let clerkUser;
+    let clerkUser: any;
     const generatedPassword = (!enquiry.password || enquiry.password.trim() === '')
         ? Math.random().toString(36).slice(-10) + "A1!a"
         : enquiry.password.trim();
@@ -266,7 +266,8 @@ async function postHandler(req: Request) {
                     mobile: existingUser.mobile || enquiry.mobile || undefined,
                 }
             });
-        } else {
+        } 
+        else {
             console.log('Creating new local user record...');
             createdOrUpdatedUser = await tx.user.create({
                 data: {
@@ -308,11 +309,29 @@ async function postHandler(req: Request) {
 
     // Step 7: Send email to user (Outside transaction as it can't be rolled back)
     try {
+        let setupUrl = undefined;
+        try {
+            const client = await clerkClient();
+            const token = await client.signInTokens.createSignInToken({
+                userId: clerkUser.id,
+                expiresInSeconds: 60 * 60 * 24 * 7, // 7 days
+            });
+            const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+            setupUrl = `${appUrl}/sign-in?__clerk_ticket=${token.token}&redirect_url=${encodeURIComponent('/auth/set-password')}`;
+            console.log('Generated setup URL using local sign-in route and SignInToken');
+        } catch (tokenError) {
+            console.error('Failed to generate sign in token:', tokenError);
+            // Fallback to password flow if token generation fails and we had a password generated
+            // but ideally this shouldn't happen.
+        }
+
         await sendOrganisationInvite({
             email: enquiry.email,
-            password: generatedPassword,
+            // Only send password if setupUrl failed to generate
+            password: setupUrl ? undefined : generatedPassword,
             organisationName: enquiry.organisationName || enquiry.name,
             ownerName: enquiry.name,
+            setupUrl: setupUrl,
         });
     } catch (emailError) {
         console.error('Failed to send invite email:', emailError);

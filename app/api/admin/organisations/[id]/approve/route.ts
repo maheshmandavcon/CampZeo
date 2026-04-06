@@ -107,7 +107,6 @@ async function postHandler(
 
                     const clerkUser = await createClerkUser({
                         email,
-                        password,
                         firstName: finalFirstName,
                         lastName: finalLastName,
                         username: username // Optional
@@ -126,11 +125,27 @@ async function postHandler(
                         }
                     });
 
+                    let setupUrl = undefined;
+                    try {
+                        const { clerkClient } = await import('@clerk/nextjs/server');
+                        const client = await clerkClient();
+                        const token = await client.signInTokens.createSignInToken({
+                            userId: clerkUser.id,
+                            expiresInSeconds: 60 * 60 * 24 * 7, // 7 days
+                        });
+                        const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+                        setupUrl = `${appUrl}/sign-in?__clerk_ticket=${token.token}&redirect_url=${encodeURIComponent('/auth/set-password')}`;
+                        console.log('Generated setup URL using local sign-in route and SignInToken for approved organisation');
+                    } catch (tokenError) {
+                        console.error('Failed to generate sign in token:', tokenError);
+                    }
+
                     await sendOrganisationInvite({
                         email,
-                        password,
+                        password: setupUrl ? undefined : password,
                         organisationName: organisation.name,
-                        ownerName: `${finalFirstName} ${finalLastName}`.trim() || "User"
+                        ownerName: `${finalFirstName} ${finalLastName}`.trim() || "User",
+                        setupUrl: setupUrl,
                     });
 
                     message += ". User account created and invitation sent.";

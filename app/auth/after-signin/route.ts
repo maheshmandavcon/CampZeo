@@ -16,16 +16,17 @@ export async function GET(req: Request) {
     });
 
     if (!dbUser) {
-      return NextResponse.redirect(new URL('/sign-up', req.url));
+      console.warn(`[AfterSignIn] No Prisma user found for Clerk ID: ${user.id}. Redirecting to sign-in.`);
+      return NextResponse.redirect(new URL('/sign-in', req.url));
     }
 
     if (dbUser.organisation) {
       return NextResponse.redirect(new URL('/organisation', req.url));
     }
 
-    return NextResponse.redirect(new URL('/sign-up', req.url));
+    return NextResponse.redirect(new URL('/sign-in', req.url));
   } catch (error) {
     console.error('Error in after-signin redirect:', error);
-    return NextResponse.redirect(new URL('/sign-up', req.url));
+    return NextResponse.redirect(new URL('/sign-in', req.url));
   }
 }

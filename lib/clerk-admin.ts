@@ -6,7 +6,7 @@ import { clerkClient } from "@clerk/nextjs/server";
 
 interface CreateUserParams {
     email: string;
-    password: string;
+    password?: string;
     firstName?: string;
     lastName?: string;
     username?: string;
@@ -24,9 +24,6 @@ export async function createClerkUser(params: CreateUserParams) {
     if (!email || email.trim() === '') {
         throw new Error('Email is required');
     }
-    if (!password || password.trim() === '') {
-        throw new Error('Password is required');
-    }
 
     try {
         const client = await clerkClient();
@@ -39,19 +36,24 @@ export async function createClerkUser(params: CreateUserParams) {
             username: generatedUsername,
             firstName: firstName || 'User',
             hasPassword: !!password,
-            passwordLength: password.length
+            passwordLength: password?.length || 0
         });
 
-        const user = await client.users.createUser({
+        const userCreateParams: any = {
             emailAddress: [email.trim()],
             username: generatedUsername,
-            password,
             firstName: firstName?.trim() || 'User',
             lastName: lastName?.trim() || undefined,
             skipPasswordChecks: true,
-            skipPasswordRequirement: false,
+            skipPasswordRequirement: !password,
             legalAcceptedAt: new Date(), // Set current date as legal consent acceptance
-        });
+        };
+
+        if (password) {
+            userCreateParams.password = password;
+        }
+
+        const user = await client.users.createUser(userCreateParams);
 
         console.log('User created successfully:', user.id);
         return user;

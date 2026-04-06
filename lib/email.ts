@@ -5,9 +5,11 @@ import { prisma } from '@/lib/prisma';
 
 interface OrganisationInviteParams {
     email: string;
-    password: string;
+    password?: string;
+    
     organisationName: string;
     ownerName?: string;
+    setupUrl?: string;
 }
 
 async function getEmailConfig() {
@@ -42,34 +44,47 @@ async function getEmailConfig() {
  * @param params - Email parameters including recipient, password, and org details
  */
 export async function sendOrganisationInvite(params: OrganisationInviteParams): Promise<void> {
-    const { email, password, organisationName, ownerName } = params;
+    const { email, password, organisationName, ownerName, setupUrl } = params;
     const { apiKey, domain, fromEmail } = await getEmailConfig();
 
     if (apiKey && domain && fromEmail) {
         const mailgun = new Mailgun(FormData);
         const mg = mailgun.client({ username: 'api', key: apiKey });
 
+        const credentialsHtml = setupUrl 
+            ? `
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="${setupUrl}" style="background-color: #0070f3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                        Set Password & Login
+                    </a>
+                </div>
+                <p style="text-align: center; color: #666; font-size: 14px;">This secure link allows you to log in instantly and set your permanent password.</p>
+              `
+            : `
+                <div style="background-color: #f4f4f4; padding: 20px; border-radius: 5px; margin: 20px 0;">
+                    <h3>Login Credentials</h3>
+                    <p><strong>Email:</strong> ${email}</p>
+                    <p><strong>Temporary Password:</strong> ${password}</p>
+                </div>
+                <p>Please login and change your password immediately.</p>
+                <p>
+                    <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/" 
+                       style="background-color: #0070f3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                       Login to Dashboard
+                    </a>
+                </p>
+              `;
+
         const msg = {
             from: fromEmail,
             to: [email],
-            subject: `Welcome to ${organisationName} - Your Account Details`,
+            subject: setupUrl ? `Welcome to ${organisationName} - Set Your Password` : `Welcome to ${organisationName} - Your Account Details`,
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                     <h2>Welcome to ${organisationName}!</h2>
-                    <p>Dear ${ownerName || 'User'},</p>
+                    <p>Hi ${ownerName || 'there'},</p>
                     <p>Your organisation "${organisationName}" has been created successfully.</p>
-                    <div style="background-color: #f4f4f4; padding: 20px; border-radius: 5px; margin: 20px 0;">
-                        <h3>Login Credentials</h3>
-                        <p><strong>Email:</strong> ${email}</p>
-                        <p><strong>Temporary Password:</strong> ${password}</p>
-                    </div>
-                    <p>Please login and change your password immediately.</p>
-                    <p>
-                        <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/" 
-                           style="background-color: #0070f3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
-                           Login to Dashboard
-                        </a>
-                    </p>
+                    ${credentialsHtml}
                 </div>
             `,
         };
@@ -90,15 +105,21 @@ export async function sendOrganisationInvite(params: OrganisationInviteParams): 
     console.log('📧 Email Content:');
     console.log('='.repeat(60));
     console.log(`To: ${email}`);
-    console.log(`Subject: Welcome to ${organisationName} - Your Account Details`);
+    console.log(`Subject: ${setupUrl ? `Welcome to ${organisationName} - Set Your Password` : `Welcome to ${organisationName} - Your Account Details`}`);
     console.log('\nEmail Body:');
     console.log(`Dear ${ownerName || 'User'},\n`);
     console.log(`Your organisation "${organisationName}" has been created successfully!\n`);
-    console.log('Login Credentials:');
-    console.log(`Email: ${email}`);
-    console.log(`Temporary Password: ${password}\n`);
-    console.log('Please login and change your password immediately.');
-    console.log(`Login URL: ${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/sign-in\n`);
+    
+    if (setupUrl) {
+        console.log('Action: Set Password & Login');
+        console.log(`Setup URL: ${setupUrl}\n`);
+    } else {
+        console.log('Login Credentials:');
+        console.log(`Email: ${email}`);
+        console.log(`Temporary Password: ${password}\n`);
+        console.log('Please login and change your password immediately.');
+        console.log(`Login URL: ${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/sign-in\n`);
+    }
     console.log('='.repeat(60));
 }
 
