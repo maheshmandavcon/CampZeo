@@ -162,8 +162,11 @@ async function createUpdateOrganisationHandler(req: Request) {
             });
 
             if (organisationPlatform) {
-                await tx.organisationPlatform.deleteMany({
-                    where: { organisationId: Number(id) }
+                const orgId = Number(id);
+                // 1. Mark all existing platforms for this organisation as inactive
+                await tx.organisationPlatform.updateMany({
+                    where: { organisationId: orgId },
+                    data: { isActive: false }
                 });
 
                 if (organisationPlatform.length > 0) {
@@ -172,12 +175,22 @@ async function createUpdateOrganisationHandler(req: Request) {
                         .filter((p: string) => Object.values(PlatformType).includes(p as PlatformType));
 
                     if (validPlatforms.length > 0) {
-                        await tx.organisationPlatform.createMany({
-                            data: validPlatforms.map((p: string) => ({
-                                organisationId: Number(id),
-                                platform: p as any
-                            }))
-                        });
+                        for (const p of validPlatforms) {
+                            await tx.organisationPlatform.upsert({
+                                where: {
+                                    organisationId_platform: {
+                                        organisationId: orgId,
+                                        platform: p as any
+                                    }
+                                },
+                                update: { isActive: true },
+                                create: {
+                                    organisationId: orgId,
+                                    platform: p as any,
+                                    isActive: true
+                                }
+                            });
+                        }
                     }
                 }
             }
@@ -231,7 +244,8 @@ async function createUpdateOrganisationHandler(req: Request) {
                 ownerName,
                 organisationPlatforms: {
                     create: validPlatforms.map((p: string) => ({
-                        platform: p as any
+                        platform: p as any,
+                        isActive: true
                     }))
                 }
             },
