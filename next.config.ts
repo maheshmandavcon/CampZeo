@@ -61,7 +61,7 @@ const nextConfig: NextConfig = {
     ],
   },
   experimental: {
-    middlewareClientMaxBodySize: '500mb',
+    middlewareClientMaxBodySize: '1024mb',
   },
   async headers() {
     return [

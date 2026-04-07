@@ -97,7 +97,7 @@ export async function uploadToDrive(
 
     // 3. Return a local proxy URL instead of a direct Google link
     // We add '#' with the filename at the end so frontend regexes can correctly identify the media type.
-    return `/api/upload/google-drive/view?id=${fileId}#${fileName}`;
+    return `/api/upload/google-drive/view?id=${fileId}&file=${encodeURIComponent(fileName)}`;
   } catch (error) {
     console.error('Error uploading to Google Drive:', error);
     throw error;
