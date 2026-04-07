@@ -41,7 +41,9 @@ export default async function SettingsPage() {
   const organisation = await prisma.organisation.findUnique({
     where: { id: effectiveOrganisationId },
     include: {
-      organisationPlatforms: true
+      organisationPlatforms: {
+        where: { isActive: true }
+      }
     }
   });
 
