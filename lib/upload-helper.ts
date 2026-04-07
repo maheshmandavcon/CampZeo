@@ -1,9 +1,20 @@
 export async function uploadToServer(file: File): Promise<{ url: string }> {
+  const provider = process.env.NEXT_PUBLIC_STORAGE_PROVIDER || 'custom_server';
   const serverUrl = process.env.NEXT_PUBLIC_UPLOAD_SERVER_URL || '';
-  const formData = new FormData();
-  formData.append('files', file);
 
-  const res = await fetch(`${serverUrl}/api/upload`, {
+  const formData = new FormData();
+  let uploadUrl = `${serverUrl}/api/upload`;
+
+  if (provider === 'google_drive') {
+    uploadUrl = '/api/upload/google-drive';
+    formData.append('file', file); // My API route expects 'file'
+    console.log("[Upload] Using Google Drive storage provider...");
+  } else {
+    formData.append('files', file); // Custom server expects 'files'
+    console.log(`[Upload] Using custom server storage provider: ${serverUrl}`);
+  }
+
+  const res = await fetch(uploadUrl, {
     method: 'POST',
     body: formData,
   });
@@ -14,7 +25,7 @@ export async function uploadToServer(file: File): Promise<{ url: string }> {
   }
 
   const data = await res.json();
-  const url = data.urls && data.urls.length > 0 ? data.urls[0] : null;
+  const url = data.urls && data.urls.length > 0 ? data.urls[0] : (data.url || null);
 
   if (!url) {
     throw new Error("Upload succeeded but no URL was returned by the server.");

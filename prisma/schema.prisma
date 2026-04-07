@@ -99,6 +99,9 @@ model OrganisationPlatform {
   organisationId Int
   platform       PlatformType
   organisation   Organisation @relation(fields: [organisationId], references: [id])
+  isActive       Boolean      @default(true)
+
+  @@unique([organisationId, platform])
 }
 
 model Campaign {

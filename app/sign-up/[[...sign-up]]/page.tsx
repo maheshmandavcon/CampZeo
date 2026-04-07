@@ -109,6 +109,7 @@ export default function Page() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [isCaptchaRequired, setIsCaptchaRequired] = useState(true);
   const recaptchaRef = useRef<ReCAPTCHA>(null);
@@ -170,10 +171,27 @@ export default function Page() {
     }
 
     setForm(prev => ({ ...prev, [name]: filteredValue }));
+    // Clear error for this field
+    if (errors[name]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
   };
 
-  const handleSelectChange = (name: string, value: string) =>
+  const handleSelectChange = (name: string, value: string) => {
     setForm(prev => ({ ...prev, [name]: value }));
+    // Clear error for this field
+    if (errors[name]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+  };
 
   //const lastPostalRef = useRef("");
 
@@ -269,17 +287,10 @@ export default function Page() {
   }, [form.postalCode]);
 
 
-  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
 
-    if (!captchaToken) {
-      toast.error("Please complete the CAPTCHA check.");
-      return;
-    }
-
-    // password: "Password",
-    // confirmPassword: "Confirm Password",
-    // Validation logic remains the same
+    // 1. Check required fields
     const requiredFields: Record<string, string> = {
       email: "Email",
       name: "Owner Name",
@@ -289,6 +300,7 @@ export default function Page() {
       state: "State",
       country: "Country",
       postalCode: "Postal Code",
+      enquiryText: "Enquiry Interest",
     };
 
     if (accountType === 'business') {
@@ -296,21 +308,45 @@ export default function Page() {
       requiredFields.taxNumber = "GST / Tax Number";
     }
 
-    for (const [field, label] of Object.entries(requiredFields)) {
-      if (!form[field as keyof typeof form] || form[field as keyof typeof form].trim() === "") {
-        toast.error("Missing Required Field", {
-          description: `${label} is required. Please fill in all fields.`,
-        });
-        return;
+    Object.entries(requiredFields).forEach(([field, label]) => {
+      const val = form[field as keyof typeof form];
+      if (!val || (typeof val === 'string' && val.trim() === "")) {
+        newErrors[field] = `${label} is required`;
       }
+    });
+
+    // 2. Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (form.email && !emailRegex.test(form.email)) {
+      newErrors.email = "Please enter a valid email address";
     }
 
-    // if (form.password !== form.confirmPassword) {
-    //   toast.error("Password Mismatch", {
-    //     description: "Passwords do not match.",
-    //   });
-    //   return;
-    // }
+    // 3. Mobile validation
+    const digits = form.mobile.replace(/\D/g, '');
+    if (form.mobile && (digits.length < 10 || digits.length > 15)) {
+      newErrors.mobile = "Mobile Number must contain 10-15 digits";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    if (!validateForm()) {
+      toast.error("Form Validation Failed", {
+        description: "Please fill in all required fields correctly.",
+      });
+      return;
+    }
+
+    if (!captchaToken) {
+      toast.error("Please complete the CAPTCHA check.");
+      return;
+    }
+
+    setLoading(true);
 
     const submissionForm = {
       ...form,
@@ -363,6 +399,7 @@ export default function Page() {
       const checkData = await checkRes.json();
       if (checkData.isSuccess && checkData.exists) {
         setEmailError(checkData.message);
+        setErrors(prev => ({ ...prev, email: checkData.message }));
         toast.error("Email Already In Use", {
           description: checkData.message,
         });
@@ -511,8 +548,9 @@ export default function Page() {
                     placeholder="Acme Corp"
                     value={form.organisationName}
                     onChange={handleChange}
-                    className="h-10"
+                    className={`h-10 ${errors.organisationName ? 'border-red-500 ring-red-500 ring-1' : ''}`}
                   />
+                  {errors.organisationName && <p className="text-xs text-red-500 font-medium px-1 mt-1">{errors.organisationName}</p>}
                 </div>
               )}
               <div className={accountType === "individual" ? "col-span-1 md:col-span-2 space-y-2" : "space-y-2"}>
@@ -523,8 +561,9 @@ export default function Page() {
                   placeholder="John Doe"
                   value={form.name}
                   onChange={handleChange}
-                  className="h-10"
+                  className={`h-10 ${errors.name ? 'border-red-500 ring-red-500 ring-1' : ''}`}
                 />
+                {errors.name && <p className="text-xs text-red-500 font-medium px-1 mt-1">{errors.name}</p>}
               </div>
 
               <div className="space-y-2">
@@ -536,9 +575,9 @@ export default function Page() {
                   placeholder="name@example.com"
                   value={form.email}
                   onChange={(e) => { handleChange(e); setEmailError(null); }}
-                  className={`h-10 ${emailError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                  className={`h-10 ${(emailError || errors.email) ? 'border-red-500 ring-1 ring-red-500' : ''}`}
                 />
-                {emailError && <p className="text-xs text-red-500 font-medium">{emailError}</p>}
+                {(emailError || errors.email) && <p className="text-xs text-red-500 font-medium px-1 mt-1">{emailError || errors.email}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="mobile">Mobile Number <span className="text-destructive">*</span></Label>
@@ -548,8 +587,9 @@ export default function Page() {
                   placeholder="+1 (555) 000-0000"
                   value={form.mobile}
                   onChange={handleChange}
-                  className="h-10"
+                  className={`h-10 ${errors.mobile ? 'border-red-500 ring-red-500 ring-1' : ''}`}
                 />
+                {errors.mobile && <p className="text-xs text-red-500 font-medium px-1 mt-1">{errors.mobile}</p>}
               </div>
 
               <div className="col-span-1 md:col-span-2 space-y-2">
@@ -560,10 +600,11 @@ export default function Page() {
                   placeholder="123 Main St"
                   value={form.address}
                   onChange={handleChange}
-                  className="h-10"
+                  className={`h-10 ${errors.address ? 'border-red-500 ring-red-500 ring-1' : ''}`}
                 />
+                {errors.address && <p className="text-xs text-red-500 font-medium px-1 mt-1">{errors.address}</p>}
               </div>
-<div className="space-y-2">
+              <div className="space-y-2">
                 <Label htmlFor="postalCode">Postal Code <span className="text-destructive">*</span></Label>
                 <Input
                   id="postalCode"
@@ -571,8 +612,9 @@ export default function Page() {
                   placeholder="10001"
                   value={form.postalCode}
                   onChange={handleChange}
-                  className="h-10"
+                  className={`h-10 ${errors.postalCode ? 'border-red-500 ring-red-500 ring-1' : ''}`}
                 />
+                {errors.postalCode && <p className="text-xs text-red-500 font-medium px-1 mt-1">{errors.postalCode}</p>}
 
                 {postalOptions.length > 0 && (
                   <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg animate-in fade-in slide-in-from-top-2 duration-300">
@@ -614,8 +656,9 @@ export default function Page() {
                     placeholder="New York"
                     value={form.city}
                     onChange={handleChange}
-                    className="h-10 pr-10"
+                    className={`h-10 pr-10 ${errors.city ? 'border-red-500 ring-red-500 ring-1' : ''}`}
                   />
+                  {errors.city && <p className="text-xs text-red-500 font-medium px-1 mt-1">{errors.city}</p>}
                   {isDetecting && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -632,8 +675,9 @@ export default function Page() {
                     placeholder="NY"
                     value={form.state}
                     onChange={handleChange}
-                    className="h-10 pr-10"
+                    className={`h-10 pr-10 ${errors.state ? 'border-red-500 ring-red-500 ring-1' : ''}`}
                   />
+                  {errors.state && <p className="text-xs text-red-500 font-medium px-1 mt-1">{errors.state}</p>}
                   {isDetecting && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -650,9 +694,10 @@ export default function Page() {
                   onValueChange={(v) => handleSelectChange("country", v)}
                   value={form.country}
                 >
-                  <SelectTrigger className="border border-gray-300 h-10">
+                  <SelectTrigger className={`border h-10 ${errors.country ? 'border-red-500 ring-red-500 ring-1' : 'border-gray-300'}`}>
                     <SelectValue placeholder="Select Country" />
                   </SelectTrigger>
+                  {errors.country && <p className="text-xs text-red-500 font-medium px-1 mt-1">{errors.country}</p>}
                   <SelectContent>
                     {countries.map((c) => (
                       <SelectItem key={c.code} value={c.name}>
@@ -662,7 +707,7 @@ export default function Page() {
                   </SelectContent>
                 </Select>
               </div>
-              
+
 
               {accountType === "business" && (
                 <div className="col-span-1 md:col-span-2 space-y-2">
@@ -673,11 +718,12 @@ export default function Page() {
                     placeholder="Tax ID or VAT Number"
                     value={form.taxNumber}
                     onChange={handleChange}
-                    className="h-10"
+                    className={`h-10 ${errors.taxNumber ? 'border-red-500 ring-red-500 ring-1' : ''}`}
                   />
+                  {errors.taxNumber && <p className="text-xs text-red-500 font-medium px-1 mt-1">{errors.taxNumber}</p>}
                 </div>
               )}
-{/* 
+              {/* 
               <div className="col-span-1 md:col-span-2 space-y-2">
                 <Label htmlFor="password">Password <span className="text-destructive">*</span></Label>
                 <div className="relative">
@@ -731,10 +777,11 @@ export default function Page() {
                   id="enquiryText"
                   name="enquiryText"
                   placeholder="Share a bit about your organization's needs..."
-                  className="min-h-[80px] border  border-gray-200 resize-none"
+                  className={`min-h-[80px] border resize-none ${errors.enquiryText ? 'border-red-500 ring-red-500 ring-1' : 'border-gray-200'}`}
                   value={form.enquiryText}
                   onChange={handleChange}
                 />
+                {errors.enquiryText && <p className="text-xs text-red-500 font-medium px-1 mt-1">{errors.enquiryText}</p>}
               </div>
             </div>
 

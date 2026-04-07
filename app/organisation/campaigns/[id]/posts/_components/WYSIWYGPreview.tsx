@@ -83,6 +83,9 @@ export function WYSIWYGPreview({
     const getFileName = (url: string) => {
         try {
             const decoded = decodeURIComponent(url);
+            if (decoded.includes('google-drive/view') && decoded.includes('#')) {
+                return decoded.split('#').pop() || 'Attachment';
+            }
             return decoded.split('/').pop()?.split('?')[0] || 'Attachment';
         } catch {
             return 'Attachment';

@@ -52,9 +52,10 @@ interface SettingsClientProps {
   };
   assignedPlatforms: string[];
   isImpersonating?: boolean;
+  facebookAppId?: string | null;
 }
 
-export function SettingsClient({ userData, assignedPlatforms, isImpersonating = false }: SettingsClientProps) {
+export function SettingsClient({ userData, assignedPlatforms, isImpersonating = false, facebookAppId }: SettingsClientProps) {
   const { user, isLoaded } = useUser();
   const [isUpdating, setIsUpdating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -397,48 +398,48 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
       connected: userData.pinterestConnected,
       accountName: socialStatus?.pinterest?.name,
       description: "Pin your visual content to Pinterest boards.",
+    },
+    {
+      id: "EMAIL",
+      name: "Email (Twilio SendGrid)",
+      icon: Mail,
+      color: "text-slate-600",
+      connected: userData.emailConnected,
+      accountName: null,
+      description: "Send emails via Twilio SendGrid.",
+    },
+    {
+      id: "SMS",
+      name: "SMS (Twilio)",
+      icon: Smartphone,
+      color: "text-red-500",
+      connected: userData.smsConnected,
+      accountName: null,
+      description: "Send SMS messages via Twilio.",
+    },
+    {
+      id: "WHATSAPP",
+      name: "WhatsApp (Twilio)",
+      icon: MessageSquare,
+      color: "text-green",
+      connected: userData.whatsappConnected,
+      accountName: null,
+      description: "Send WhatsApp messages via Twilio.",
     }
-    // {
-    //   id: "EMAIL",
-    //   name: "Email (Twilio SendGrid)",
-    //   icon: Mail,
-    //   color: "text-slate-600",
-    //   connected: userData.emailConnected,
-    //   accountName: null,
-    //   description: "Send emails via Twilio SendGrid.",
-    // },
-    // {
-    //   id: "SMS",
-    //   name: "SMS (Twilio)",
-    //   icon: Smartphone,
-    //   color: "text-red-500",
-    //   connected: userData.smsConnected,
-    //   accountName: null,
-    //   description: "Send SMS messages via Twilio.",
-    // },
-    // {
-    //   id: "WHATSAPP",
-    //   name: "WhatsApp (Twilio)",
-    //   icon: MessageSquare,
-    //   color: "text-green",
-    //   connected: userData.whatsappConnected,
-    //   accountName: null,
-    //   description: "Send WhatsApp messages via Twilio.",
-    // }
   ];
 
   const filteredPlatforms = platforms.filter(platform => {
-    // 1. If impersonating, show all assigned platforms (including EMAIL, SMS, WHATSAPP)
+    // 1. If impersonating, show all assigned platforms
     if (isImpersonating) {
       return assignedPlatforms.includes(platform.id);
     }
 
-    // 2. Normal flow: Exclude EMAIL, SMS, WHATSAPP from the list entirely
-    if (['EMAIL', 'SMS', 'WHATSAPP'].includes(platform.id)) {
+    // 2. Normal flow: Exclude EMAIL from the list (staying consistent with previous feedback)
+    if (platform.id === 'EMAIL') {
       return false;
     }
 
-    // 3. Only show platforms that are assigned to the organisation
+    // 3. Only show platforms that are assigned and active (assignedPlatforms now only contains active ones)
     return assignedPlatforms.includes(platform.id);
   });
 

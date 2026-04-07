@@ -95,5 +95,5 @@ async function postHandler(request: NextRequest) {
     }
 }
 
-export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/facebook/lead-forms", "getHandler");
-export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/facebook/lead-forms", "postHandler");
+export const GET = withErrorHandling(getHandler, "GET /api/socialmedia/facebook/lead-forms");
+export const POST = withErrorHandling(postHandler, "POST /api/socialmedia/facebook/lead-forms");

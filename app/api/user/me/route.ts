@@ -17,7 +17,9 @@ async function getHandler() {
             include: {
                 organisation: {
                     include: {
-                        organisationPlatforms: true,
+                        organisationPlatforms: {
+                            where: { isActive: true }
+                        },
                         subscriptions: {
                             orderBy: { createdAt: 'desc' },
                             take: 1,
@@ -44,7 +46,9 @@ async function getHandler() {
                 const org = await prisma.organisation.findUnique({
                     where: { id: impersonatedId },
                     include: {
-                        organisationPlatforms: true,
+                        organisationPlatforms: {
+                            where: { isActive: true }
+                        },
                         subscriptions: {
                             orderBy: { createdAt: 'desc' },
                             take: 1,
