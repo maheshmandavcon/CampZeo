@@ -35,14 +35,24 @@ export async function GET(req: Request) {
       supportsAllDrives: true,
     });
 
-    // 3. Fetch the actual file content
-    const response = await drive.files.get(
-      { fileId, alt: 'media', supportsAllDrives: true },
-      { responseType: 'stream' }
-    );
+    // 3. Fetch the actual file content using native fetch to get a Web Stream compatible with NextResponse
+    const client = await auth.getClient();
+    const token = await client.getAccessToken();
+    
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
+      headers: {
+        Authorization: `Bearer ${token.token}`
+      }
+    });
 
-    // 4. Return as a stream with the correct headers
-    return new NextResponse(response.data as any, {
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('Failed to fetch from drive:', text);
+      return new NextResponse('Error fetching media from Google Drive', { status: res.status });
+    }
+
+    // 4. Return the Web stream with the correct headers
+    return new NextResponse(res.body, {
       headers: {
         'Content-Type': metadata.data.mimeType || 'application/octet-stream',
         'Cache-Control': 'public, max-age=31536000, immutable',
