@@ -11,11 +11,12 @@ import { sendSms, sendWhatsapp } from '@/lib/twilio';
 import { createBoostedAd } from '@/lib/meta-ads';
 import { logInfo } from '@/lib/audit-logger';
 import { deleteFromServer } from '@/lib/upload-helper';
+import { deleteFromDrive } from '@/lib/google-drive';
 
 
 async function cleanupBlobs(urls: (string | string[] | null | undefined)[]) {
     const allUrls = urls.flat().filter((url): url is string =>
-        typeof url === 'string' && (url.includes('vercel-storage.com') || url.includes('103.72.220.77'))
+        typeof url === 'string' && (url.includes('vercel-storage.com') || url.includes('103.72.220.77') || url.includes('google.com/uc'))
     );
 
     if (allUrls.length > 0) {
@@ -58,6 +59,7 @@ async function cleanupBlobs(urls: (string | string[] | null | undefined)[]) {
 
             const vercelUrls = urlsToDelete.filter(url => url.includes('vercel-storage.com'));
             const customUrls = urlsToDelete.filter(url => url.includes('103.72.220.77'));
+            const googleUrls = urlsToDelete.filter(url => url.includes('google.com/uc'));
 
             if (vercelUrls.length > 0) {
                 try {
@@ -70,6 +72,16 @@ async function cleanupBlobs(urls: (string | string[] | null | undefined)[]) {
             if (customUrls.length > 0) {
                 for (const url of customUrls) {
                     await deleteFromServer(url);
+                }
+            }
+
+            if (googleUrls.length > 0) {
+                for (const url of googleUrls) {
+                    try {
+                        await deleteFromDrive(url);
+                    } catch (error) {
+                        console.error('[Cleanup] Failed to delete file from Google Drive:', error);
+                    }
                 }
             }
         }
@@ -1017,6 +1029,9 @@ export async function sendCampaignPost(
                     lastUpdated: new Date()
                 }
             });
+
+            // Cleanup media if no longer referenced
+            await cleanupBlobs([...(post.mediaUrls || []), post.videoUrl]);
         }
 
         return {

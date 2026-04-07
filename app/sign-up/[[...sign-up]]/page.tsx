@@ -492,7 +492,7 @@ export default function Page() {
                 />
                 {errors.address && <p className="text-xs text-red-500 font-medium px-1 mt-1">{errors.address}</p>}
               </div>
-<div className="space-y-2">
+              <div className="space-y-2">
                 <Label htmlFor="postalCode">Postal Code <span className="text-destructive">*</span></Label>
                 <Input
                   id="postalCode"
@@ -595,7 +595,7 @@ export default function Page() {
                   </SelectContent>
                 </Select>
               </div>
-              
+
 
               {accountType === "business" && (
                 <div className="col-span-1 md:col-span-2 space-y-2">
@@ -611,7 +611,7 @@ export default function Page() {
                   {errors.taxNumber && <p className="text-xs text-red-500 font-medium px-1 mt-1">{errors.taxNumber}</p>}
                 </div>
               )}
-{/* 
+              {/* 
               <div className="col-span-1 md:col-span-2 space-y-2">
                 <Label htmlFor="password">Password <span className="text-destructive">*</span></Label>
                 <div className="relative">
