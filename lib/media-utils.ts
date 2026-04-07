@@ -8,48 +8,53 @@
  * @returns Absolute public URL
  */
 export function getPublicMediaUrl(url: string): string {
-    // If already absolute URL, return as is
+    // If already absolute URL, return as is (but ensure it's not a relative-protocol URL)
     if (url.startsWith('http://') || url.startsWith('https://')) {
         return url;
     }
 
     // If relative URL, convert to absolute
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
-        process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` :
-        'http://localhost:3000';
+    // Priority: Explicit App URL -> Vercel Deployment URL -> Localhost (Development)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 
-    return `${baseUrl}${url.startsWith('/') ? url : `/${url}`}`;
+    // Remove any accidental multiple slashes
+    const cleanPath = url.startsWith('/') ? url : `/${url}`;
+    
+    // Facebook/Instagram sometimes fail if fragments are present in the 'url' param
+    const urlWithoutFragment = cleanPath.split('#')[0];
+
+    return `${baseUrl}${urlWithoutFragment}`;
 }
 
 /**
- * Checks if a URL is publicly accessible (not localhost)
+ * Checks if a URL is publicly accessible (not localhost/127.0.0.1)
  * @param url - The URL to check
  * @returns true if URL is publicly accessible
  */
 export function isPublicUrl(url: string): boolean {
     if (!url) return false;
 
-    const isLocalhost = url.includes('localhost') ||
-        url.includes('127.0.0.1') ||
+    // A "public" url must be absolute and NOT localhost
+    const isLocal = url.includes('localhost') || 
+        url.includes('127.0.0.1') || 
         url.includes('0.0.0.0');
 
-    return !isLocalhost && (url.startsWith('http://') || url.startsWith('https://'));
+    return (url.startsWith('http://') || url.startsWith('https://')) && !isLocal;
 }
 
 /**
  * Gets the appropriate media URL for social media posting
- * For production: returns the URL as is (should be Vercel Blob)
- * For development: converts localhost URLs to public URLs if available
  * @param url - The media URL
  * @returns URL suitable for social media posting
  */
 export function getSocialMediaUrl(url: string): string {
-    // If it's already a public URL (Vercel Blob, Cloudinary, etc.), return as is
+    // If it's already a public absolute URL, return as is
     if (isPublicUrl(url)) {
         return url;
     }
 
-    // For localhost URLs, convert to public URL
+    // Otherwise, try to make it absolute using the configured base URL
     return getPublicMediaUrl(url);
 }
 
