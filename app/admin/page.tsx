@@ -39,7 +39,10 @@ import {
   FileJson,
   Bell,
   Siren,
-  CreditCard
+  CreditCard,
+  LayoutGrid,
+  HardDrive,
+  Lock
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -422,7 +425,7 @@ export default function AdminDashboard() {
       fetchOrganisations();
     } else if (activeTab === 'logs') {
       fetchOtherData();
-    } else if (activeTab === 'addons-wallet') {
+    } else if (activeTab === 'features') {
       fetchOrganisations(); // Need orgs for balances and toggles
       fetchTransactions();
     } else {
@@ -1289,8 +1292,8 @@ export default function AdminDashboard() {
               <TabsTrigger value="system-alerts" className="justify-start px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-white hover:bg-red-800 hover:text-slate-200 transition-all rounded-md mx-2">
                 <Siren className="mr-3 size-4" /> System Alerts
               </TabsTrigger>
-              <TabsTrigger value="addons-wallet" className="justify-start px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-white hover:bg-red-800 hover:text-slate-200 transition-all rounded-md mx-2">
-                <CreditCard className="mr-3 size-4" /> Addons & Wallet
+              <TabsTrigger value="features" className="justify-start px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-white hover:bg-red-800 hover:text-slate-200 transition-all rounded-md mx-2">
+                <LayoutGrid className="mr-3 size-4" /> Feature Config
               </TabsTrigger>
             </TabsList>
           </div>
@@ -1589,8 +1592,18 @@ export default function AdminDashboard() {
                                 <TableCell>{org.ownerName || org.users?.[0]?.firstName || 'N/A'}</TableCell>
                                 <TableCell>
                                   <div className="flex flex-col text-xs gap-1">
-                                    <span className="flex items-center gap-1"><Smartphone className="size-3" /> {org.wallet?.smsCreditsAvailable || 0}</span>
-                                    <span className="flex items-center gap-1"><MessageSquare className="size-3" /> {org.wallet?.whatsappCreditsAvailable || 0}</span>
+                                    <span className="flex items-center gap-1">
+                                      <Smartphone className="size-3" /> 
+                                      {org.platforms && (org.platforms.includes('sms') || org.platforms.includes('SMS')) 
+                                        ? (org.wallet?.smsCreditsAvailable || 0) 
+                                        : <span className="text-muted-foreground italic text-[10px]">Not Enabled</span>}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <MessageSquare className="size-3" /> 
+                                      {org.platforms && (org.platforms.includes('whatsapp') || org.platforms.includes('WHATSAPP')) 
+                                        ? (org.wallet?.whatsappCreditsAvailable || 0) 
+                                        : <span className="text-muted-foreground italic text-[10px]">Not Enabled</span>}
+                                    </span>
                                   </div>
                                 </TableCell>
                                 <TableCell>
@@ -2164,187 +2177,237 @@ export default function AdminDashboard() {
               <AdminNotificationSettings />
             </TabsContent>
        
-           <TabsContent value="addons-wallet" className="m-0 space-y-6 focus-visible:outline-none">
+           <TabsContent value="features" className="m-0 space-y-6 focus-visible:outline-none">
+              {/* Feature Configuration Header */}
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-slate-900">SMS & WhatsApp Addons</h2>
-                  <p className="text-muted-foreground">Manage organization credits and Twilio-based services.</p>
+                  <h2 className="text-2xl font-bold tracking-tight text-slate-900">Feature Configuration</h2>
+                  <p className="text-muted-foreground">Manage platform features, addons, and integrations from a single hub.</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-                  <Card className="border shadow-sm bg-white">
-                    <CardHeader>
-                      <CardTitle>Organisation Services & Balances</CardTitle>
-                      <CardDescription>Toggle platform access for organisations and view current balances.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <Table>
-                        <TableHeader className="bg-slate-50">
-                          <TableRow>
-                            <TableHead className="font-semibold text-slate-700">Organisation</TableHead>
-                            <TableHead className="font-semibold text-slate-700">Credit Balances</TableHead>
-                            <TableHead className="font-semibold text-slate-700">Active Services</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {walletOrganisations.map((org) => (
-                            <TableRow key={org.id}>
-                              <TableCell className="align-top py-4">
-                                <div className="font-medium">{org.name}</div>
-                                <div className="text-xs text-muted-foreground">{org.ownerName || 'No Owner'}</div>
-                              </TableCell>
-                              <TableCell className="align-top py-4">
-                                <div className="space-y-1">
-                                  <div className="flex justify-between text-xs w-32 border-b pb-1">
-                                    <span>SMS:</span>
-                                    <span className="font-mono font-bold">{org.wallet?.smsCreditsAvailable || 0}</span>
-                                  </div>
-                                  <div className="flex justify-between text-xs w-32 border-b pb-1 pt-1">
-                                    <span>WhatsApp:</span>
-                                    <span className="font-mono font-bold">{org.wallet?.whatsappCreditsAvailable || 0}</span>
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell className="py-4">
-                                <div className="flex items-center gap-6">
-                                  <div className="flex flex-wrap gap-4">
-                                    {[
-                                      { id: 'sms', label: 'SMS', icon: Smartphone },
-                                      { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
-                                    ].map((svc) => (
-                                      <div key={svc.id} className="flex flex-col items-center gap-1.5 p-2 border rounded-md min-w-[70px] bg-slate-50">
-                                        <svc.icon className="size-4 text-muted-foreground" />
-                                        <span className="text-[10px] font-medium uppercase tracking-tighter">{svc.label}</span>
-                                        <Switch
-                                          className="data-[state=unchecked]:bg-slate-300 data-[state=checked]:bg-blue-600 scale-125"
-                                          checked={(org.platforms || []).includes(svc.id)}
-                                          disabled={isUpdatingService}
-                                          onCheckedChange={() => handleToggleService(org.id, svc.id, org.platforms || [])}
-                                        />
-                                      </div>
-                                    ))}
-                                  </div>
-                                  
-                                  {((org.platforms || []).includes('sms') || (org.platforms || []).includes('whatsapp')) && (
-                                    <Button 
-                                      variant="ghost" 
-                                      size="sm" 
-                                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-8 px-2 flex items-center shrink-0"
-                                      disabled={isUpdatingService}
-                                      onClick={() => {
-                                        setSuspensionOrgId(org.id);
-                                        setSuspensionPlatform('both');
-                                        setSuspensionCurrentPlatforms(org.platforms || []);
-                                        setSuspensionReason(SUSPENSION_REASONS[0]);
-                                        setIsDisableBoth(true);
-                                        setIsSuspensionDialogOpen(true);
-                                      }}
-                                    >
-                                    
-                                    
-                                      Disable Both
-                                    </Button>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
-                  </Card>
+              <Tabs defaultValue="addons-wallet" className="w-full">
+                <div className="border-b bg-white rounded-t-lg">
+                  <TabsList className="h-auto p-1 bg-slate-100/80 rounded-lg gap-1">
+                    <TabsTrigger
+                      value="addons-wallet"
+                      className="px-4 py-2.5 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm rounded-md transition-all"
+                    >
+                      <CreditCard className="mr-2 size-4" />
+                      Addons & Wallet
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="storage"
+                      disabled
+                      className="px-4 py-2.5 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm rounded-md transition-all opacity-50 cursor-not-allowed"
+                    >
+                      <HardDrive className="mr-2 size-4" />
+                      Storage Integrations
+                      <Badge variant="outline" className="ml-2 text-[9px] px-1.5 py-0 h-4 border-amber-300 text-amber-600 bg-amber-50">
+                        Coming Soon
+                      </Badge>
+                    </TabsTrigger>
+                  </TabsList>
                 </div>
 
-                <div className="lg:col-span-1 space-y-6">
-                  <Card className="border shadow-sm bg-white h-full max-h-[800px] flex flex-col">
-                    <CardHeader className="shrink-0 border-b">
-                      <div className="flex items-center justify-between mb-2">
-                        <CardTitle>Recent Transactions</CardTitle>
-                        <Badge variant="outline" className="font-mono uppercase text-[10px]">ALL</Badge>
-                      </div>
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Search transactions..."
-                          className="pl-8 h-9 text-xs"
-                          value={transactionsSearch}
-                          onChange={(e) => setTransactionsSearch(e.target.value)}
-                        />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="flex-1 overflow-y-auto p-0 scrollbar-thin">
-                      <div className="space-y-0">
-                        {transactions.map((tx) => (
-                          <div key={tx.id} className="p-4 border-b last:border-0 hover:bg-slate-50 transition-colors">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="space-y-1 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant={tx.type === 'PURCHASE' ? 'default' : 'secondary'} className="text-[10px] px-1.5 h-4">
-                                    {tx.type}
-                                  </Badge>
-                                  <span className="text-xs font-bold text-slate-900">{tx.service}</span>
-                                </div>
-                                <div className="text-[11px] font-medium text-slate-600 line-clamp-1">{tx.wallet?.organisation?.name}</div>
-                                <div className="text-[10px] text-muted-foreground italic">Owner: {tx.wallet?.organisation?.ownerName || 'N/A'}</div>
-                                <p className="text-[11px] text-muted-foreground leading-tight">{tx.description}</p>
-                              </div>
-                              <div className="text-right shrink-0">
-                                <div className={`text-sm font-bold ${tx.type === 'REFUND' || tx.type === 'CREDIT'   ? 'text-green-600' : 'text-slate-900'}`}>
-                                  {tx.type === 'REFUND' || tx.type === 'CREDIT' ? '+' : '-'}{tx.amount}
-                                </div>
-                                <div className="text-[10px] text-muted-foreground">
-                                  {new Date(tx.createdAt).toLocaleDateString()}
-                                </div>
-                              </div>
+                {/* Sub-Tab: Addons & Wallet */}
+                <TabsContent value="addons-wallet" className="mt-4 space-y-6 focus-visible:outline-none">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2 space-y-6">
+                      <Card className="border shadow-sm bg-white">
+                        <CardHeader>
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-blue-50">
+                              <Smartphone className="size-5 text-blue-600" />
+                            </div>
+                            <div>
+                              <CardTitle>Organisation Services & Balances</CardTitle>
+                              <CardDescription>Toggle SMS & WhatsApp access and view current credit balances.</CardDescription>
                             </div>
                           </div>
-                        ))}
-                        {transactions.length === 0 && (
-                          <div className="p-8 text-center text-xs text-muted-foreground">
-                            No transactions found.
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                    <div className="shrink-0 p-4 border-t bg-slate-50">
-                      <div className="flex items-center justify-between gap-4">
-                        <p className="text-[10px] text-muted-foreground">
-                          Showing {transactions.length} of {transactionsTotalCount}
-                        </p>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2"
-                            disabled={transactionsPage <= 1}
-                            onClick={() => setTransactionsPage(p => p - 1)}
-                          >
-                            <ChevronLeft className="size-3" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2"
-                            disabled={transactionsPage * transactionsPageSize >= transactionsTotalCount}
-                            onClick={() => setTransactionsPage(p => p + 1)}
-                          >
-                            <ChevronRight className="size-3" />
-                          </Button>
-                        </div>
-                      </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                          <Table>
+                            <TableHeader className="bg-slate-50">
+                              <TableRow>
+                                <TableHead className="font-semibold text-slate-700">Organisation</TableHead>
+                                <TableHead className="font-semibold text-slate-700">Credit Balances</TableHead>
+                                <TableHead className="font-semibold text-slate-700">Active Services</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {walletOrganisations.map((org) => (
+                                <TableRow key={org.id}>
+                                  <TableCell className="align-top py-4">
+                                    <div className="font-medium">{org.name}</div>
+                                    <div className="text-xs text-muted-foreground">{org.ownerName || 'No Owner'}</div>
+                                  </TableCell>
+                                  <TableCell className="align-top py-4">
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between text-xs w-32 border-b pb-1">
+                                        <span>SMS:</span>
+                                        <span className="font-mono font-bold">{org.wallet?.smsCreditsAvailable || 0}</span>
+                                      </div>
+                                      <div className="flex justify-between text-xs w-32 border-b pb-1 pt-1">
+                                        <span>WhatsApp:</span>
+                                        <span className="font-mono font-bold">{org.wallet?.whatsappCreditsAvailable || 0}</span>
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="py-4">
+                                    <div className="flex items-center gap-6">
+                                      <div className="flex flex-wrap gap-4">
+                                        {[
+                                          { id: 'sms', label: 'SMS', icon: Smartphone },
+                                          { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
+                                        ].map((svc) => (
+                                          <div key={svc.id} className="flex flex-col items-center gap-1.5 p-2 border rounded-md min-w-[70px] bg-slate-50">
+                                            <svc.icon className="size-4 text-muted-foreground" />
+                                            <span className="text-[10px] font-medium uppercase tracking-tighter">{svc.label}</span>
+                                            <Switch
+                                              className="data-[state=unchecked]:bg-slate-300 data-[state=checked]:bg-blue-600 scale-125"
+                                              checked={(org.platforms || []).includes(svc.id)}
+                                              disabled={isUpdatingService}
+                                              onCheckedChange={() => handleToggleService(org.id, svc.id, org.platforms || [])}
+                                            />
+                                          </div>
+                                        ))}
+                                      </div>
+                                      
+                                      {((org.platforms || []).includes('sms') || (org.platforms || []).includes('whatsapp')) && (
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm" 
+                                          className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-8 px-2 flex items-center shrink-0"
+                                          disabled={isUpdatingService}
+                                          onClick={() => {
+                                            setSuspensionOrgId(org.id);
+                                            setSuspensionPlatform('both');
+                                            setSuspensionCurrentPlatforms(org.platforms || []);
+                                            setSuspensionReason(SUSPENSION_REASONS[0]);
+                                            setIsDisableBoth(true);
+                                            setIsSuspensionDialogOpen(true);
+                                          }}
+                                        >
+                                          Disable Both
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </CardContent>
+                      </Card>
                     </div>
-                  </Card>
-                </div>
-              </div>
-              
-              {/* Show empty state if no orgs match */}
-              {walletOrganisations.length === 0 && !isLoading && (
-                  <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">
-                      <p>No organisations have addons or wallet balances.</p>
+
+                    <div className="lg:col-span-1 space-y-6">
+                      <Card className="border shadow-sm bg-white h-full max-h-[800px] flex flex-col">
+                        <CardHeader className="shrink-0 border-b">
+                          <div className="flex items-center justify-between mb-2">
+                            <CardTitle>Recent Transactions</CardTitle>
+                            <Badge variant="outline" className="font-mono uppercase text-[10px]">ALL</Badge>
+                          </div>
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              placeholder="Search transactions..."
+                              className="pl-8 h-9 text-xs"
+                              value={transactionsSearch}
+                              onChange={(e) => setTransactionsSearch(e.target.value)}
+                            />
+                          </div>
+                        </CardHeader>
+                        <CardContent className="flex-1 overflow-y-auto p-0 scrollbar-thin">
+                          <div className="space-y-0">
+                            {transactions.map((tx) => (
+                              <div key={tx.id} className="p-4 border-b last:border-0 hover:bg-slate-50 transition-colors">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="space-y-1 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant={tx.type === 'PURCHASE' ? 'default' : 'secondary'} className="text-[10px] px-1.5 h-4">
+                                        {tx.type}
+                                      </Badge>
+                                      <span className="text-xs font-bold text-slate-900">{tx.service}</span>
+                                    </div>
+                                    <div className="text-[11px] font-medium text-slate-600 line-clamp-1">{tx.wallet?.organisation?.name}</div>
+                                    <div className="text-[10px] text-muted-foreground italic">Owner: {tx.wallet?.organisation?.ownerName || 'N/A'}</div>
+                                    <p className="text-[11px] text-muted-foreground leading-tight">{tx.description}</p>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <div className={`text-sm font-bold ${tx.type === 'REFUND' || tx.type === 'CREDIT' ? 'text-green-600' : 'text-slate-900'}`}>
+                                      {tx.type === 'REFUND' || tx.type === 'CREDIT' ? '+' : '-'}{tx.amount}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground">
+                                      {new Date(tx.createdAt).toLocaleDateString()}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            {transactions.length === 0 && (
+                              <div className="p-8 text-center text-xs text-muted-foreground">
+                                No transactions found.
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                        <div className="shrink-0 p-4 border-t bg-slate-50">
+                          <div className="flex items-center justify-between gap-4">
+                            <p className="text-[10px] text-muted-foreground">
+                              Showing {transactions.length} of {transactionsTotalCount}
+                            </p>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2"
+                                disabled={transactionsPage <= 1}
+                                onClick={() => setTransactionsPage(p => p - 1)}
+                              >
+                                <ChevronLeft className="size-3" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2"
+                                disabled={transactionsPage * transactionsPageSize >= transactionsTotalCount}
+                                onClick={() => setTransactionsPage(p => p + 1)}
+                              >
+                                <ChevronRight className="size-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    </div>
                   </div>
-              )}
+                  
+                  {/* Show empty state if no orgs match */}
+                  {walletOrganisations.length === 0 && !isLoading && (
+                    <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">
+                      <p>No organisations have addons or wallet balances.</p>
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* Sub-Tab: Storage Integrations (Coming Soon) */}
+                <TabsContent value="storage" className="mt-4 space-y-6 focus-visible:outline-none">
+                  <Card className="border shadow-sm bg-white">
+                    <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                      <div className="p-4 rounded-full bg-slate-100 mb-4">
+                        <Lock className="size-8 text-slate-400" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-slate-700 mb-2">Storage Integrations</h3>
+                      <p className="text-sm text-muted-foreground max-w-md">
+                        Upload and manage media from your server or Google Drive. This feature is currently under development and will be available soon.
+                      </p>
+                      <Badge variant="outline" className="mt-4 border-amber-300 text-amber-600 bg-amber-50">Coming Soon</Badge>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
             </TabsContent>
 
             {/* System Alerts */}
