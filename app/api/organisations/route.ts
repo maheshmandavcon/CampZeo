@@ -198,7 +198,8 @@ async function postHandler(req: Request) {
                 await prisma.organisationPlatform.createMany({
                     data: allPlatforms.map((platform) => ({
                         organisationId: organisation.id,
-                        platform: platform as any
+                        platform: platform as any,
+                        isActive: true
                     }))
                 });
 

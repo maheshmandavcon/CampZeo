@@ -194,12 +194,12 @@ async function postHandler(req: Request) {
                 trialEndDate: trialEndDate,
                 organisationPlatforms: {
                     create: [
-                        { platform: 'EMAIL' },
-                        { platform: 'FACEBOOK' },
-                        { platform: 'INSTAGRAM' },
-                        { platform: 'LINKEDIN' },
-                        { platform: 'YOUTUBE' },
-                        { platform: 'PINTEREST' },
+                        { platform: 'EMAIL', isActive: true },
+                        { platform: 'FACEBOOK', isActive: true },
+                        { platform: 'INSTAGRAM', isActive: true },
+                        { platform: 'LINKEDIN', isActive: true },
+                        { platform: 'YOUTUBE', isActive: true },
+                        { platform: 'PINTEREST', isActive: true },
                     ]
                 }
             }
