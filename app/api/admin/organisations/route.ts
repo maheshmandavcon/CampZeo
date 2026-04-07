@@ -87,7 +87,9 @@ async function getOrganisationsHandler(req: Request) {
 
     const list = organisations.map((org: any) => ({
         ...org,
-        platforms: org.organisationPlatforms.map((op: any) => op.platform.toLowerCase())
+        platforms: org.organisationPlatforms
+            .filter((op: any) => op.isActive === true)
+            .map((op: any) => op.platform.toLowerCase())
     }));
 
     return NextResponse.json({
@@ -258,7 +260,9 @@ async function createUpdateOrganisationHandler(req: Request) {
 
     const responseOrg = {
         ...organisation,
-        platforms: organisation?.organisationPlatforms.map((op: any) => op.platform.toLowerCase()) || []
+        platforms: organisation?.organisationPlatforms
+            ?.filter((op: any) => op.isActive === true)
+            .map((op: any) => op.platform.toLowerCase()) || []
     };
 
     return NextResponse.json({

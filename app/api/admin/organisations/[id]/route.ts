@@ -21,6 +21,9 @@ async function getHandler(
         where: { id: parseInt(id) },
         include: {
             users: true,
+            organisationPlatforms: {
+                where: { isActive: true }
+            }
         },
     });
 
@@ -28,8 +31,13 @@ async function getHandler(
         return NextResponse.json({ isSuccess: false, message: "Organisation not found" }, { status: 404 });
     }
 
+    const responseOrg = {
+        ...organisation,
+        platforms: organisation.organisationPlatforms.map((op: any) => op.platform.toLowerCase())
+    };
+
     return NextResponse.json({
-        data: organisation,
+        data: responseOrg,
         isSuccess: true,
         message: null,
     });
