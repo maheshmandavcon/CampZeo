@@ -97,18 +97,33 @@ async function putHandler(
             .map((p: string) => p.toUpperCase())
             .filter((p: string) => Object.values(PlatformType).includes(p));
 
-        await prisma.organisationPlatform.deleteMany({
-            where: { organisationId: parseInt(id) }
-        });
-        
-        if (validPlatforms.length > 0) {
-            await prisma.organisationPlatform.createMany({
-                data: validPlatforms.map((platform: string) => ({
-                    organisationId: parseInt(id),
-                    platform: platform as any
-                }))
+        // Use a transaction to update platforms non-destructively
+        const orgId = parseInt(id);
+        await prisma.$transaction(async (tx) => {
+            // 1. Mark all existing platforms for this organisation as inactive
+            await tx.organisationPlatform.updateMany({
+                where: { organisationId: orgId },
+                data: { isActive: false }
             });
-        }
+
+            // 2. Upsert the platforms from the selected list to active
+            for (const platform of validPlatforms) {
+                await tx.organisationPlatform.upsert({
+                    where: {
+                        organisationId_platform: {
+                            organisationId: orgId,
+                            platform: platform as any
+                        }
+                    },
+                    update: { isActive: true },
+                    create: {
+                        organisationId: orgId,
+                        platform: platform as any,
+                        isActive: true
+                    }
+                });
+            }
+        });
 
         const { deactivatedPlatforms, suspensionReason } = body;
         if (deactivatedPlatforms && Array.isArray(deactivatedPlatforms) && deactivatedPlatforms.length > 0 && suspensionReason) {

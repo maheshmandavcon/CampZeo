@@ -61,6 +61,18 @@ async function getHandler() {
     if (orgUsers.some(u => !!u.youtubeAccessToken)) connectedPlatforms.push('YouTube');
     if (orgUsers.some(u => !!u.pinterestAccessToken)) connectedPlatforms.push('Pinterest');
 
+    // Check for SMS and WhatsApp in OrganisationPlatform table
+    const activeOrgPlatforms = await prisma.organisationPlatform.findMany({
+        where: {
+            organisationId,
+            isActive: true,
+            platform: { in: ['SMS', 'WHATSAPP'] }
+        }
+    });
+
+    if (activeOrgPlatforms.some(p => p.platform === 'SMS')) connectedPlatforms.push('SMS');
+    if (activeOrgPlatforms.some(p => p.platform === 'WHATSAPP')) connectedPlatforms.push('WhatsApp');
+
     const calculateMetric = (current: number, limit: number) => {
         const percentage = limit > 0 ? (current / limit) * 100 : 0;
         return {
