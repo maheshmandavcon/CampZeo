@@ -32,7 +32,7 @@ import { WYSIWYGPreview } from '../../_components/WYSIWYGPreview';
 import { useUser } from '@clerk/nextjs';
 import { uploadToServer } from '@/lib/upload-helper';
 import { MetaBoostSection, MetaBoostOptions } from '../../_components/MetaBoostSection';
-import { isVideoUrl } from '@/lib/media-utils';
+import { isVideoUrl, getPreviewUrl } from '@/lib/media-utils';
 
 
 
@@ -1034,7 +1034,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                                                     </div>
                                                 ) : (
                                                     <img
-                                                        src={url}
+                                                        src={getPreviewUrl(url)}
                                                         alt={`Media ${index + 1}`}
                                                         className="w-full h-full object-cover"
                                                     />
@@ -1182,7 +1182,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                                             </div>
                                             {thumbnailUrl && (
                                                 <div className="relative aspect-[9/16] w-20 overflow-hidden rounded border bg-muted">
-                                                    <Image src={thumbnailUrl} alt="Cover" fill className="object-cover" unoptimized />
+                                                    <Image src={getPreviewUrl(thumbnailUrl)} alt="Cover" fill className="object-cover" unoptimized />
                                                     <button
                                                         type="button"
                                                         onClick={() => setThumbnailUrl(null)}

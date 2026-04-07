@@ -47,6 +47,11 @@ async function getCampaignHandler(
             isDeleted: false,
         },
         include: {
+            organisation: {
+                select: {
+                    id: true,
+                }
+            },
             contacts: {
                 select: {
                     id: true,
