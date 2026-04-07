@@ -83,13 +83,19 @@ export async function makeFilePublic(fileId: string): Promise<void> {
 export async function uploadToDrive(
   fileBuffer: Buffer,
   fileName: string,
-  mimeType: string
+  mimeType: string,
+  pathParts?: string[]
 ): Promise<string> {
   const drive = await getDriveClient();
-  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  let folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
   if (!folderId) {
     throw new Error('GOOGLE_DRIVE_FOLDER_ID is not defined');
+  }
+
+  // If pathParts are provided, navigate/create folders
+  if (pathParts && pathParts.length > 0) {
+    folderId = await getOrCreateFolder(pathParts, folderId);
   }
 
   // Create a readable stream from the buffer
@@ -288,15 +294,87 @@ export async function deleteFromDrive(fileIdOrUrl: string): Promise<boolean> {
   let fileId = fileIdOrUrl;
 
   // Extract ID if a URL was provided
+  // UC Format: ...?id=FILE_ID&...
   if (fileIdOrUrl.includes('id=')) {
     fileId = fileIdOrUrl.split('id=')[1].split('&')[0];
+  } 
+  // Direct Link Format: .../file/d/FILE_ID/view...
+  else if (fileIdOrUrl.includes('/file/d/')) {
+    fileId = fileIdOrUrl.split('/file/d/')[1].split('/')[0];
   }
 
+  console.log(`[DRIVE_API] Attempting to delete file ID: ${fileId}`);
+
   try {
-    await drive.files.delete({ fileId });
+    const res: any = await drive.files.delete({ 
+        fileId, 
+        supportsAllDrives: true 
+    });
+    console.log(`[DRIVE_API] Delete result for ${fileId}: Status ${res.status}`);
     return true;
+  } catch (error: any) {
+    console.warn(`[DRIVE_API] Skip delete for ${fileId}: ${error?.message || error}`);
+    // If it's already deleted or ID is bad, we return true to not get stuck,
+    // but we log it as a warning.
+    return true; 
+  }
+}
+
+/**
+ * Finds and deletes files in 'pending' folders that are older than maxAgeHours.
+ */
+export async function cleanupPendingFiles(maxAgeHours: number = 24): Promise<{ deleted: number; errors: number }> {
+  const drive = await getDriveClient();
+  const rootId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  if (!rootId) return { deleted: 0, errors: 0 };
+
+  try {
+    // 1. Find all 'pending' folders
+    const folderResponse: any = await drive.files.list({
+      q: `name = 'pending' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: 'files(id)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    const pendingFolderIds = folderResponse.data.files?.map((f: any) => f.id) || [];
+    console.log(`[DRIVE_CLEANUP] Found ${pendingFolderIds.length} 'pending' folders.`);
+    
+    let deletedCount = 0;
+    let errorCount = 0;
+
+    const expirationDate = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000).toISOString();
+    console.log(`[DRIVE_CLEANUP] Cleaning files created before ${expirationDate}`);
+
+    for (const folderId of pendingFolderIds) {
+      // 2. List files in each pending folder created before expirationDate
+      const fileResponse: any = await drive.files.list({
+        q: `'${folderId}' in parents and createdTime < '${expirationDate}' and trashed = false`,
+        fields: 'files(id, name, createdTime)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      });
+
+      const files = fileResponse.data.files || [];
+      if (files.length > 0) {
+          console.log(`[DRIVE_CLEANUP] Folder ${folderId} has ${files.length} expired files.`);
+      }
+
+      for (const file of files) {
+        try {
+          await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
+          deletedCount++;
+          console.log(`[DRIVE_CLEANUP] Deleted: ${file.name} (Created: ${file.createdTime})`);
+        } catch (err) {
+          console.error(`[DRIVE_CLEANUP] Failed to delete ${file.id}:`, err);
+          errorCount++;
+        }
+      }
+    }
+
+    return { deleted: deletedCount, errors: errorCount };
   } catch (error) {
-    console.error(`Failed to delete file ${fileId} from Drive:`, error);
-    return false;
+    console.error('[Cleanup] Error during pending files cleanup:', error);
+    return { deleted: 0, errors: 1 };
   }
 }

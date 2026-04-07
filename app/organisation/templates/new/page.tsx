@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Play, Sparkles, Mail, MessageSquare, Facebook, Instagram, Linkedin, Youtube, Twitter, Image as ImageIcon, Send, Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, ThumbsUp, Repeat2, Upload, X, Phone, Pin, MoreVertical } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { uploadToServer } from '@/lib/upload-helper';
+import { uploadToServer, deleteFromDriveImmediate } from '@/lib/upload-helper';
+import { useMediaCleanup } from '@/hooks/use-media-cleanup';
 
 const ALL_PLATFORMS = [
     { value: "EMAIL", label: "Email", icon: Mail },
@@ -25,6 +26,8 @@ const ALL_PLATFORMS = [
 export default function NewTemplatePage() {
     const router = useRouter();
     const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
+    const [organisationId, setOrganisationId] = useState<string | null>(null);
+    const { trackUpload, markAsSubmitted } = useMediaCleanup();
     const [isLoadingPlatforms, setIsLoadingPlatforms] = useState(true);
     const [formData, setFormData] = useState({
         name: "",
@@ -53,6 +56,7 @@ export default function NewTemplatePage() {
                 const data = await res.json();
                 if (data.success && data.platforms) {
                     setConnectedPlatforms(data.platforms);
+                    setOrganisationId(data.organisationId);
 
                     // Set default platform to first connected one
                     if (data.platforms.length > 0 && !formData.platform) {
@@ -93,9 +97,11 @@ export default function NewTemplatePage() {
             const uploadedUrls: string[] = [];
 
             for (const file of Array.from(files)) {
-                const newBlob = await uploadToServer(file);
+                const newBlob = await uploadToServer(file, organisationId || undefined);
 
                 if (newBlob.url) {
+                    console.log(`[Drive] Template Image tracked: ${newBlob.url}`);
+                    trackUpload(newBlob.url);
                     uploadedUrls.push(newBlob.url);
                 }
             }
@@ -126,9 +132,11 @@ export default function NewTemplatePage() {
             const file = files[0];
 
             // Use client-side upload
-            const newBlob = await uploadToServer(file);
+            const newBlob = await uploadToServer(file, organisationId || undefined);
 
             if (newBlob.url) {
+                console.log(`[Drive] Template Thumbnail tracked: ${newBlob.url}`);
+                trackUpload(newBlob.url);
                 setFormData(prev => ({
                     ...prev,
                     metadata: { ...prev.metadata, thumbnailUrl: newBlob.url }
@@ -146,10 +154,18 @@ export default function NewTemplatePage() {
     };
 
     const removeImage = (index: number) => {
+        const urlToRemove = formData.mediaUrls[index];
         setFormData(prev => ({
             ...prev,
             mediaUrls: prev.mediaUrls.filter((_, i) => i !== index)
         }));
+
+        if (urlToRemove) {
+            console.log(`[Drive] Manual template image removal: ${urlToRemove}`);
+            deleteFromDriveImmediate([urlToRemove]).catch(err => {
+                console.error('[Drive] Manual cleanup failed:', err);
+            });
+        }
     };
 
     const getYouTubeId = (url: string) => {
@@ -195,6 +211,7 @@ export default function NewTemplatePage() {
             console.log('Response data:', data);
 
             if (response.ok && data.success) {
+                markAsSubmitted();
                 toast.success("Template created successfully");
                 router.push("/organisation/templates");
             } else {

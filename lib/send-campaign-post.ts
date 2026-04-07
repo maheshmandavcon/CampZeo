@@ -16,7 +16,12 @@ import { deleteFromDrive } from '@/lib/google-drive';
 
 async function cleanupBlobs(urls: (string | string[] | null | undefined)[]) {
     const allUrls = urls.flat().filter((url): url is string =>
-        typeof url === 'string' && (url.includes('vercel-storage.com') || url.includes('103.72.220.77') || url.includes('google.com/uc'))
+        typeof url === 'string' && (
+            url.includes('vercel-storage.com') || 
+            url.includes('103.72.220.77') || 
+            url.includes('google.com/uc') ||
+            url.includes('/api/upload/google-drive/view')
+        )
     );
 
     if (allUrls.length > 0) {
@@ -24,21 +29,36 @@ async function cleanupBlobs(urls: (string | string[] | null | undefined)[]) {
 
         for (const url of allUrls) {
             try {
-                // Check if any other CampaignPost still references this URL
+                // Determine the "canonical" Google Drive URL if it's a proxy or direct link
+                let canonicalUrl = url;
+                let fileId: string | null = null;
+                
+                if (url.includes('id=')) {
+                    fileId = url.split('id=')[1].split('&')[0];
+                    if (url.includes('google.com/uc') || url.includes('/view')) {
+                        canonicalUrl = `https://drive.google.com/uc?id=${fileId}&export=download`;
+                    }
+                }
+
+                // Check if any other CampaignPost still references this URL (canonical or exact)
                 const postCount = await prisma.campaignPost.count({
                     where: {
                         OR: [
-                            { videoUrl: url },
-                            { mediaUrls: { has: url } }
+                            { videoUrl: { contains: fileId || url } },
+                            { mediaUrls: { has: url } },
+                            ...(fileId ? [{ mediaUrls: { has: canonicalUrl } }] : [])
                         ],
                         isDeleted: false
                     }
                 });
 
-                // Also check MessageTemplates just in case
+                // Also check MessageTemplates
                 const templateCount = await prisma.messageTemplate.count({
                     where: {
-                        mediaUrls: { has: url },
+                        OR: [
+                            { mediaUrls: { has: url } },
+                            ...(fileId ? [{ mediaUrls: { has: canonicalUrl } }] : [])
+                        ],
                         isActive: true
                     }
                 });
@@ -59,7 +79,7 @@ async function cleanupBlobs(urls: (string | string[] | null | undefined)[]) {
 
             const vercelUrls = urlsToDelete.filter(url => url.includes('vercel-storage.com'));
             const customUrls = urlsToDelete.filter(url => url.includes('103.72.220.77'));
-            const googleUrls = urlsToDelete.filter(url => url.includes('google.com/uc'));
+            const googleUrls = urlsToDelete.filter(url => url.includes('google.com/uc') || url.includes('/api/upload/google-drive/view'));
 
             if (vercelUrls.length > 0) {
                 try {
@@ -79,6 +99,7 @@ async function cleanupBlobs(urls: (string | string[] | null | undefined)[]) {
                 for (const url of googleUrls) {
                     try {
                         await deleteFromDrive(url);
+                        console.log(`[Cleanup] Success: Deleted ${url} from Google Drive`);
                     } catch (error) {
                         console.error('[Cleanup] Failed to delete file from Google Drive:', error);
                     }

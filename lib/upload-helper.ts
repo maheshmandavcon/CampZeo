@@ -9,8 +9,8 @@ export async function uploadToServer(
   if (provider === 'google_drive') {
     console.log("[Upload] Using Google Drive resumable storage provider...");
     
-    if (!organisationId || !campaignId) {
-      throw new Error("Organisation ID and Campaign ID are required for Google Drive folder organization.");
+    if (!organisationId) {
+      throw new Error("Organisation ID is required for Google Drive folder organization.");
     }
 
     // 1. Initiate resumable upload session
@@ -135,6 +135,34 @@ export async function deleteFromServer(publicUrl: string): Promise<boolean> {
     return true;
   } catch (error) {
     console.error(`[Cleanup] Error deleting from custom server:`, error);
+    return false;
+  }
+}
+export async function deleteFromDriveImmediate(urls: string[]): Promise<boolean> {
+  if (!urls || urls.length === 0) return true;
+  
+  try {
+    console.log(`[DriveHelper] Immediate cleanup for ${urls.length} files via POST...`);
+    const res = await fetch('/api/upload/google-drive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        action: 'cleanup',
+        urls 
+      }),
+      keepalive: true // Crucial for beforeunload cleanup
+    });
+
+    if (!res.ok) {
+      console.warn(`[DriveHelper] Immediate cleanup failed: ${res.statusText}`);
+      return false;
+    }
+
+    const data = await res.json();
+    console.log(`[DriveHelper] Cleanup successful: ${data.deletedCount} files removed.`);
+    return true;
+  } catch (error) {
+    console.error(`[DriveHelper] Error during immediate cleanup:`, error);
     return false;
   }
 }

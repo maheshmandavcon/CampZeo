@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Play, Loader2, FileEdit, Mail, MessageSquare, Facebook, Instagram, Linkedin, Youtube, Twitter, Image as ImageIcon, Send, Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, ThumbsUp, Repeat2, Upload, X, Pin, Phone } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { uploadToServer } from '@/lib/upload-helper';
+import { uploadToServer, deleteFromDriveImmediate } from '@/lib/upload-helper';
+import { useMediaCleanup } from '@/hooks/use-media-cleanup';
 
 const ALL_PLATFORMS = [
     { value: "EMAIL", label: "Email", icon: Mail },
@@ -27,6 +28,8 @@ export default function EditTemplatePage() {
     const router = useRouter();
     const params = useParams();
     const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
+    const [organisationId, setOrganisationId] = useState<string | null>(null);
+    const { trackUpload, markAsSubmitted } = useMediaCleanup();
     const [formData, setFormData] = useState({
         name: "",
         subject: "",
@@ -56,6 +59,7 @@ export default function EditTemplatePage() {
                 const data = await res.json();
                 if (data.success && data.platforms) {
                     setConnectedPlatforms(data.platforms);
+                    setOrganisationId(data.organisationId);
                 }
             }
         } catch (error) {
@@ -117,9 +121,11 @@ export default function EditTemplatePage() {
 
             for (const file of Array.from(files)) {
                 // Use client-side upload to avoid Vercel 4.5MB serverless limit
-                const newBlob = await uploadToServer(file);
+                const newBlob = await uploadToServer(file, organisationId || undefined);
 
                 if (newBlob.url) {
+                    console.log(`[Drive] Template Image tracked: ${newBlob.url}`);
+                    trackUpload(newBlob.url);
                     uploadedUrls.push(newBlob.url);
                 }
             }
@@ -163,9 +169,11 @@ export default function EditTemplatePage() {
             const file = files[0];
 
             // Use client-side upload
-            const newBlob = await uploadToServer(file);
+            const newBlob = await uploadToServer(file, organisationId || undefined);
 
             if (newBlob.url) {
+                console.log(`[Drive] Template Thumbnail tracked: ${newBlob.url}`);
+                trackUpload(newBlob.url);
                 setFormData(prev => ({
                     ...prev,
                     metadata: { ...prev.metadata, thumbnailUrl: newBlob.url }
@@ -183,10 +191,18 @@ export default function EditTemplatePage() {
     };
 
     const removeImage = (index: number) => {
+        const urlToRemove = formData.mediaUrls[index];
         setFormData(prev => ({
             ...prev,
             mediaUrls: prev.mediaUrls.filter((_, i) => i !== index)
         }));
+
+        if (urlToRemove) {
+            console.log(`[Drive] Manual template image removal: ${urlToRemove}`);
+            deleteFromDriveImmediate([urlToRemove]).catch(err => {
+                console.error('[Drive] Manual cleanup failed:', err);
+            });
+        }
     };
 
     const handleUpdate = async () => {
@@ -210,6 +226,7 @@ export default function EditTemplatePage() {
             const data = await response.json();
 
             if (data.success) {
+                markAsSubmitted();
                 toast.success("Template updated successfully");
                 router.push("/organisation/templates");
             } else {
