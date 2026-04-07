@@ -3,7 +3,6 @@ import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { generatePassword, sendOrganisationInvite } from "@/lib/email";
 import { createClerkUser } from "@/lib/clerk-admin";
-import { sendSms } from "@/lib/twilio";
 import { logWarning, logInfo } from "@/lib/audit-logger";
 import { withErrorHandling } from '@/lib/api-handler';
 // Define PlatformType locally to avoid build errors if Prisma client generation fails to export it
@@ -80,6 +79,7 @@ async function getOrganisationsHandler(req: Request) {
             include: {
                 users: true, // Include users to show owner details if needed
                 organisationPlatforms: true,
+                wallet: true,
             },
         }),
         prisma.organisation.count({ where: whereClause }),

@@ -19,9 +19,10 @@ import {
     DialogDescription,
     DialogHeader,
     DialogTitle,
+    DialogFooter
 } from '@/components/ui/dialog';
 
-import { ArrowLeft, Loader2, Save, Upload, X, Youtube, Eye, Video, Trash2, FileText, Sparkles, Mail, MessageSquare, Phone, Facebook, Instagram, Linkedin, Send, Plus, Wand2, Rocket } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Upload, X, Youtube, Eye, Video, Trash2, FileText, Sparkles, Mail, MessageSquare, Phone, Facebook, Instagram, Linkedin, Send, Plus, Wand2, Rocket, Check } from 'lucide-react';
 import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
@@ -90,6 +91,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
 
     // Preview state
     const [showPreview, setShowPreview] = useState(false);
+    const [showSocialPublishConfirm, setShowSocialPublishConfirm] = useState(false);
 
     // Template state
     const [templates, setTemplates] = useState<any[]>([]);
@@ -589,8 +591,8 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
     };
 
     // Handle form submit
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = async (e?: React.FormEvent, skipSocialCheck = false) => {
+        if (e) e.preventDefault();
 
         // Validation
         if (!type) {
@@ -603,6 +605,12 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                 toast.error('LinkedIn only allows one video per post. Please remove extra videos.');
                 return;
             }
+        }
+
+        const isSocialPlatform = type && !['EMAIL', 'SMS', 'WHATSAPP'].includes(type);
+        if (isSocialPlatform && !scheduledPostTime && !skipSocialCheck) {
+            setShowSocialPublishConfirm(true);
+            return;
         }
 
         if (!message && !subject) {
@@ -1544,6 +1552,53 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                     </div>
                 </DialogContent>
             </Dialog >
+
+            {/* Social Media Publish Confirmation Dialog */}
+            <Dialog open={showSocialPublishConfirm} onOpenChange={setShowSocialPublishConfirm}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Rocket className="size-5 text-primary" />
+                            Confirm Publication
+                        </DialogTitle>
+                        <DialogDescription className="py-4">
+                            You haven&apos;t scheduled a post date for this {type?.toLowerCase()} post.
+                            <br /><br />
+                            <strong>Without a scheduled date, this post will be published automatically (immediately) once updated.</strong>
+                            <br /><br />
+                            Do you want to proceed and publish now?
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="flex gap-2 sm:gap-0">
+                        <Button
+                            variant="outline"
+                            onClick={() => setShowSocialPublishConfirm(false)}
+                            disabled={saving}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                setShowSocialPublishConfirm(false);
+                                handleSubmit(undefined, true);
+                            }}
+                            disabled={saving}
+                        >
+                            {saving ? (
+                                <>
+                                    <Loader2 className="mr-2 size-4 animate-spin" />
+                                    Updating...
+                                </>
+                            ) : (
+                                <>
+                                    <Check className="mr-2 size-4" />
+                                    Confirm & Update Now
+                                </>
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* AI Content Assistant */}
             < AIContentAssistant

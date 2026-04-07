@@ -18,14 +18,11 @@ export function AdminNotificationSettings() {
     const [newEmail, setNewEmail] = useState("");
 
     const [formData, setFormData] = useState({
-        SMTP_HOST: "",
-        SMTP_PORT: "587",
-        SMTP_USER: "",
-        SMTP_PASS: "",
-        SMTP_FROM: "",
+        MAILGUN_API_KEY: "",
+        MAILGUN_DOMAIN: "",
+        MAILGUN_FROM_EMAIL: "",
         ADMIN_EMAIL_RECIPIENTS: [] as string[],
-        ADMIN_LOG_LEVEL: "ERROR",
-        SMTP_SECURE: "false"
+        ADMIN_LOG_LEVEL: "ERROR"
     });
 
     // Fetch configs
@@ -44,14 +41,11 @@ export function AdminNotificationSettings() {
                     const recipients = recipientsStr ? recipientsStr.split(',').map((e: string) => e.trim()).filter(Boolean) : [];
 
                     setFormData({
-                        SMTP_HOST: getValue('SMTP_HOST'),
-                        SMTP_PORT: getValue('SMTP_PORT') || "587",
-                        SMTP_USER: getValue('SMTP_USER'),
-                        SMTP_PASS: getValue('SMTP_PASS'),
-                        SMTP_FROM: getValue('SMTP_FROM'),
+                        MAILGUN_API_KEY: getValue('MAILGUN_API_KEY'),
+                        MAILGUN_DOMAIN: getValue('MAILGUN_DOMAIN'),
+                        MAILGUN_FROM_EMAIL: getValue('MAILGUN_FROM_EMAIL'),
                         ADMIN_EMAIL_RECIPIENTS: recipients,
-                        ADMIN_LOG_LEVEL: getValue('ADMIN_LOG_LEVEL') || "ERROR",
-                        SMTP_SECURE: getValue('SMTP_SECURE') || "false"
+                        ADMIN_LOG_LEVEL: getValue('ADMIN_LOG_LEVEL') || "ERROR"
                     });
                 }
             } catch (error) {
@@ -117,7 +111,7 @@ export function AdminNotificationSettings() {
             }).filter(Boolean);
 
             await Promise.all(promises);
-            toast.success("SMTP Configuration saved successfully");
+            toast.success("Mailgun Configuration saved successfully");
         } catch (error) {
             toast.error("Failed to save settings");
         } finally {
@@ -133,8 +127,8 @@ export function AdminNotificationSettings() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">SMTP Configuration</h2>
-                    <p className="text-muted-foreground">Configure how the system sends alerts and notifications via email.</p>
+                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Email Configuration</h2>
+                    <p className="text-muted-foreground">Configure how the system sends alerts and notifications via Mailgun.</p>
                 </div>
             </div>
 
@@ -142,59 +136,43 @@ export function AdminNotificationSettings() {
                 <Card className="border shadow-sm">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                            <Mail className="h-5 w-5" /> SMTP Configuration
+                            <Mail className="h-5 w-5" /> Mailgun Configuration
                         </CardTitle>
                         <CardDescription>
-                            Details for the outbound email server used for system alerts.
+                            Details for the Mailgun API used for system emails and alerts.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                            <div className="space-y-2">
-                                <Label>SMTP Host</Label>
-                                <Input
-                                    placeholder="smtp.example.com"
-                                    value={formData.SMTP_HOST}
-                                    onChange={(e) => handleChange('SMTP_HOST', e.target.value)}
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>SMTP Port</Label>
-                                <Input
-                                    placeholder="587"
-                                    value={formData.SMTP_PORT}
-                                    onChange={(e) => handleChange('SMTP_PORT', e.target.value)}
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Username</Label>
-                                <Input
-                                    placeholder="apikey or user@example.com"
-                                    value={formData.SMTP_USER}
-                                    onChange={(e) => handleChange('SMTP_USER', e.target.value)}
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Password</Label>
+                            <div className="space-y-2 md:col-span-2">
+                                <Label>Mailgun API Key</Label>
                                 <SecretInput
-                                    value={formData.SMTP_PASS}
-                                    onChange={(e) => handleChange('SMTP_PASS', e.target.value)}
-                                    placeholder="Enter SMTP Password"
+                                    placeholder="key-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                                    value={formData.MAILGUN_API_KEY}
+                                    onChange={(e) => handleChange('MAILGUN_API_KEY', e.target.value)}
                                 />
+                                <p className="text-xs text-muted-foreground">Found in Mailgun Dashboard → API Keys → Private API Key</p>
                             </div>
 
-                            <div className="space-y-2 col-span-2">
+                            <div className="space-y-2">
+                                <Label>Mailgun Domain</Label>
+                                <Input
+                                    placeholder="mg.yourdomain.com"
+                                    value={formData.MAILGUN_DOMAIN}
+                                    onChange={(e) => handleChange('MAILGUN_DOMAIN', e.target.value)}
+                                />
+                                <p className="text-xs text-muted-foreground">The verified domain in your Mailgun account.</p>
+                            </div>
+
+                            <div className="space-y-2">
                                 <Label>From Name/Email</Label>
                                 <Input
-                                    placeholder='"System Alert" <alert@campzeo.com>'
-                                    value={formData.SMTP_FROM}
-                                    onChange={(e) => handleChange('SMTP_FROM', e.target.value)}
+                                    placeholder='"CampZeo Alerts" &lt;alerts@yourdomain.com&gt;'
+                                    value={formData.MAILGUN_FROM_EMAIL}
+                                    onChange={(e) => handleChange('MAILGUN_FROM_EMAIL', e.target.value)}
                                 />
-                                <p className="text-xs text-muted-foreground">Example: "Campzeo Alerts" &lt;noreply@campzeo.com&gt;</p>
+                                <p className="text-xs text-muted-foreground">Example: "CampZeo Support" &lt;support@mg.campzeo.com&gt;</p>
                             </div>
                         </div>
 
@@ -255,15 +233,6 @@ export function AdminNotificationSettings() {
                                         </SelectContent>
                                     </Select>
                                     <p className="text-xs text-muted-foreground">Minimum severity level to trigger an email notification.</p>
-                                </div>
-
-                                <div className="flex items-center space-x-2 pt-8">
-                                    <Switch
-                                        id="secure-mode"
-                                        checked={formData.SMTP_SECURE === 'true'}
-                                        onCheckedChange={(checked) => handleChange('SMTP_SECURE', String(checked))}
-                                    />
-                                    <Label htmlFor="secure-mode">Enable Secure Connection (SSL/TLS)</Label>
                                 </div>
                             </div>
                         </div>

@@ -21,6 +21,85 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+const BLOCKED_DOMAINS = new Set([
+  "yopmail.com", "yopmail.fr", "cool.fr.nf", "jetable.fr.nf",
+  "nospam.ze.tc", "nomail.xl.cx", "mega.zik.dj", "speed.1s.fr",
+  "courriel.fr.nf", "moncourrier.fr.nf", "monemail.fr.nf",
+
+  "mailinator.com", "mailinator2.com", "trashmail.com",
+  "trashmail.me", "trashmail.net", "trashmail.at",
+  "trashmail.io", "trashmail.xyz",
+
+  "guerrillamail.com", "guerrillamail.net", "guerrillamail.org",
+  "guerrillamail.biz", "guerrillamail.de", "guerrillamail.info",
+  "grr.la", "spam4.me",
+
+  "10minutemail.com", "10minutemail.net", "10minutemail.org",
+  "10minemail.com", "tempr.email", "discard.email",
+
+  "throwam.com", "throwaway.email", "throwam.com",
+  "spamgourmet.com", "spamgourmet.net", "spamgourmet.org",
+
+  "tempmail.com", "tempmail.net", "tempmail.org",
+  "temp-mail.org", "temp-mail.ru", "tempinbox.com",
+  "tempemail.com", "tempemail.net", "fakeinbox.com",
+  "fakeinbox.net", "mailnull.com", "spamex.com",
+  "mailexpire.com", "spamfree24.org", "spamfree.eu",
+
+  "sharklasers.com", "guerrillamailblock.com", "grr.la",
+  "guerrillamail.info", "spam4.me", "yopmail.pp.ua",
+
+  "maildrop.cc", "dispostable.com", "mailnesia.com",
+  "spamgob.com", "mailzilla.com", "trashdevil.com",
+  "trashdevil.de", "wegwerfmail.de", "wegwerfmail.net",
+  "wegwerfmail.org", "spamzy.com", "spamspot.com",
+]);
+
+const BLOCKED_TLDS = new Set([
+  "xyz", "gq", "ml", "cf", "tk", "ga",
+]);
+
+export function validateEmail(email: string): {
+  valid: boolean;
+  error?: string;
+} {
+  if (!email || typeof email !== "string") {
+    return { valid: false, error: "Email is required" };
+  }
+
+  const trimmed = email.trim().toLowerCase();
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!emailRegex.test(trimmed)) {
+    return { valid: false, error: "Invalid email format" };
+  }
+
+  const [localPart, domain] = trimmed.split("@");
+
+  if (localPart.length < 2) {
+    return { valid: false, error: "Invalid email address" };
+  }
+
+  const tld = domain.split(".").pop() ?? "";
+
+  if (BLOCKED_TLDS.has(tld)) {
+    return { valid: false, error: "Email domain not allowed" };
+  }
+
+  if (BLOCKED_DOMAINS.has(domain)) {
+    return { valid: false, error: "Disposable email addresses are not allowed" };
+  }
+
+  const isBlockedSubdomain = [...BLOCKED_DOMAINS].some(
+    (blocked) => domain.endsWith(`.${blocked}`) || domain === blocked
+  );
+  if (isBlockedSubdomain) {
+    return { valid: false, error: "Disposable email addresses are not allowed" };
+  }
+
+  return { valid: true };
+}
+
 export default function Page() {
   const router = useRouter();
 
@@ -275,6 +354,39 @@ export default function Page() {
       taxNumber: accountType === 'individual' ? (form.taxNumber || "N/A") : form.taxNumber,
       captchaToken
     };
+    // Email validation
+    const emailValidation = validateEmail(form.email);
+    if (!emailValidation.valid) {
+      toast.error("Invalid Email", {
+        description: emailValidation.error || "Please enter a valid email address.",
+      });
+      return;
+    }
+
+    // // Password validation
+    // const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+    // if (!passwordRegex.test(form.password)) {
+    //   toast.error("Weak Password", {
+    //     description: "Password must be at least 8 characters with 1 uppercase, 1 lowercase, and 1 number.",
+    //   });
+    //   return;
+    // }
+
+    // Mobile validation
+    //  const phoneRegex = /^\+[1-9]\d{0,2}[\d\s\-().]*$/;
+            const digits = form.mobile.replace(/\D/g, '');
+            if (digits.length < 10 || digits.length > 15) {
+                toast.error("Invalid Mobile Number", {
+                    description: "Must contain 10-15 digits.",
+                });
+                return;
+            }
+    // if (form.mobile.length < 10) {
+    //   toast.error("Invalid Mobile Number", {
+    //     description: "Mobile number must be at least 10 digits.",
+    //   });
+    //   return;
+    // }
 
     setLoading(true);
 

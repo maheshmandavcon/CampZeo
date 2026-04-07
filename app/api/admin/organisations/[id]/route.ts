@@ -81,15 +81,97 @@ async function putHandler(
     });
 
     if (platforms && Array.isArray(platforms)) {
+        const PlatformType = {
+            EMAIL: 'EMAIL',
+            SMS: 'SMS',
+            WHATSAPP: 'WHATSAPP',
+            RCS: 'RCS',
+            FACEBOOK: 'FACEBOOK',
+            INSTAGRAM: 'INSTAGRAM',
+            LINKEDIN: 'LINKEDIN',
+            YOUTUBE: 'YOUTUBE',
+            PINTEREST: 'PINTEREST'
+        };
+
+        const validPlatforms = platforms
+            .map((p: string) => p.toUpperCase())
+            .filter((p: string) => Object.values(PlatformType).includes(p));
+
         await prisma.organisationPlatform.deleteMany({
             where: { organisationId: parseInt(id) }
         });
-        await prisma.organisationPlatform.createMany({
-            data: platforms.map((platform: string) => ({
-                organisationId: parseInt(id),
-                platform: platform as any
-            }))
-        });
+        
+        if (validPlatforms.length > 0) {
+            await prisma.organisationPlatform.createMany({
+                data: validPlatforms.map((platform: string) => ({
+                    organisationId: parseInt(id),
+                    platform: platform as any
+                }))
+            });
+        }
+
+        const { deactivatedPlatforms, suspensionReason } = body;
+        if (deactivatedPlatforms && Array.isArray(deactivatedPlatforms) && deactivatedPlatforms.length > 0 && suspensionReason) {
+            const org = await prisma.organisation.findUnique({
+                where: { id: parseInt(id) },
+                include: { users: true }
+            });
+
+            const owner = org?.users?.[0]; // Get primary user
+
+            if (org) {
+                if (owner) {
+                    const { sendServiceSuspensionEmail } = await import('@/lib/email');
+                    await sendServiceSuspensionEmail({
+                        email: owner.email,
+                        organisationName: org.name,
+                        ownerName: owner.firstName ? `${owner.firstName} ${owner.lastName || ''}`.trim() : (org.ownerName || undefined),
+                        suspendedServices: deactivatedPlatforms,
+                        reason: suspensionReason
+                    });
+                }
+
+                await prisma.notification.create({
+                    data: {
+                        organisationId: parseInt(id),
+                        message: `The following services have been suspended for your organisation: ${deactivatedPlatforms.join(', ').toUpperCase()}.\n\nReason: ${suspensionReason}`,
+                        type: 'SYSTEM_ALERT',
+                        isRead: false
+                    }
+                });
+            }
+        }
+
+        const { activatedPlatforms } = body;
+        if (activatedPlatforms && Array.isArray(activatedPlatforms) && activatedPlatforms.length > 0) {
+            const org = await prisma.organisation.findUnique({
+                where: { id: parseInt(id) },
+                include: { users: true }
+            });
+
+            const owner = org?.users?.[0]; // Get primary user
+
+            if (org) {
+                if (owner) {
+                    const { sendServiceRestorationEmail } = await import('@/lib/email');
+                    await sendServiceRestorationEmail({
+                        email: owner.email,
+                        organisationName: org.name,
+                        ownerName: owner.firstName ? `${owner.firstName} ${owner.lastName || ''}`.trim() : (org.ownerName || undefined),
+                        restoredServices: activatedPlatforms
+                    });
+                }
+
+                await prisma.notification.create({
+                    data: {
+                        organisationId: parseInt(id),
+                        message: `Good news! The following services have been fully restored and re-enabled for your organisation: ${activatedPlatforms.join(', ').toUpperCase()}.`,
+                        type: 'SERVICE_RESTORED',
+                        isRead: false
+                    }
+                });
+            }
+        }
     }
 
     if (ownerName) {

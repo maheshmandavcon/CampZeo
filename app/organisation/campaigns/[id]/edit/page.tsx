@@ -248,9 +248,9 @@ export default function EditCampaignPage({ params }: { params: Promise<{ id: str
                 toast.error('End date cannot be in the past');
                 return;
             }
-            const submissionTime = new Date();
-            submissionTime.setSeconds(0, 0);
-            if (!hasScheduledPosts && new Date(startDate) < submissionTime) {
+            const nowObj = new Date();
+            const today = new Date(nowObj.getFullYear(), nowObj.getMonth(), nowObj.getDate());
+            if (!hasScheduledPosts && new Date(startDate) < today) {
                 toast.error('Start date cannot be in the past');
                 return;
             }
@@ -300,8 +300,13 @@ export default function EditCampaignPage({ params }: { params: Promise<{ id: str
 
     const allOnPageSelected = contacts.length > 0 && contacts.every((c) => selectedContacts.includes(c.id));
     const someOnPageSelected = contacts.some((c) => selectedContacts.includes(c.id)) && !allOnPageSelected;
-
-    const minDate = formatDateTimeLocal(new Date());
+    const now = new Date();
+    const minDate = (() => {
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}T00:00`;
+    })();
 
     if (loadingCampaign) {
         return (

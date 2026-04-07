@@ -796,3 +796,165 @@ export async function sendTwilioAccessStatusEmail(params: TwilioAccessStatusPara
 
     return true;
 }
+export interface ServiceSuspensionEmailParams {
+    email: string;
+    organisationName: string;
+    ownerName?: string;
+    suspendedServices: string[];
+    reason: string;
+}
+
+export async function sendServiceSuspensionEmail(params: ServiceSuspensionEmailParams): Promise<boolean> {
+    const { email, organisationName, ownerName, suspendedServices, reason } = params;
+    const { apiKey, domain, fromEmail } = await getEmailConfig();
+
+    const subject = `Action Required: Service Suspension for ${organisationName}`;
+    const servicesList = suspendedServices.map(s => s.toUpperCase()).join(' & ');
+    
+    const html = `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; color: #333; line-height: 1.6;">
+            <div style="text-align: center; padding: 20px 0;">
+                <h1 style="color: #ef4444; margin: 0;">Service Notification</h1>
+            </div>
+            <div style="border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                <div style="background-color: #fef2f2; padding: 20px; text-align: center; border-bottom: 1px solid #fee2e2;">
+                    <h2 style="margin: 0; color: #991b1b;">Subscription Feature Suspended</h2>
+                </div>
+                <div style="padding: 30px;">
+                    <p>Dear ${ownerName || 'Valued Partner'},</p>
+                    <p>We are writing to inform you that the <strong>${servicesList}</strong> feature(s) for your organisation, <strong>${organisationName}</strong>, have been suspended by the system administrator.</p>
+                    
+                    <div style="background-color: #f9fafb; border: 1px solid #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <p style="margin: 0 0 10px 0; font-weight: bold; color: #374151;">Reason for Suspension:</p>
+                        <p style="margin: 0; color: #4b5563; font-style: italic;">"${reason}"</p>
+                    </div>
+
+                    <p>While these services are suspended, you will not be able to send or receive messages through these platforms. All other features of your CampZeo dashboard remain active.</p>
+                    
+                    <p>If you believe this is an error or wish to discuss the restoration of these services, please contact our support team at <a href="mailto:surya@mandavconsultancy.com" style="color: #3b82f6;">surya@mandavconsultancy.com</a>.</p>
+                    
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://campzeo.com'}/organisation/" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                            View Account 
+                        </a>
+                    </div>
+
+                    <p style="font-size: 14px; color: #6b7280;">Thank you for your cooperation and understanding.</p>
+                </div>
+            </div>
+            <div style="text-align: center; padding: 20px; font-size: 12px; color: #9ca3af;">
+                &copy; ${new Date().getFullYear()} CampZeo. All rights reserved.<br>
+                This is an official administrative notification regarding your account status.
+            </div>
+        </div>
+    `;
+
+    if (apiKey && domain && fromEmail) {
+        const mailgun = new Mailgun(FormData);
+        const mg = mailgun.client({ username: 'api', key: apiKey });
+
+        const msg: any = {
+            from: fromEmail,
+            to: [email],
+            subject: subject,
+            html: html,
+        };
+
+        try {
+            await mg.messages.create(domain, msg);
+            console.log(`✅ Service suspension email sent to ${email} for ${organisationName}`);
+            return true;
+        } catch (error: any) {
+            console.error('Error sending service suspension email via Mailgun:', error);
+            return false;
+        }
+    }
+
+    console.log('='.repeat(60));
+    console.log(`📧 MOCK EMAIL: Service Suspension Notification`);
+    console.log('='.repeat(60));
+    console.log(`To: ${email}`);
+    console.log(`Subject: ${subject}`);
+    console.log(`Services: ${servicesList}`);
+    console.log(`Reason: ${reason}`);
+    console.log('='.repeat(60));
+
+    return true;
+}
+
+export interface ServiceRestorationEmailParams {
+    email: string;
+    organisationName: string;
+    ownerName?: string;
+    restoredServices: string[];
+}
+
+export async function sendServiceRestorationEmail(params: ServiceRestorationEmailParams): Promise<boolean> {
+    const { email, organisationName, ownerName, restoredServices } = params;
+    const { apiKey, domain, fromEmail } = await getEmailConfig();
+
+    const subject = `Service Restored: ${organisationName}`;
+    const servicesList = restoredServices.map(s => s.toUpperCase()).join(' & ');
+    
+    const html = `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; color: #333; line-height: 1.6;">
+            <div style="text-align: center; padding: 20px 0;">
+                <h1 style="color: #22c55e; margin: 0;">Service Notification</h1>
+            </div>
+            <div style="border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                <div style="background-color: #f0fdf4; padding: 20px; text-align: center; border-bottom: 1px solid #dcfce3;">
+                    <h2 style="margin: 0; color: #166534;">Subscription Feature Restored</h2>
+                </div>
+                <div style="padding: 30px;">
+                    <p>Dear ${ownerName || 'Valued Partner'},</p>
+                    <p>We are pleased to inform you that the <strong>${servicesList}</strong> feature(s) for your organisation, <strong>${organisationName}</strong>, have been fully restored and re-enabled by the system administrator.</p>
+                    
+                    <p>You can now resume sending and receiving messages through these platforms immediately. We appreciate your patience and cooperation.</p>
+                    
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://campzeo.com'}/organisation/" style="background-color: #22c55e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                            Account 
+                        </a>
+                    </div>
+
+                    <p style="font-size: 14px; color: #6b7280;">If you continue to experience any issues, please contact our support team at <a href="mailto:surya@mandavconsultancy.com" style="color: #22c55e;">surya@mandavconsultancy.com</a>.</p>
+                </div>
+            </div>
+            <div style="text-align: center; padding: 20px; font-size: 12px; color: #9ca3af;">
+                &copy; ${new Date().getFullYear()} CampZeo. All rights reserved.<br>
+                This is an official administrative notification regarding your account status.
+            </div>
+        </div>
+    `;
+
+    if (apiKey && domain && fromEmail) {
+        const mailgun = new Mailgun(FormData);
+        const mg = mailgun.client({ username: 'api', key: apiKey });
+
+        const msg: any = {
+            from: fromEmail,
+            to: [email],
+            subject: subject,
+            html: html,
+        };
+
+        try {
+            await mg.messages.create(domain, msg);
+            console.log(`✅ Service restoration email sent to ${email} for ${organisationName}`);
+            return true;
+        } catch (error: any) {
+            console.error('Error sending service restoration email via Mailgun:', error);
+            return false;
+        }
+    }
+
+    console.log('='.repeat(60));
+    console.log(`📧 MOCK EMAIL: Service Restoration Notification`);
+    console.log('='.repeat(60));
+    console.log(`To: ${email}`);
+    console.log(`Subject: ${subject}`);
+    console.log(`Services: ${servicesList}`);
+    console.log('='.repeat(60));
+
+    return true;
+}
