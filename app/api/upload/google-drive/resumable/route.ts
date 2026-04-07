@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getOrCreateFolder, getResumableUploadUrl, uploadChunkProxy } from '@/lib/google-drive';
+import { getOrCreateFolder, getResumableUploadUrl, uploadChunkProxy, makeFilePublic } from '@/lib/google-drive';
 import { withErrorHandling, ApiError } from '@/lib/api-handler';
 
 /**
@@ -10,15 +10,15 @@ export const POST = withErrorHandling(async (req: Request) => {
   const body = await req.json();
   const { fileName, mimeType, organisationId, campaignId } = body;
 
-  if (!fileName || !mimeType || !organisationId || !campaignId) {
-    throw new ApiError(400, 'Missing required fields: fileName, mimeType, organisationId, campaignId');
+  if (!fileName || !mimeType || !organisationId) {
+    throw new ApiError(400, 'Missing required fields: fileName, mimeType, organisationId');
   }
 
-  // 1. Get or create the folder structure: {orgId}/{campId}/pending
-  // We use a "pending" folder initially because the postId is not yet known.
-  console.log(`[Drive] Initiating resumable upload in: ${organisationId}/${campaignId}/pending`);
+  // 1. Get or create the folder structure: {orgId}/{campId}/pending or {orgId}/templates/pending
+  const pathParts = campaignId ? [organisationId, campaignId, 'pending'] : [organisationId, 'templates', 'pending'];
+  console.log(`[Drive] Initiating resumable upload in: ${pathParts.join('/')}`);
   
-  const folderId = await getOrCreateFolder([organisationId, campaignId, 'pending']);
+  const folderId = await getOrCreateFolder(pathParts);
 
   // 2. Start the resumable session with Google
   const { uploadUrl } = await getResumableUploadUrl(fileName, mimeType, folderId);
@@ -50,6 +50,17 @@ export const PUT = withErrorHandling(async (req: Request) => {
 
   // Proxy the chunk to Google
   const result = await uploadChunkProxy(uploadUrl, chunkBuffer, rangeStart, totalSize);
+
+  // If the upload is complete, make the file public
+  if ((result.status === 200 || result.status === 201) && result.data?.id) {
+    console.log(`[Drive] Resumable upload complete for file ${result.data.id}. Making public...`);
+    try {
+      await makeFilePublic(result.data.id);
+    } catch (error) {
+      console.error(`[Drive] Failed to make file ${result.data.id} public:`, error);
+      // We don't throw here to avoid failing a successful upload, but it might result in a broken preview
+    }
+  }
 
   return NextResponse.json(result);
 }, "PUT /api/upload/google-drive/resumable");

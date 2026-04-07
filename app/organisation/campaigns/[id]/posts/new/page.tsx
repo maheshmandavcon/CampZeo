@@ -57,7 +57,8 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { AIContentAssistant } from '@/components/ai-content-assistant';
-import { uploadToServer } from '@/lib/upload-helper';
+import { uploadToServer, deleteFromDriveImmediate } from '@/lib/upload-helper';
+import { useMediaCleanup } from '@/hooks/use-media-cleanup';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { isVideoUrl, getPreviewUrl } from '@/lib/media-utils';
@@ -74,6 +75,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const router = useRouter();
     const resolvedParams = React.use(params);
     const campaignId = resolvedParams.id;
+    const { trackUpload, markAsSubmitted } = useMediaCleanup();
     // const balance :any  ;
 
     // Form state
@@ -499,12 +501,16 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 }
 
                 // Use client-side upload with organization and campaign context
+                const orgId = campaign?.organisationId || campaign?.organisation?.id;
+                
                 const newBlob = await uploadToServer(
                     file, 
-                    campaign?.organisation?.id, 
+                    orgId, 
                     campaignId
                 );
 
+                console.log(`[Drive] Media tracked: ${newBlob.url}`);
+                trackUpload(newBlob.url);
                 newUrls.push(newBlob.url);
             }
 
@@ -554,12 +560,15 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
             const file = files[0];
 
+            const orgId = campaign?.organisationId || campaign?.organisation?.id;
             const newBlob = await uploadToServer(
                 file, 
-                campaign?.organisation?.id, 
+                orgId, 
                 campaignId
             );
 
+            console.log(`[Drive] Thumbnail tracked: ${newBlob.url}`);
+            trackUpload(newBlob.url);
             setThumbnailUrl(newBlob.url);
             toast.success('Thumbnail uploaded successfully');
         } catch (error) {
@@ -572,9 +581,18 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         }
     };
 
-    const removeMedia = (index: number) => {
+    const removeMedia = async (index: number) => {
+        const urlToRemove = mediaUrls[index];
         const updatedUrls = mediaUrls.filter((_, i) => i !== index);
         setMediaUrls(updatedUrls);
+
+        // Immediate cleanup for manually removed files
+        if (urlToRemove) {
+            console.log(`[Drive] Manual removal: cleaning up ${urlToRemove}`);
+            deleteFromDriveImmediate([urlToRemove]).catch(err => {
+                console.error('[Drive] Manual cleanup failed:', err);
+            });
+        }
 
         // Auto-detect Content Type for Instagram/Facebook
         if (selectedPlatform === 'INSTAGRAM' || selectedPlatform === 'FACEBOOK') {
@@ -950,6 +968,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 throw new Error(error.error || 'Failed to create post');
             }
 
+            markAsSubmitted();
             toast.success('Post created successfully');
             router.push(`/organisation/campaigns/${campaignId}/posts`);
         } catch (error) {
@@ -1005,6 +1024,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
             const data = await response.json();
             const post = data.post;
+            markAsSubmitted();
 
             // Use utility to open popup
             const adAccountId = post.metadata?.metaBoost?.adAccountId || localStorage.getItem('last_meta_ad_account_id') || '';

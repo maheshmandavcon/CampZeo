@@ -52,7 +52,8 @@ async function getHandler() {
 
         return NextResponse.json({
             success: true,
-            platforms: uniquePlatforms
+            platforms: uniquePlatforms,
+            organisationId: effectiveOrganisationId
         });
 
     

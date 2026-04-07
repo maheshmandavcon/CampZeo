@@ -30,9 +30,10 @@ import Image from 'next/image';
 import { AIContentAssistant } from '@/components/ai-content-assistant';
 import { WYSIWYGPreview } from '../../_components/WYSIWYGPreview';
 import { useUser } from '@clerk/nextjs';
-import { uploadToServer } from '@/lib/upload-helper';
+import { uploadToServer, deleteFromDriveImmediate } from '@/lib/upload-helper';
 import { MetaBoostSection, MetaBoostOptions } from '../../_components/MetaBoostSection';
 import { isVideoUrl, getPreviewUrl } from '@/lib/media-utils';
+import { useMediaCleanup } from '@/hooks/use-media-cleanup';
 
 
 
@@ -55,6 +56,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
     const resolvedParams = React.use(params);
     const campaignId = resolvedParams.id;
     const postId = resolvedParams.postId;
+    const { trackUpload, markAsSubmitted } = useMediaCleanup();
 
     // Form state
     const [subject, setSubject] = useState('');
@@ -497,8 +499,15 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                 }
 
                 // Use client-side upload to avoid Vercel 4.5MB serverless limit
-                const newBlob = await uploadToServer(file);
+                const orgId = campaign?.organisationId || campaign?.organisation?.id;
+                const newBlob = await uploadToServer(
+                    file,
+                    orgId,
+                    campaignId as string
+                );
 
+                console.log(`[Drive] Media tracked: ${newBlob.url}`);
+                trackUpload(newBlob.url);
                 newUrls.push(newBlob.url);
             }
 
@@ -550,8 +559,15 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
 
             const file = files[0];
 
-            const newBlob = await uploadToServer(file);
+            const orgId = campaign?.organisationId || campaign?.organisation?.id;
+            const newBlob = await uploadToServer(
+                file,
+                orgId,
+                campaignId as string
+            );
 
+            console.log(`[Drive] Thumbnail tracked: ${newBlob.url}`);
+            trackUpload(newBlob.url);
             setThumbnailUrl(newBlob.url);
             toast.success('Thumbnail uploaded successfully');
         } catch (error) {
@@ -564,9 +580,18 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
         }
     };
 
-    const removeMedia = (index: number) => {
+    const removeMedia = async (index: number) => {
+        const urlToRemove = mediaUrls[index];
         const updatedUrls = mediaUrls.filter((_, i) => i !== index);
         setMediaUrls(updatedUrls);
+
+        // Immediate cleanup for manually removed files
+        if (urlToRemove) {
+            console.log(`[Drive] Manual removal: cleaning up ${urlToRemove}`);
+            deleteFromDriveImmediate([urlToRemove]).catch(err => {
+                console.error('[Drive] Manual cleanup failed:', err);
+            });
+        }
 
         // Auto-detect Content Type for Instagram/Facebook
         if (type === 'INSTAGRAM' || type === 'FACEBOOK') {
@@ -717,6 +742,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                 throw new Error(error.error || 'Failed to update post');
             }
 
+            markAsSubmitted();
             toast.success('Post updated successfully');
             router.push(`/organisation/campaigns/${campaignId}/posts`);
         } catch (error) {
@@ -766,6 +792,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
 
             const data = await response.json();
             const post = data.post;
+            markAsSubmitted();
 
             // Use utility to open popup
             const adAccountId = post.metadata?.metaBoost?.adAccountId || localStorage.getItem('last_meta_ad_account_id') || '';
