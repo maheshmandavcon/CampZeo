@@ -26,6 +26,7 @@ import {
     FileIcon,
     FileQuestion
 } from 'lucide-react';
+import { isVideoUrl, isImageUrl, isDocumentUrl, getPreviewUrl } from '@/lib/media-utils';
 import {
     Dialog,
     DialogContent,
@@ -68,10 +69,6 @@ export function WYSIWYGPreview({
         setCurrentSlideIndex(0);
     }, [mediaUrls, platform]);
 
-    const isVideo = (url: string) => url.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
-    const isImage = (url: string) => url.match(/\.(jpg|jpeg|png|gif|webp|avif|bmp|tiff)(\?.*)?$/i);
-    const isDocument = (url: string) => url.match(/\.(pdf|csv|xlsx|xls|doc|docx|txt|ppt|pptx)(\?.*)?$/i);
-
     const getFileIcon = (url: string) => {
         const ext = url.split('.').pop()?.split('?')[0].toLowerCase() || '';
         if (['csv', 'xlsx', 'xls'].includes(ext)) return <FileSpreadsheet className="size-10 text-green-600" />;
@@ -109,9 +106,10 @@ export function WYSIWYGPreview({
         }
 
         const renderMediaItem = (url: string, className?: string) => {
-            const isVid = isVideo(url);
-            const isImg = isImage(url);
-            const isDoc = isDocument(url);
+            const isVid = isVideoUrl(url);
+            const isImg = isImageUrl(url);
+            const isDoc = isDocumentUrl(url);
+            const previewUrl = getPreviewUrl(url);
 
             return (
                 <div
@@ -127,7 +125,7 @@ export function WYSIWYGPreview({
                 >
                     {isVid ? (
                         <video
-                            src={url}
+                            src={previewUrl}
                             className="size-full object-fill"
                             autoPlay
                             muted
@@ -136,7 +134,7 @@ export function WYSIWYGPreview({
                         />
                     ) : isImg ? (
                         <Image
-                            src={url}
+                            src={previewUrl}
                             alt="Preview"
                             fill
                             className="object-fill"
@@ -338,7 +336,7 @@ export function WYSIWYGPreview({
                         <>
                             {thumbnailUrl ? (
                                 <Image
-                                    src={thumbnailUrl}
+                                    src={getPreviewUrl(thumbnailUrl)}
                                     alt="Thumbnail"
                                     fill
                                     className="object-fill"
@@ -350,7 +348,7 @@ export function WYSIWYGPreview({
                             <button
                                 type="button"
                                 onClick={() => setIsPlayingVideo(true)}
-                                disabled={!mediaUrls.length || (!isYouTubeUrl && !isVideo(videoUrl))}
+                                disabled={!mediaUrls.length || (!isYouTubeUrl && !isVideoUrl(videoUrl))}
                                 className="absolute cursor-pointer inset-0 flex items-center justify-center disabled:cursor-not-allowed group"
                             >
                                 <div className="flex size-14 items-center justify-center rounded-full bg-red-600/90 shadow-lg backdrop-blur-sm transition-transform group-hover:scale-110 disabled:opacity-50">
@@ -718,21 +716,21 @@ export function WYSIWYGPreview({
                     <div className="flex-1 bg-gray-100/50 backdrop-blur-md overflow-hidden relative ">
                         {selectedFile && (
                             <>
-                                {isVideo(selectedFile) ? (
-                                    <video src={selectedFile} className="size-full" controls autoPlay />
-                                ) : isImage(selectedFile) ? (
+                                {isVideoUrl(selectedFile) ? (
+                                    <video src={getPreviewUrl(selectedFile)} className="size-full" controls autoPlay />
+                                ) : isImageUrl(selectedFile) ? (
                                     <div className="relative size-full flex items-center justify-center p-4">
                                         <Image
-                                            src={selectedFile}
+                                            src={getPreviewUrl(selectedFile)}
                                             alt="Preview"
                                             fill
                                             className="object-contain"
                                             unoptimized
                                         />
                                     </div>
-                                ) : isDocument(selectedFile) && selectedFile.toLowerCase().includes('.pdf') ? (
+                                ) : isDocumentUrl(selectedFile) && selectedFile.toLowerCase().includes('.pdf') ? (
                                     <iframe
-                                        src={selectedFile}
+                                        src={getPreviewUrl(selectedFile)}
                                         className="size-full border-0 min-h-[600px] overflow-hidden"
                                         title="PDF Preview"
                                     />

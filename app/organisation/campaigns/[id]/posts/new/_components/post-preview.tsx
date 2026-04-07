@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Heart, MessageCircle, Share2, MoreHorizontal, ThumbsUp, MessageSquare, Repeat, Send } from 'lucide-react';
 import Image from 'next/image';
+import { getPreviewUrl } from '@/lib/media-utils';
 
 interface PostPreviewProps {
     platforms: string[];
@@ -281,11 +282,11 @@ function YouTubePreview({ subject, message, mediaUrls, thumbnailUrl, user, isRee
             {thumbnailUrl ? (
                 <div className={`${isReel ? 'aspect-[9/16] max-w-[240px] mx-auto' : 'aspect-video'} relative bg-muted overflow-hidden`}>
                     <Image
-                        src={thumbnailUrl}
+                        src={getPreviewUrl(thumbnailUrl)}
                         alt="Video Thumbnail"
                         fill
                         className="object-cover"
-                        unoptimized={isExternalUrl(thumbnailUrl)}
+                        unoptimized
                     />
                     {hasVideo && (
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -320,11 +321,11 @@ function YouTubePreview({ subject, message, mediaUrls, thumbnailUrl, user, isRee
             ) : hasImage ? (
                 <div className="aspect-video relative bg-muted overflow-hidden">
                     <Image
-                        src={mediaUrls[0]}
+                        src={getPreviewUrl(mediaUrls[0])}
                         alt="Video Thumbnail"
                         fill
                         className="object-cover"
-                        unoptimized={isExternalUrl(mediaUrls[0])}
+                        unoptimized
                     />
                     <div className="absolute inset-0 flex items-center justify-center">
                         <div className="size-16 rounded-full bg-red-600/90 flex items-center justify-center">
@@ -359,12 +360,12 @@ function PinterestPreview({ subject, message, mediaUrls, user }: any) {
             <div className="rounded-2xl overflow-hidden bg-muted mb-2">
                 {mediaUrls && mediaUrls.length > 0 ? (
                     <Image
-                        src={mediaUrls[0]}
+                        src={getPreviewUrl(mediaUrls[0])}
                         alt="Pin"
                         width={236}
                         height={354}
                         className="object-cover w-full h-auto"
-                        unoptimized={isExternalUrl(mediaUrls[0])}
+                        unoptimized
                     />
                 ) : (
                     <div className="aspect-[2/3] flex items-center justify-center text-muted-foreground">
@@ -429,11 +430,11 @@ function MediaGrid({ mediaUrls, square, rounded, thumbnailUrl }: { mediaUrls: st
                             <>
                                 {thumbnailUrl && index === 0 ? (
                                     <Image
-                                        src={thumbnailUrl}
+                                        src={getPreviewUrl(thumbnailUrl)}
                                         alt={`Media ${index}`}
                                         fill
                                         className="object-cover"
-                                        unoptimized={isExternalUrl(thumbnailUrl)}
+                                        unoptimized
                                     />
                                 ) : (
                                     <div className="flex items-center justify-center h-full bg-black/10">
@@ -446,21 +447,13 @@ function MediaGrid({ mediaUrls, square, rounded, thumbnailUrl }: { mediaUrls: st
                                     </div>
                                 </div>
                             </>
-                        ) : isExternalUrl(url) ? (
-                            // Use unoptimized for external URLs (Vercel Blob, etc.)
+                        ) : (
                             <Image
-                                src={url}
+                                src={getPreviewUrl(url)}
                                 alt={`Media ${index}`}
                                 fill
                                 className="object-cover"
                                 unoptimized
-                            />
-                        ) : (
-                            <Image
-                                src={url}
-                                alt={`Media ${index}`}
-                                fill
-                                className="object-cover"
                             />
                         )}
                         {index === 3 && count > 4 && (

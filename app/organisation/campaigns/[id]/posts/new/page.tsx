@@ -60,7 +60,7 @@ import { AIContentAssistant } from '@/components/ai-content-assistant';
 import { uploadToServer } from '@/lib/upload-helper';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { isVideoUrl } from '@/lib/media-utils';
+import { isVideoUrl, getPreviewUrl } from '@/lib/media-utils';
 import {
     Tooltip,
     TooltipContent,
@@ -498,8 +498,12 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     newlyAddedVideos++;
                 }
 
-                // Use client-side upload
-                const newBlob = await uploadToServer(file);
+                // Use client-side upload with organization and campaign context
+                const newBlob = await uploadToServer(
+                    file, 
+                    campaign?.organisation?.id, 
+                    campaignId
+                );
 
                 newUrls.push(newBlob.url);
             }
@@ -550,7 +554,11 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
             const file = files[0];
 
-            const newBlob = await uploadToServer(file);
+            const newBlob = await uploadToServer(
+                file, 
+                campaign?.organisation?.id, 
+                campaignId
+            );
 
             setThumbnailUrl(newBlob.url);
             toast.success('Thumbnail uploaded successfully');
@@ -1561,7 +1569,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                         </div>
                                                     ) : (
                                                         <Image
-                                                            src={url}
+                                                            src={getPreviewUrl(url)}
                                                             alt={`Attachment ${index + 1}`}
                                                             fill
                                                             className="object-cover"
@@ -1633,7 +1641,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                             </div>
                                                         ) : (
                                                             <Image
-                                                                src={url}
+                                                                src={getPreviewUrl(url)}
                                                                 alt={`Media ${index + 1}`}
                                                                 fill
                                                                 className="object-cover"
@@ -1841,7 +1849,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                     </div>
                                                     {thumbnailUrl && (
                                                         <div className="relative aspect-[9/16] w-20 overflow-hidden rounded border bg-muted">
-                                                            <Image src={thumbnailUrl} alt="Cover" fill className="object-cover" unoptimized />
+                                                            <Image src={getPreviewUrl(thumbnailUrl)} alt="Cover" fill className="object-cover" unoptimized />
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setThumbnailUrl(null)}
@@ -2001,7 +2009,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                     />
                                                     {thumbnailUrl && (
                                                         <div className="relative aspect-video w-32 overflow-hidden rounded border bg-muted group cursor-pointer">
-                                                            <Image src={thumbnailUrl} alt="Thumbnail" fill className="object-cover" unoptimized />
+                                                            <Image src={getPreviewUrl(thumbnailUrl)} alt="Thumbnail" fill className="object-cover" unoptimized />
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setThumbnailUrl(null)}

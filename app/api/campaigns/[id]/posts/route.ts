@@ -5,6 +5,7 @@ import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
 import { sendCampaignPost } from '@/lib/send-campaign-post';
 import { logWarning, logInfo } from '@/lib/audit-logger';
 import { withErrorHandling, ApiError } from '@/lib/api-handler';
+import { getOrCreateFolder, moveFile, makeFilePublic } from '@/lib/google-drive';
 
 // GET - Fetch all posts for a campaign
 async function getPostsHandler(
@@ -253,6 +254,59 @@ async function createPostHandler(
             }
         }
     });
+
+    // --- GOOGLE DRIVE FOLDER ORGANIZATION ---
+    // If the storage provider is google_drive, move the files to {orgId}/{campId}/{postId}/
+    if (process.env.NEXT_PUBLIC_STORAGE_PROVIDER === 'google_drive' && (mediaUrls?.length || thumbnailUrl)) {
+        try {
+            console.log(`[Drive] Organizing files for post ${post.id}...`);
+            const orgId = String(effectiveOrganisationId);
+            const campId = String(campaignId);
+            const postId = String(post.id);
+
+            // 1. Create the post-specific folder
+            const targetFolderId = await getOrCreateFolder([orgId, campId, postId]);
+
+            // 2. Identify all Google Drive files to move
+            const filesToMove: string[] = [];
+            
+            // Extract file IDs from proxy URLs
+            const extractId = (url: string) => {
+                if (url.includes('id=')) {
+                    return url.split('id=')[1].split('&')[0];
+                }
+                return null;
+            };
+
+            if (mediaUrls) {
+                mediaUrls.forEach((url: string) => {
+                    const id = extractId(url);
+                    if (id) filesToMove.push(id);
+                });
+            }
+
+            if (thumbnailUrl) {
+                const id = extractId(thumbnailUrl);
+                if (id) filesToMove.push(id);
+            }
+
+            // 3. Move and finalize each file
+            for (const fileId of filesToMove) {
+                try {
+                    await moveFile(fileId, targetFolderId);
+                    await makeFilePublic(fileId);
+                } catch (moveErr) {
+                    console.error(`[Drive] Failed to move file ${fileId}:`, moveErr);
+                }
+            }
+            
+            console.log(`[Drive] Metadata organization complete for post ${post.id}`);
+        } catch (orgErr) {
+            console.error('[Drive] Folder organization failed:', orgErr);
+            // Non-blocking error, we don't want to fail post creation if organization fails
+        }
+    }
+    // ----------------------------------------
 
     
     if (isSocialPlatform && !scheduledPostTime) {
