@@ -32,10 +32,11 @@ async function getHandler() {
             return NextResponse.json({ error: "No organization found" }, { status: 404 });
         }
 
-        // Get organization platforms
+        // Get organization platforms (only active ones)
         const orgPlatforms = await prisma.organisationPlatform.findMany({
             where: {
-                organisationId: effectiveOrganisationId
+                organisationId: effectiveOrganisationId,
+                isActive: true
             },
             select: {
                 platform: true
@@ -45,10 +46,8 @@ async function getHandler() {
         // Extract platform types
         const platforms = orgPlatforms.map((op: { platform: string }) => op.platform);
 
-        const allPlatforms = ['EMAIL', ...platforms];
-
         // Remove duplicates
-        const uniquePlatforms = [...new Set(allPlatforms)];
+        const uniquePlatforms = [...new Set(platforms)];
 
         return NextResponse.json({
             success: true,
