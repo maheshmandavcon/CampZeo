@@ -180,15 +180,15 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
 
       if (data.url) {
         // window.location.href = data.url;
-        
+
         const width = 600;
         const height = 700;
         const left = window.screenX + (window.outerWidth - width) / 2;
         const top = window.screenY + (window.outerHeight - height) / 2;
-        
+
         window.open(
-          data.url, 
-          `Connect ${platform}`, 
+          data.url,
+          `Connect ${platform}`,
           `width=${width},height=${height},left=${left},top=${top},status=no,locations=no,toolbar=no,menubar=no`
         );
       }
@@ -318,7 +318,7 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
 
       if (event.data?.type === 'AUTH_COMPLETE') {
         const { status, platform, error } = event.data;
-        
+
         if (status === 'success') {
           toast.success(`Successfully connected ${platform}!`);
           window.location.reload();
@@ -399,33 +399,7 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
       accountName: socialStatus?.pinterest?.name,
       description: "Pin your visual content to Pinterest boards.",
     },
-    {
-      id: "EMAIL",
-      name: "Email (Twilio SendGrid)",
-      icon: Mail,
-      color: "text-slate-600",
-      connected: userData.emailConnected,
-      accountName: null,
-      description: "Send emails via Twilio SendGrid.",
-    },
-    {
-      id: "SMS",
-      name: "SMS (Twilio)",
-      icon: Smartphone,
-      color: "text-red-500",
-      connected: userData.smsConnected,
-      accountName: null,
-      description: "Send SMS messages via Twilio.",
-    },
-    {
-      id: "WHATSAPP",
-      name: "WhatsApp (Twilio)",
-      icon: MessageSquare,
-      color: "text-green",
-      connected: userData.whatsappConnected,
-      accountName: null,
-      description: "Send WhatsApp messages via Twilio.",
-    }
+
   ];
 
   const filteredPlatforms = platforms.filter(platform => {
@@ -808,10 +782,10 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                     const height = 700;
                     const left = window.screenX + (window.outerWidth - width) / 2;
                     const top = window.screenY + (window.outerHeight - height) / 2;
-                    
+
                     window.open(
-                      data.url, 
-                      'Connect Instagram', 
+                      data.url,
+                      'Connect Instagram',
                       `width=${width},height=${height},left=${left},top=${top},status=no,locations=no,toolbar=no,menubar=no`
                     );
                   }
@@ -851,10 +825,10 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                     const height = 700;
                     const left = window.screenX + (window.outerWidth - width) / 2;
                     const top = window.screenY + (window.outerHeight - height) / 2;
-                    
+
                     window.open(
-                      data.url, 
-                      'Connect Instagram', 
+                      data.url,
+                      'Connect Instagram',
                       `width=${width},height=${height},left=${left},top=${top},status=no,locations=no,toolbar=no,menubar=no`
                     );
                   }
