@@ -21,6 +21,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
 
   /* Radius */
   --radius-lg: var(--radius);
