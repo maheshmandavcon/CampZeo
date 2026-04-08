@@ -49,6 +49,9 @@ import {
     FileText,
     Users,
     Download,
+    ArrowUpDown,
+    ArrowUp,
+    ArrowDown,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -83,6 +86,9 @@ export default function CampaignsPage() {
     const [showCampaignModal, setShowCampaignModal] = useState(false);
     const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
     const [exporting, setExporting] = useState(false);
+    const [sortBy, setSortBy] = useState<string>('createdAt');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
 
     // Fetch campaigns
     const fetchCampaigns = async () => {
@@ -91,6 +97,8 @@ export default function CampaignsPage() {
             const params = new URLSearchParams({
                 page: currentPage.toString(),
                 limit: itemsPerPage.toString(),
+                sortBy: sortBy,
+                sortOrder: sortOrder,
                 ...(searchQuery && { search: searchQuery }),
             });
 
@@ -106,12 +114,32 @@ export default function CampaignsPage() {
             toast.error('Failed to fetch campaigns');
         } finally {
             setLoading(false);
+            setIsInitialLoading(false);
         }
     };
 
     useEffect(() => {
         fetchCampaigns();
-    }, [currentPage, itemsPerPage, searchQuery]);
+    }, [currentPage, itemsPerPage, searchQuery, sortBy, sortOrder]);
+
+    const handleSort = (column: string) => {
+        if (sortBy === column) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(column);
+            setSortOrder('asc');
+        }
+        setCurrentPage(1);
+    };
+
+    const SortIcon = ({ column }: { column: string }) => {
+        if (sortBy !== column) return <ArrowUpDown className="size-4 ml-2 opacity-50" />;
+        return sortOrder === 'asc' ? (
+            <ArrowUp className="size-4 ml-2" />
+        ) : (
+            <ArrowDown className="size-4 ml-2" />
+        );
+    };
 
     // Handle delete campaign
     const handleDeleteCampaign = async (campaignId: number) => {
@@ -262,18 +290,22 @@ export default function CampaignsPage() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {loading ? (
+                        {loading && isInitialLoading ? (
                             <div className="flex items-center justify-center py-12">
                                 <Loader2 className="size-8 animate-spin text-muted-foreground" />
                             </div>
                         ) : campaigns.length === 0 ? (
                             <div className="text-center py-12">
                                 <FileText className="size-12 mx-auto text-muted-foreground mb-4" />
-                                <p className="text-muted-foreground">No campaigns found</p>
-                                <Button onClick={handleAddCampaign} className="  cursor-pointer mt-4">
-                                    <Plus className="size-4 mr-2" />
-                                    Create Your First Campaign
-                                </Button>
+                                <p className="text-muted-foreground">
+                                    {loading ? "Searching..." : "No campaigns found"}
+                                </p>
+                                {!loading && (
+                                    <Button onClick={handleAddCampaign} className="  cursor-pointer mt-4">
+                                        <Plus className="size-4 mr-2" />
+                                        Create Your First Campaign
+                                    </Button>
+                                )}
                             </div>
                         ) : (
                             <>
@@ -281,11 +313,51 @@ export default function CampaignsPage() {
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHead>Campaign Name</TableHead>
-                                                <TableHead>Status</TableHead>
-                                                <TableHead>Duration</TableHead>
-                                                <TableHead>Contacts</TableHead>
-                                                <TableHead>Posts</TableHead>
+                                                <TableHead
+                                                    className="cursor-pointer hover:text-foreground transition-colors"
+                                                    onClick={() => handleSort('name')}
+                                                >
+                                                    <div className="flex items-center">
+                                                        Campaign Name
+                                                        <SortIcon column="name" />
+                                                    </div>
+                                                </TableHead>
+                                                <TableHead
+                                                    className="cursor-pointer hover:text-foreground transition-colors"
+                                                    onClick={() => handleSort('status')}
+                                                >
+                                                    <div className="flex items-center">
+                                                        Status
+                                                        <SortIcon column="status" />
+                                                    </div>
+                                                </TableHead>
+                                                <TableHead
+                                                    className="cursor-pointer hover:text-foreground transition-colors"
+                                                    onClick={() => handleSort('duration')}
+                                                >
+                                                    <div className="flex items-center">
+                                                        Duration
+                                                        <SortIcon column="duration" />
+                                                    </div>
+                                                </TableHead>
+                                                <TableHead
+                                                    className="cursor-pointer hover:text-foreground transition-colors"
+                                                    onClick={() => handleSort('contacts')}
+                                                >
+                                                    <div className="flex items-center">
+                                                        Contacts
+                                                        <SortIcon column="contacts" />
+                                                    </div>
+                                                </TableHead>
+                                                <TableHead
+                                                    className="cursor-pointer hover:text-foreground transition-colors"
+                                                    onClick={() => handleSort('posts')}
+                                                >
+                                                    <div className="flex items-center">
+                                                        Posts
+                                                        <SortIcon column="posts" />
+                                                    </div>
+                                                </TableHead>
                                                 <TableHead >Actions</TableHead>
                                             </TableRow>
                                         </TableHeader>

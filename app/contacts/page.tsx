@@ -39,6 +39,9 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import {
+    ArrowUpDown,
+    ArrowUp,
+    ArrowDown,
     Search,
     Download,
     Trash2,
@@ -94,6 +97,9 @@ export default function ContactListPage() {
     const [showQuickView, setShowQuickView] = useState(false);
     const [quickViewContact, setQuickViewContact] = useState<Contact | null>(null);
     const [exporting, setExporting] = useState(false);
+    const [sortBy, setSortBy] = useState<string>('createdAt');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    const [isFirstLoad, setIsFirstLoad] = useState(true);
 
     // Fetch contacts
     const fetchContacts = async () => {
@@ -102,6 +108,8 @@ export default function ContactListPage() {
             const params = new URLSearchParams({
                 page: currentPage.toString(),
                 limit: itemsPerPage.toString(),
+                sortBy: sortBy,
+                sortOrder: sortOrder,
                 ...(searchQuery && { search: searchQuery }),
                 ...(selectedCampaign !== 'all' && { campaignId: selectedCampaign }),
             });
@@ -118,6 +126,7 @@ export default function ContactListPage() {
             toast.error('Failed to fetch contacts');
         } finally {
             setLoading(false);
+            setIsFirstLoad(false);
         }
     };
 
@@ -141,7 +150,26 @@ export default function ContactListPage() {
     useEffect(() => {
         fetchContacts();
         setSelectedContacts([]);
-    }, [currentPage, itemsPerPage, searchQuery, selectedCampaign]);
+    }, [currentPage, itemsPerPage, searchQuery, selectedCampaign, sortBy, sortOrder]);
+
+    const handleSort = (column: string) => {
+        if (sortBy === column) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(column);
+            setSortOrder('asc');
+        }
+        setCurrentPage(1);
+    };
+
+    const SortIcon = ({ column }: { column: string }) => {
+        if (sortBy !== column) return <ArrowUpDown className="size-4 ml-2 opacity-50" />;
+        return sortOrder === 'asc' ? (
+            <ArrowUp className="size-4 ml-2" />
+        ) : (
+            <ArrowDown className="size-4 ml-2" />
+        );
+    };
 
     // Handle select all
     const handleSelectAll = (checked: boolean) => {
@@ -361,181 +389,223 @@ export default function ContactListPage() {
                             Showing {contacts.length} of {totalContacts} contacts
                         </CardDescription>
                     </CardHeader>
-                    <CardContent>
-                        {loading ? (
+                    <CardContent className="relative">
+                        {loading && isFirstLoad ? (
                             <div className="flex items-center justify-center py-12">
                                 <Loader2 className="size-8 animate-spin text-muted-foreground" />
                             </div>
                         ) : contacts.length === 0 ? (
                             <div className="text-center py-12">
-                                <p className="text-muted-foreground">No contacts found</p>
+                                <p className="text-muted-foreground">
+                                    {loading ? "Searching..." : "No contacts found"}
+                                </p>
                             </div>
                         ) : (
-                            <>
-                                <div className="rounded-md border">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow >
-                                                <TableHead className="w-[50px]">
-                                                    <Checkbox
-                                                        checked={allSelected}
-                                                        onCheckedChange={handleSelectAll}
-                                                        aria-label="Select all"
-                                                        className={someSelected ? 'data-[state=checked]:bg-muted' : ''}
-                                                    />
-                                                </TableHead>
-                                                <TableHead >Name</TableHead>
-                                                <TableHead >Email</TableHead>
-                                                <TableHead >Mobile</TableHead>
-                                                <TableHead >Campaigns</TableHead>
-                                                <TableHead >Created</TableHead>
-                                                <TableHead  >Actions</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {contacts.map((contact) => (
-                                                <TableRow key={contact.id}>
-                                                    <TableCell>
-                                                        <Checkbox
-                                                            checked={selectedContacts.includes(contact.id)}
-                                                            onCheckedChange={(checked) =>
-                                                                handleSelectContact(contact.id, checked as boolean)
-                                                            }
-                                                            aria-label={`Select ${contact.contactName}`}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell className="font-medium">
-                                                        {contact.contactName || '-'}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {contact.contactEmail ? (
-                                                            <div className="flex items-center gap-2">
-                                                                <Mail className="size-4 text-muted-foreground" />
-                                                                <span className="text-sm">{contact.contactEmail}</span>
+                                    <>
+                                        <div className="rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow >
+                                                        <TableHead className="w-[50px]">
+                                                            <Checkbox
+                                                                checked={allSelected}
+                                                                onCheckedChange={handleSelectAll}
+                                                                aria-label="Select all"
+                                                                className={someSelected ? 'data-[state=checked]:bg-muted' : ''}
+                                                            />
+                                                        </TableHead>
+                                                        <TableHead
+                                                            className="cursor-pointer hover:text-foreground transition-colors"
+                                                            onClick={() => handleSort('name')}
+                                                        >
+                                                            <div className="flex items-center">
+                                                                Name
+                                                                <SortIcon column="name" />
                                                             </div>
-                                                        ) : (
-                                                            '-'
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {contact.contactMobile ? (
-                                                            <div className="flex items-center gap-2">
-                                                                <Phone className="size-4 text-muted-foreground" />
-                                                                <span className="text-sm">{contact.contactMobile}</span>
+                                                        </TableHead>
+                                                        <TableHead
+                                                            className="cursor-pointer hover:text-foreground transition-colors"
+                                                            onClick={() => handleSort('email')}
+                                                        >
+                                                            <div className="flex items-center">
+                                                                Email
+                                                                <SortIcon column="email" />
                                                             </div>
-                                                        ) : (
-                                                            '-'
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex flex-wrap gap-1">
-                                                            {contact.campaigns.length > 0 ? (
-                                                                contact.campaigns.slice(0, 2).map((campaign) => (
-                                                                    <Badge key={campaign.id} variant="secondary" className="text-xs max-w-[150px] truncate" title={campaign.name}>
-                                                                        {campaign.name}
-                                                                    </Badge>
-                                                                ))
-                                                            ) : (
-                                                                <span className="text-sm text-muted-foreground">No campaigns</span>
-                                                            )}
-                                                            {contact.campaigns.length > 2 && (
-                                                                <Badge variant="outline" className="text-xs">
-                                                                    +{contact.campaigns.length - 2}
-                                                                </Badge>
-                                                            )}
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell className="text-sm text-muted-foreground">
-                                                        {new Date(contact.createdAt).toLocaleDateString()}
-                                                    </TableCell>
-                                                    <TableCell >
-                                                        <div className="flex items-center  gap-2">
-                                                            <Button
-                                                                size="sm"
-                                                                className="cursor-pointer"
-                                                                variant="ghost"
-                                                                onClick={() => handleQuickView(contact)}
-                                                            >
-                                                                <Eye className="size-4" />
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                className="cursor-pointer"
-                                                                onClick={() => router.push(`/contacts/${contact.id}/edit`)}
-                                                            >
-                                                                <Edit className="size-4" />
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                className="cursor-pointer"
-                                                                onClick={() => {
-                                                                    setDeleteContactId(contact.id);
-                                                                    setShowDeleteDialog(true);
-                                                                }}
-                                                            >
-                                                                <Trash2 className="size-4 text-destructive" />
-                                                            </Button>
-                                                        </div>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-
-                                {/* Pagination */}
-                                <div className="flex items-center justify-between mt-4">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-muted-foreground">Rows per page:</span>
-                                        <Select
-                                            value={itemsPerPage.toString()}
-                                            onValueChange={(value) => {
-                                                setItemsPerPage(parseInt(value));
-                                                setCurrentPage(1);
-                                            }}
-                                        >
-                                            <SelectTrigger className="w-[80px]">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="5">5</SelectItem>
-                                                <SelectItem value="10">10</SelectItem>
-                                                <SelectItem value="20">20</SelectItem>
-                                                <SelectItem value="50">50</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-muted-foreground">
-                                            Page {currentPage} of {totalPages}
-                                        </span>
-                                        <div className="flex gap-1">
-                                            <Button
-                                                size="sm"
-                                                className="cursor-pointer"
-                                                variant="outline"
-                                                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                                                disabled={currentPage === 1}
-                                            >
-                                                <ChevronLeft className="size-4" />
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                className="cursor-pointer"
-                                                variant="outline"
-                                                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                                                disabled={currentPage === totalPages}
-                                            >
-                                                <ChevronRight className="size-4" />
-                                            </Button>
+                                                        </TableHead>
+                                                        <TableHead
+                                                            className="cursor-pointer hover:text-foreground transition-colors"
+                                                            onClick={() => handleSort('mobile')}
+                                                        >
+                                                            <div className="flex items-center">
+                                                                Mobile
+                                                                <SortIcon column="mobile" />
+                                                            </div>
+                                                        </TableHead>
+                                                        <TableHead
+                                                            className="cursor-pointer hover:text-foreground transition-colors"
+                                                            onClick={() => handleSort('campaigns')}
+                                                        >
+                                                            <div className="flex items-center">
+                                                                Campaigns
+                                                                <SortIcon column="campaigns" />
+                                                            </div>
+                                                        </TableHead>
+                                                        <TableHead
+                                                            className="cursor-pointer hover:text-foreground transition-colors"
+                                                            onClick={() => handleSort('created')}
+                                                        >
+                                                            <div className="flex items-center">
+                                                                Created
+                                                                <SortIcon column="created" />
+                                                            </div>
+                                                        </TableHead>
+                                                        <TableHead  >Actions</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {contacts.map((contact) => (
+                                                        <TableRow key={contact.id}>
+                                                            <TableCell>
+                                                                <Checkbox
+                                                                    checked={selectedContacts.includes(contact.id)}
+                                                                    onCheckedChange={(checked) =>
+                                                                        handleSelectContact(contact.id, checked as boolean)
+                                                                    }
+                                                                    aria-label={`Select ${contact.contactName}`}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="font-medium">
+                                                                {contact.contactName || '-'}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {contact.contactEmail ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Mail className="size-4 text-muted-foreground" />
+                                                                        <span className="text-sm">{contact.contactEmail}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    '-'
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {contact.contactMobile ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Phone className="size-4 text-muted-foreground" />
+                                                                        <span className="text-sm">{contact.contactMobile}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    '-'
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {contact.campaigns.length > 0 ? (
+                                                                        contact.campaigns.slice(0, 2).map((campaign) => (
+                                                                            <Badge key={campaign.id} variant="secondary" className="text-xs max-w-[150px] truncate" title={campaign.name}>
+                                                                                {campaign.name}
+                                                                            </Badge>
+                                                                        ))
+                                                                    ) : (
+                                                                        <span className="text-sm text-muted-foreground">No campaigns</span>
+                                                                    )}
+                                                                    {contact.campaigns.length > 2 && (
+                                                                        <Badge variant="outline" className="text-xs">
+                                                                            +{contact.campaigns.length - 2}
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="text-sm text-muted-foreground">
+                                                                {new Date(contact.createdAt).toLocaleDateString()}
+                                                            </TableCell>
+                                                            <TableCell >
+                                                                <div className="flex items-center  gap-2">
+                                                                    <Button
+                                                                        size="sm"
+                                                                        className="cursor-pointer"
+                                                                        variant="ghost"
+                                                                        onClick={() => handleQuickView(contact)}
+                                                                    >
+                                                                        <Eye className="size-4" />
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        className="cursor-pointer"
+                                                                        onClick={() => router.push(`/contacts/${contact.id}/edit`)}
+                                                                    >
+                                                                        <Edit className="size-4" />
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        className="cursor-pointer"
+                                                                        onClick={() => {
+                                                                            setDeleteContactId(contact.id);
+                                                                            setShowDeleteDialog(true);
+                                                                        }}
+                                                                    >
+                                                                        <Trash2 className="size-4 text-destructive" />
+                                                                    </Button>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
                                         </div>
-                                    </div>
-                                </div>
-                            </>
-                        )}
+
+                                        {/* Pagination */}
+                                        <div className="flex items-center justify-between mt-4">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-muted-foreground">Rows per page:</span>
+                                                <Select
+                                                    value={itemsPerPage.toString()}
+                                                    onValueChange={(value) => {
+                                                        setItemsPerPage(parseInt(value));
+                                                        setCurrentPage(1);
+                                                    }}
+                                                >
+                                                    <SelectTrigger className="w-[80px]">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="5">5</SelectItem>
+                                                        <SelectItem value="10">10</SelectItem>
+                                                        <SelectItem value="20">20</SelectItem>
+                                                        <SelectItem value="50">50</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-muted-foreground">
+                                                    Page {currentPage} of {totalPages}
+                                                </span>
+                                                <div className="flex gap-1">
+                                                    <Button
+                                                        size="sm"
+                                                        className="cursor-pointer"
+                                                        variant="outline"
+                                                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                                                        disabled={currentPage === 1}
+                                                    >
+                                                        <ChevronLeft className="size-4" />
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        className="cursor-pointer"
+                                                        variant="outline"
+                                                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                                                        disabled={currentPage === totalPages}
+                                                    >
+                                                        <ChevronRight className="size-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                     </CardContent>
                 </Card>
             </div>

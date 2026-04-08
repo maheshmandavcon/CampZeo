@@ -38,6 +38,8 @@ async function getCampaignsHandler(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
+    const sortBy = searchParams.get('sortBy') || 'createdAt';
+    const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
 
     const skip = (page - 1) * limit;
 
@@ -72,9 +74,13 @@ async function getCampaignsHandler(request: NextRequest) {
                     },
                 },
             },
-            orderBy: {
-                createdAt: 'desc'
-            },
+            orderBy: sortBy === 'contacts' 
+                ? { contacts: { _count: sortOrder } }
+                : sortBy === 'posts'
+                ? { posts: { _count: sortOrder } }
+                : sortBy === 'status' || sortBy === 'duration'
+                ? { startDate: sortOrder }
+                : { [sortBy]: sortOrder },
             skip,
             take: limit,
         }),
