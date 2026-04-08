@@ -399,15 +399,6 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
       accountName: socialStatus?.pinterest?.name,
       description: "Pin your visual content to Pinterest boards.",
     },
-    {
-      id: "EMAIL",
-      name: "Email (Twilio SendGrid)",
-      icon: Mail,
-      color: "text-slate-600",
-      connected: userData.emailConnected,
-      accountName: null,
-      description: "Send emails via Twilio SendGrid.",
-    },
 
   ];
 
