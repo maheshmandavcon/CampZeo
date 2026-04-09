@@ -426,7 +426,8 @@ export async function sendCampaignPost(
     };
  console.log("IG MEDIA URLS:", post.mediaUrls);
 // 1. Resolve the URLs using your proxy helper
-const resolvedVideoUrl = resolveMediaUrl(post.videoUrl);
+// We use the stable proxy for Google Drive media to ensure compatibility with Meta.
+const resolvedVideoUrl = resolveMediaUrl(post.videoUrl); 
 const rawMediaUrls = Array.isArray(post.mediaUrls) ? post.mediaUrls : [];
 const igMediaUrls = rawMediaUrls.map((url:string) => resolveMediaUrl(url));
 
@@ -438,7 +439,10 @@ const mediaToUse = isReel
     ? resolvedVideoUrl // This MUST be the https://campzeo.com/... link
     : (igMediaUrls.length > 1 ? igMediaUrls : (igMediaUrls[0] || resolvedVideoUrl));
 
-// 3. Debug check (Add this line to your logs to verify)
+// 3. Debug check (High visibility for terminal debugging)
+console.log(`\n==================================================`);
+console.log(`[Instagram] PLATFORM POST INITIATED`);
+console.log(`[Instagram] BASE APP URL:`, process.env.NEXT_PUBLIC_APP_URL);
 console.log(`[Instagram] FINAL MEDIA TO USE:`, mediaToUse);
 
     if (!mediaToUse || (Array.isArray(mediaToUse) && mediaToUse.length === 0)) {

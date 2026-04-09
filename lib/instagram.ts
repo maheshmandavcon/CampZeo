@@ -142,16 +142,17 @@ export async function postToInstagram(
       });
 
       if (isVideo) {
-        // According to Meta Docs, top-level videos should use REELS or STORIES. 
-        // Defaulting to REELS for feed videos as per modern API standards.
-        params.append("media_type", options?.isReel === false ? "VIDEO" : "REELS"); 
+        // Modern Instagram Graph API treats all videos as REELS.
+        // Even for "normal" posts, we use REELS and set share_to_feed: true to show it in the grid.
+        params.append("media_type", "REELS");
         params.append("video_url", originalUrl);
         
         if (options?.coverUrl) {
           params.append("cover_url", options.coverUrl);
         }
 
-        if (options?.shareToFeed) {
+        // share_to_feed defaults to false for Reels; we enable it to ensure it appears in the Main Grid.
+        if (options?.shareToFeed !== false) {
           params.append("share_to_feed", "true");
         }
       } else {
@@ -251,14 +252,16 @@ async function waitForInstagramMediaProcessing(
 
             if (response.ok) {
                 const data = await response.json();
-                const status = data.status_code;
-                console.log(`[Instagram] Container ${containerId} status: ${status}`);
+                const statusCode = data.status_code;
+                const statusDetail = data.status || 'No additional details provided by Meta.';
+                
+                console.log(`[Instagram] Container ${containerId} status: ${statusCode}${statusCode === 'ERROR' ? ` | Reason: ${statusDetail}` : ''}`);
 
-                if (status === 'FINISHED') return;
-                if (status === 'ERROR') {
-                    // Try to fetch error details if possible (though often not exposed on this edge)
-                    console.error(`[Instagram] Container ${containerId} failed processing.`);
-                    throw new Error(`Media processing failed for ${containerId}. This usually means one of the items (Video/Image) failed validation (e.g. wrong aspect ratio, corrupt file).`);
+                if (statusCode === 'FINISHED') return;
+                
+                if (statusCode === 'ERROR') {
+                    console.error(`[Instagram] Container ${containerId} processing failed. Detail: ${statusDetail}`);
+                    throw new Error(`Instagram Processing Error: ${statusDetail}`);
                 }
                 // If IN_PROGRESS or PUBLISHED, keep waiting (though PUBLISHED shouldn't happen before publish step)
             } else {
@@ -298,7 +301,7 @@ export async function getInstagramPostInsights(
     mediaId: string,
     accessToken: string,
     connectionType?: 'FACEBOOK' | 'DIRECT'
-): Promise<InstagramPostInsights> {
+): Promise<InstagramPostInsights> { 
     const mediaFields = 'like_count,comments_count,media_type,caption,media_url,permalink';
     const baseUrl = "https://graph.facebook.com/v24.0";
     const mediaResponse = await fetch(
