@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Heart, MessageCircle, Share2, MoreHorizontal, ThumbsUp, MessageSquare, Repeat, Send } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, ThumbsUp, MessageSquare, Repeat, Send, Sparkles, Eye, Video, Image as ImageIcon } from 'lucide-react';
 import Image from 'next/image';
 import { getPreviewUrl } from '@/lib/media-utils';
 
@@ -25,12 +25,15 @@ export function PostPreview({ platforms, subject, message, mediaUrls, thumbnailU
 
     if (platforms.length === 0) {
         return (
-            <Card className="h-full">
+            <Card className="h-full border-none shadow-none bg-muted/30">
                 <CardHeader>
-                    <CardTitle>Preview</CardTitle>
+                    <CardTitle className="text-sm font-medium">Post Preview</CardTitle>
                 </CardHeader>
-                <CardContent className="flex items-center justify-center h-[300px] text-muted-foreground">
-                    Select a platform to see preview
+                <CardContent className="flex flex-col items-center justify-center h-[400px] text-muted-foreground gap-4">
+                    <div className="size-16 rounded-full bg-muted flex items-center justify-center">
+                        <Eye className="size-8" />
+                    </div>
+                    <p className="text-center max-w-[200px]">Select a platform to see how your post will look</p>
                 </CardContent>
             </Card>
         );
@@ -42,23 +45,26 @@ export function PostPreview({ platforms, subject, message, mediaUrls, thumbnailU
     }
 
     return (
-        <Card className="h-full sticky top-4">
-            <CardHeader>
-                <CardTitle>Post Preview</CardTitle>
+        <Card className="h-full sticky top-4 border-none shadow-none bg-muted/10">
+            <CardHeader className="pb-2">
+                <CardTitle className="text-lg font-bold flex items-center gap-2">
+                    <Sparkles className="size-5 text-primary" />
+                    Live Preview
+                </CardTitle>
             </CardHeader>
             <CardContent>
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <TabsList className="w-full justify-start overflow-x-auto mb-4">
+                    <TabsList className="w-full justify-start overflow-x-auto mb-6 bg-muted/50 p-1">
                         {platforms.map(platform => (
-                            <TabsTrigger key={platform} value={platform}>
+                            <TabsTrigger key={platform} value={platform} className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
                                 {platform.charAt(0) + platform.slice(1).toLowerCase()}
                             </TabsTrigger>
                         ))}
                     </TabsList>
 
                     {platforms.map(platform => (
-                        <TabsContent key={platform} value={platform} className="mt-0">
-                            <div className="border rounded-lg overflow-hidden bg-white dark:bg-black">
+                        <TabsContent key={platform} value={platform} className="mt-0 focus-visible:outline-none">
+                            <div className="border rounded-xl overflow-hidden bg-white dark:bg-[#1c1e21] shadow-xl max-w-[500px] mx-auto transition-all duration-300">
                                 {platform === 'FACEBOOK' && (
                                     <FacebookPreview
                                         subject={subject}
@@ -75,6 +81,7 @@ export function PostPreview({ platforms, subject, message, mediaUrls, thumbnailU
                                         mediaUrls={mediaUrls}
                                         thumbnailUrl={thumbnailUrl}
                                         user={user}
+                                        isReel={isReel}
                                     />
                                 )}
                                 {platform === 'LINKEDIN' && (
@@ -121,6 +128,9 @@ export function PostPreview({ platforms, subject, message, mediaUrls, thumbnailU
                         </TabsContent>
                     ))}
                 </Tabs>
+                <p className="text-[10px] text-center text-muted-foreground mt-4">
+                    * Previews are approximations and may vary slightly on the actual device.
+                </p>
             </CardContent>
         </Card>
     );
@@ -202,39 +212,98 @@ function LinkedInPreview({ subject, message, mediaUrls, user }: any) {
     );
 }
 
-function InstagramPreview({ subject, message, mediaUrls, thumbnailUrl, user }: any) {
+function InstagramPreview({ subject, message, mediaUrls, thumbnailUrl, user, isReel }: any) {
     return (
-        <div className="space-y-3 pb-4">
-            <div className="flex items-center gap-2 p-3">
-                <Avatar className="size-8">
-                    <AvatarImage src={user?.image} />
-                    <AvatarFallback>U</AvatarFallback>
-                </Avatar>
-                <p className="font-semibold text-sm">{user?.name || 'username'}</p>
-                <Button variant="ghost" size="icon" className="ml-auto cursor-pointer h-8 w-8">
-                    <MoreHorizontal className="size-4" />
-                </Button>
-            </div>
-            {mediaUrls && mediaUrls.length > 0 ? (
-                <MediaGrid mediaUrls={mediaUrls} thumbnailUrl={thumbnailUrl} square />
-            ) : (
-                <div className="aspect-square bg-muted flex items-center justify-center text-muted-foreground">
-                    No media
-                </div>
-            )}
-            <div className="px-3 space-y-2">
-                <div className="flex items-center gap-4">
-                    <Heart className="size-6" />
-                    <MessageCircle className="size-6" />
-                    <Send className="size-6" />
-                    <div className="ml-auto">
-                        <div className="size-6 border-2 border-current rounded-none" />
+        <div className={`space-y-0 pb-0 ${isReel ? 'bg-black text-white h-[600px] relative' : ''}`}>
+            {isReel ? (
+                // --- REELS VIEW ---
+                <div className="h-full relative overflow-hidden">
+                    {mediaUrls && mediaUrls.length > 0 ? (
+                        <MediaGrid mediaUrls={mediaUrls} thumbnailUrl={thumbnailUrl} ratio="9/16" />
+                    ) : (
+                        <div className="h-full bg-zinc-900 flex items-center justify-center text-zinc-500">
+                           <Video className="size-12 opacity-20" />
+                        </div>
+                    )}
+                    
+                    {/* Reels Overlay */}
+                    <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/80 to-transparent space-y-3">
+                        <div className="flex items-center gap-2">
+                             <Avatar className="size-8 border border-white/20">
+                                <AvatarImage src={user?.image} />
+                                <AvatarFallback>U</AvatarFallback>
+                            </Avatar>
+                            <p className="font-semibold text-sm">{user?.name || 'username'}</p>
+                            <Button variant="outline" size="sm" className="h-7 text-[10px] bg-transparent border-white/50 text-white hover:bg-white/10">Follow</Button>
+                        </div>
+                        <p className="text-xs line-clamp-2">{message || 'Reel description...'}</p>
+                        <div className="flex items-center gap-2 text-[10px] opacity-70">
+                            <span className="flex items-center gap-1"><MessageSquare className="size-3" /> Original Audio</span>
+                        </div>
+                    </div>
+
+                    {/* Reels Sidebar */}
+                    <div className="absolute right-2 bottom-20 flex flex-col items-center gap-6">
+                        <div className="flex flex-col items-center gap-1">
+                            <Heart className="size-7" />
+                            <span className="text-[10px]">1.2k</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                            <MessageCircle className="size-7" />
+                            <span className="text-[10px]">84</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                            <Send className="size-7" />
+                        </div>
+                        <MoreHorizontal className="size-5" />
+                        <div className="size-6 border-2 border-white rounded-md overflow-hidden bg-zinc-800" />
                     </div>
                 </div>
-                <div className="text-sm">
-                    <p><span className="font-semibold">{user?.name || 'username'}</span> {subject ? <span className="font-bold mr-1">{subject}</span> : ''}{message}</p>
-                </div>
-            </div>
+            ) : (
+                // --- STANDARD FEED VIEW ---
+                <>
+                    <div className="flex items-center gap-2 p-3">
+                        <Avatar className="size-8">
+                            <AvatarImage src={user?.image} />
+                            <AvatarFallback>U</AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col">
+                            <p className="font-semibold text-xs leading-none">{user?.name || 'username'}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Original Audio</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="ml-auto cursor-pointer h-8 w-8 text-muted-foreground">
+                            <MoreHorizontal className="size-4" />
+                        </Button>
+                    </div>
+                    {mediaUrls && mediaUrls.length > 0 ? (
+                        <MediaGrid mediaUrls={mediaUrls} thumbnailUrl={thumbnailUrl} ratio="4/5" rounded={false} />
+                    ) : (
+                        <div className="aspect-square bg-muted/30 flex flex-col items-center justify-center text-muted-foreground gap-2">
+                            <ImageIcon className="size-8 opacity-20" />
+                            <span className="text-xs">Media Preview</span>
+                        </div>
+                    )}
+                    <div className="px-3 py-3 space-y-2">
+                        <div className="flex items-center gap-4">
+                            <Heart className="size-6 hover:text-red-500 transition-colors" />
+                            <MessageCircle className="size-6 hover:opacity-70 transition-opacity" />
+                            <Send className="size-6 hover:rotate-12 transition-transform" />
+                            <div className="ml-auto">
+                                <div className="size-6 border-2 border-current rounded-sm opacity-20" />
+                            </div>
+                        </div>
+                        <div className="text-xs space-y-1">
+                            <p className="font-semibold">1,234 likes</p>
+                            <p>
+                                <span className="font-semibold mr-1.5">{user?.name || 'username'}</span> 
+                                {subject && <span className="font-bold mr-1">{subject}</span>}
+                                <span className="whitespace-pre-wrap">{message || 'Your caption here...'}</span>
+                            </p>
+                            <p className="text-[10px] text-muted-foreground uppercase mt-2">Just now</p>
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 }
@@ -410,22 +479,22 @@ function EmailPreview({ subject, message }: { subject: string, message: string }
     );
 }
 
-function MediaGrid({ mediaUrls, square, rounded, thumbnailUrl }: { mediaUrls: string[], square?: boolean, rounded?: boolean, thumbnailUrl?: string | null }) {
+function MediaGrid({ mediaUrls, ratio = '1/1', rounded = true, thumbnailUrl }: { mediaUrls: string[], ratio?: string, rounded?: boolean, thumbnailUrl?: string | null }) {
     const count = mediaUrls.length;
     const displayUrls = mediaUrls.slice(0, 4);
 
-    // Check if URL is external (Vercel Blob, etc.)
-    const isExternalUrl = (url: string) => url.startsWith('http://') || url.startsWith('https://');
-
     return (
-        <div className={`grid gap-0.5 ${count === 1 ? 'grid-cols-1' : 'grid-cols-2'} ${rounded ? 'rounded-xl overflow-hidden border' : ''}`}>
+        <div className={`grid gap-0.5 w-full ${count === 1 ? 'grid-cols-1' : 'grid-cols-2'} ${rounded ? 'rounded-lg overflow-hidden' : ''}`}>
             {displayUrls.map((url, index) => {
-                const isVideo = url.match(/\.(mp4|mov|webm)$/i);
+                const isVideo = url.match(/\.(mp4|mov|webm|m4v)$/i);
                 // Use thumbnail if it's the first item, it's a video, and thumbnail is provided
                 const imageUrl = (index === 0 && isVideo && thumbnailUrl) ? thumbnailUrl : url;
 
                 return (
-                    <div key={index} className={`relative ${square ? 'aspect-square' : (count === 1 ? 'aspect-video' : 'aspect-square')} bg-muted overflow-hidden`}>
+                    <div key={index} 
+                        className={`relative w-full bg-muted overflow-hidden`}
+                        style={{ aspectRatio: ratio }}
+                    >
                         {isVideo ? (
                             <>
                                 {thumbnailUrl && index === 0 ? (
@@ -438,12 +507,12 @@ function MediaGrid({ mediaUrls, square, rounded, thumbnailUrl }: { mediaUrls: st
                                     />
                                 ) : (
                                     <div className="flex items-center justify-center h-full bg-black/10">
-                                        {/* Fallback pattern if no thumbnail */}
+                                        <Video className="size-8 text-black/20" />
                                     </div>
                                 )}
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="size-8 rounded-full bg-white/80 flex items-center justify-center shadow-sm">
-                                        <div className="ml-1 size-0 border-y-[6px] border-y-transparent border-l-[10px] border-l-black" />
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/5">
+                                    <div className="size-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform">
+                                        <div className="ml-1 size-0 border-y-[8px] border-y-transparent border-l-[14px] border-l-black" />
                                     </div>
                                 </div>
                             </>
@@ -452,12 +521,12 @@ function MediaGrid({ mediaUrls, square, rounded, thumbnailUrl }: { mediaUrls: st
                                 src={getPreviewUrl(url)}
                                 alt={`Media ${index}`}
                                 fill
-                                className="object-cover"
+                                className="object-cover hover:scale-105 transition-transform duration-500"
                                 unoptimized
                             />
                         )}
                         {index === 3 && count > 4 && (
-                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-bold text-xl">
+                            <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center text-white font-bold text-2xl">
                                 +{count - 4}
                             </div>
                         )}

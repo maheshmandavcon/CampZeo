@@ -44,7 +44,8 @@ export function withErrorHandling(handler: ApiHandler, apiName: string): ApiHand
                 url: req.url,
                 method: req.method,
                 query: Object.fromEntries(req.nextUrl.searchParams.entries()),
-                params: context?.params,
+                params: context?.params instanceof Promise ? undefined : context?.params, // Don't log if it's an unawaited Promise to avoid Next.js 15 error
+                hasParams: !!context?.params,
                 isApiError: error instanceof ApiError,
                 isPublic: error instanceof ApiError ? error.isPublic : false
             };

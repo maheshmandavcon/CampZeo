@@ -28,7 +28,7 @@ export async function postToInstagram(
   }
 ) {
   const { accessToken, userId } = credentials;
-  const baseUrl = "https://graph.facebook.com/v24.0";
+  const baseUrl = getBaseUrl(credentials);
 
   const mediaList = Array.isArray(media) ? media : [media];
   const isCarousel = mediaList.length > 1;
@@ -49,12 +49,17 @@ export async function postToInstagram(
     if (isCarousel) {
       const childIds: string[] = [];
 
-      for (const mediaUrl of mediaList) {
-        const isVideo = isVideoUrl(mediaUrl);
+      for (const originalUrl of mediaList) {
+        const isVideo = isVideoUrl(originalUrl); // Detect type using original URL
+        const validation = validateMediaUrl(originalUrl);
+        const mediaUrl = validation.url;
+
+        console.log(`[Instagram] Carousel item: ${mediaUrl} | isVideo: ${isVideo}`);
 
         const params = new URLSearchParams({
           access_token: accessToken,
           is_carousel_item: "true",
+          // For carousel items, VIDEO and IMAGE are valid and documented
           media_type: isVideo ? "VIDEO" : "IMAGE",
         });
 
@@ -64,6 +69,7 @@ export async function postToInstagram(
           params.append("image_url", mediaUrl);
         }
 
+        console.log(`[IG_DEBUG] Creating carousel child: ${mediaUrl} | isVideo: ${isVideo}`);
         const res = await fetch(
           `${baseUrl}/${userId}/media`,
           { method: "POST", body: params }
@@ -71,6 +77,7 @@ export async function postToInstagram(
 
         if (!res.ok) {
           const err = await res.json();
+          console.error(`[IG_DEBUG] Carousel Child Failed:`, JSON.stringify(err, null, 2));
           throw new Error(
             `Carousel child creation failed: ${JSON.stringify(err)}`
           );
@@ -98,6 +105,7 @@ export async function postToInstagram(
         );
       }
 
+      console.log(`[IG_DEBUG] Requesting Carousel Container. Children: ${childIds.join(',')}`);
       const containerRes = await fetch(
         `${baseUrl}/${userId}/media`,
         { method: "POST", body: containerParams }
@@ -105,6 +113,7 @@ export async function postToInstagram(
 
       if (!containerRes.ok) {
         const err = await containerRes.json();
+        console.error(`[IG_DEBUG] Carousel Container Failed:`, JSON.stringify(err, null, 2));
         throw new Error(
           `Carousel container creation failed: ${JSON.stringify(err)}`
         );
@@ -120,21 +129,23 @@ export async function postToInstagram(
     // SINGLE MEDIA FLOW
     // ============================================================
     else {
-      const mediaUrl = mediaList[0];
-      const isVideo = isVideoUrl(mediaUrl);
+      const originalUrl = mediaList[0];
+      const isVideo = options?.isVideo ?? isVideoUrl(originalUrl); // Detect type using original URL 
+      const validation = validateMediaUrl(originalUrl);
+      const mediaUrl = validation.url;
+
+      console.log(`[Instagram] Posting single item. Original: ${originalUrl} | Public: ${mediaUrl} | isVideo: ${isVideo}`);
 
       const params = new URLSearchParams({
         access_token: accessToken,
-        caption,
+        caption: caption || "",
       });
 
       if (isVideo) {
-        if (options?.isReel) {
-          params.append("media_type", "REELS");
-        } else {
-          params.append("media_type", "VIDEO");
-        }
-        params.append("video_url", mediaUrl);
+        // According to Meta Docs, top-level videos should use REELS or STORIES. 
+        // Defaulting to REELS for feed videos as per modern API standards.
+        params.append("media_type", options?.isReel === false ? "VIDEO" : "REELS"); 
+        params.append("video_url", originalUrl);
         
         if (options?.coverUrl) {
           params.append("cover_url", options.coverUrl);
@@ -144,7 +155,7 @@ export async function postToInstagram(
           params.append("share_to_feed", "true");
         }
       } else {
-        params.append("media_type", "IMAGE");
+        // For single IMAGE posts, media_type should be OMITTED as per Meta Docs example
         params.append("image_url", mediaUrl);
       }
 
@@ -156,6 +167,9 @@ export async function postToInstagram(
         );
       }
 
+      console.log(`[IG_DEBUG] Request: POST ${baseUrl}/${userId}/media`);
+      console.log(`[IG_DEBUG] Params:`, Object.fromEntries(params.entries()));
+
       const res = await fetch(
         `${baseUrl}/${userId}/media`,
         { method: "POST", body: params }
@@ -163,12 +177,14 @@ export async function postToInstagram(
 
       if (!res.ok) {
         const err = await res.json();
+        console.error(`[IG_DEBUG] Single Media Creation Failed:`, JSON.stringify(err, null, 2));
         throw new Error(
           `Media container creation failed: ${JSON.stringify(err)}`
         );
       }
 
       const data = await res.json();
+      console.log(`[IG_DEBUG] Single Media Container Created: ${data.id}`);
       creationId = data.id;
 
       if (isVideo) {
@@ -189,6 +205,7 @@ export async function postToInstagram(
 
     console.log(`[Instagram] Publishing: ${creationId}`);
 
+    console.log(`[IG_DEBUG] Requesting Media Publish. Container: ${creationId}`);
     const publishRes = await fetch(
       `${baseUrl}/${userId}/media_publish`,
       {
@@ -202,12 +219,12 @@ export async function postToInstagram(
 
     if (!publishRes.ok) {
       const err = await publishRes.json();
+      console.error(`[IG_DEBUG] Media Publish Failed:`, JSON.stringify(err, null, 2));
       throw new Error(`Media publish failed: ${JSON.stringify(err)}`);
     }
 
     const publishData = await publishRes.json();
-
-    console.log(`[Instagram] Successfully published: ${publishData.id}`);
+    console.log(`[IG_DEBUG] Successfully published: ${publishData.id}`);
 
     return { id: publishData.id };
   } catch (error) {

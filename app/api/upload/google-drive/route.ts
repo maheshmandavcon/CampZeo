@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import { uploadToDrive, deleteFromDrive } from '@/lib/google-drive';
 import { withErrorHandling, ApiError } from '@/lib/api-handler';
+import sharp from 'sharp';
+import { getTargetAspectRatio } from '@/lib/media-utils';
 
 /**
  * Common cleanup logic for session files
@@ -79,11 +81,68 @@ async function postHandler(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const orgId = searchParams.get('organisationId');
     const campId = searchParams.get('campaignId');
+    const platform = searchParams.get('platform');
+    const isReel = searchParams.get('isReel') === 'true';
+    
     const pathParts = (orgId && campId) ? [orgId, campId, 'pending'] : undefined;
 
-    // Call the Google Drive helper
+    // --- AUTOMATIC ASPECT RATIO ADJUSTMENT ---
+    let processedBuffer = buffer;
+    if (file.type.startsWith('image/') && platform) {
+        try {
+            const targetRatio = getTargetAspectRatio(platform, isReel);
+            if (targetRatio) {
+                console.log(`[Drive API] Auto-adjusting aspect ratio for ${platform} (${isReel ? 'Reel' : 'Post'}). Target ratio: ${targetRatio}`);
+                
+                // Get image metadata to determine current dimensions
+                const image = sharp(buffer);
+                const metadata = await image.metadata();
+                
+                if (metadata.width && metadata.height) {
+                    const currentRatio = metadata.width / metadata.height;
+                    
+                    // Only process if the ratio is significantly different (threshold 0.05)
+                    if (Math.abs(currentRatio - targetRatio) > 0.05) {
+                        console.log(`[Drive API] Processing image. Current ratio: ${currentRatio.toFixed(2)}, Target: ${targetRatio.toFixed(2)}`);
+                        
+                        // We use fit: 'cover' for a center-crop that fills the target aspect ratio
+                        // We need to calculate new width/height that matches targetRatio
+                        let newWidth, newHeight;
+                        
+                        if (currentRatio > targetRatio) {
+                            // Current is wider than target -> Keep height, reduce width (crop sides)
+                            newHeight = metadata.height;
+                            newWidth = Math.round(newHeight * targetRatio);
+                        } else {
+                            // Current is taller than target -> Keep width, reduce height (crop top/bottom)
+                            newWidth = metadata.width;
+                            newHeight = Math.round(newWidth / targetRatio);
+                        }
+
+                        processedBuffer = Buffer.from(await image
+                            .extract({
+                                left: Math.floor((metadata.width - newWidth) / 2),
+                                top: Math.floor((metadata.height - newHeight) / 2),
+                                width: newWidth,
+                                height: newHeight
+                            })
+                            .resize(newWidth, newHeight) // Just to be safe / normalize
+                            .toBuffer());
+                            
+                        console.log(`[Drive API] Image center-cropped to ${newWidth}x${newHeight}`);
+                    }
+                }
+            }
+        } catch (sharpError) {
+            console.error('[Drive API] Sharp processing error:', sharpError);
+            // Fallback to original buffer if processing fails
+        }
+    }
+    // ------------------------------------------
+
+    // Call the Google Drive helper with processed buffer
     const publicUrl = await uploadToDrive(
-      buffer,
+      processedBuffer as any,
       file.name,
       file.type,
       pathParts

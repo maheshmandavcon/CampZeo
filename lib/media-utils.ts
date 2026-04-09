@@ -1,6 +1,51 @@
 /**
  * Utility functions for handling media URLs across different environments
+ * Defines standard aspect ratios for social media platforms
  */
+
+export const PLATFORM_ASPECT_RATIOS: Record<string, { standard: number; reel?: number; name: string; ratioText: string }> = {
+    INSTAGRAM: {
+        standard: 1, // 1:1 Square is the most reliable for Feed
+        reel: 9 / 16, // 9:16 Vertical
+        name: 'Instagram',
+        ratioText: '1:1 (Square) or 4:5 (Vertical)'
+    },
+    FACEBOOK: {
+        standard: 1.91 / 1, // 1.91:1 Horizontal
+        reel: 9 / 16,
+        name: 'Facebook',
+        ratioText: '1.91:1 (Horizontal) or 1:1 (Square)'
+    },
+    LINKEDIN: {
+        standard: 1.91 / 1,
+        name: 'LinkedIn',
+        ratioText: '1.91:1 (Horizontal)'
+    },
+    YOUTUBE: {
+        standard: 16 / 9,
+        reel: 9 / 16,
+        name: 'YouTube',
+        ratioText: '16:9 (Horizontal) or 9:16 (Shorts)'
+    },
+    PINTEREST: {
+        standard: 2 / 3,
+        name: 'Pinterest',
+        ratioText: '2:3 (Vertical)'
+    }
+};
+
+/**
+ * Gets the target aspect ratio for a given platform
+ * @param platform - The platform name
+ * @param isReel - Whether it's a Reel/Short
+ * @returns Numerical aspect ratio (width/height)
+ */
+export function getTargetAspectRatio(platform: string | null | undefined, isReel?: boolean): number | null {
+    if (!platform) return null;
+    const config = PLATFORM_ASPECT_RATIOS[platform.toUpperCase()];
+    if (!config) return null;
+    return isReel && config.reel ? config.reel : config.standard;
+}
 
 /**
  * Converts a relative URL to an absolute public URL
@@ -28,6 +73,50 @@ export function getPublicMediaUrl(url: string): string {
 }
 
 /**
+ * Checks if a URL is a Google Drive URL (standard or optimized CDN)
+ */
+export function isGoogleDriveUrl(url: string | null | undefined): boolean {
+    if (!url) return false;
+    return url.includes('drive.google.com/uc') || 
+           url.includes('googleusercontent.com/d/') || 
+           url.includes('/file/d/') ||
+           url.includes('/api/upload/google-drive/');
+}
+
+/**
+ * Extracts a file ID from various Google Drive URL formats
+ */
+export function extractGoogleDriveId(url: string | null | undefined): string | null {
+    if (!url) return null;
+    try {
+        const urlObj = new URL(url);
+        // 1. Check for ?id= parameter (uc?id=...)
+        const id = urlObj.searchParams.get('id');
+        if (id) return id;
+
+        // 2. Check for /d/ID pattern (lh3.googleusercontent.com/d/ID)
+        if (url.includes('googleusercontent.com/d/')) {
+            const parts = url.split('/d/')[1]?.split(/[/?=]/);
+            if (parts && parts[0]) return parts[0];
+        }
+
+        // 3. Check for standard /file/d/ID/view pattern
+        if (url.includes('/file/d/')) {
+            const parts = url.split('/file/d/')[1]?.split('/');
+            if (parts && parts[0]) return parts[0];
+        }
+    } catch {
+        // Fallback for non-standard or malformed URLs (including relative internal paths)
+        const ucMatch = url.match(/[?&]id=([^?&]+)/);
+        if (ucMatch) return ucMatch[1];
+        
+        const dMatch = url.match(/\/d\/([^/?=]+)/);
+        if (dMatch) return dMatch[1];
+    }
+    return null;
+}
+
+/**
  * Gets a URL suitable for local frontend preview (bypasses CORS/Download-only issues)
  * @param url - The source URL
  * @returns Proxy URL for Google Drive, or original URL
@@ -35,18 +124,11 @@ export function getPublicMediaUrl(url: string): string {
 export function getPreviewUrl(url: string | null | undefined): string {
     if (!url) return '';
 
-    // If it's a Google Drive direct link, use our proxy for the preview
-    if (url.includes('drive.google.com/uc')) {
-        try {
-            const urlObj = new URL(url);
-            const id = urlObj.searchParams.get('id');
-            if (id) {
-                return `/api/upload/google-drive/view?id=${id}`;
-            }
-        } catch (e) {
-            // Regex fallback if URL parsing fails
-            const match = url.match(/[?&]id=([^?&]+)/);
-            if (match) return `/api/upload/google-drive/view?id=${match[1]}`;
+    // If it's a Google Drive link, use our proxy for the preview
+    if (isGoogleDriveUrl(url)) {
+        const id = extractGoogleDriveId(url);
+        if (id) {
+            return `/api/upload/google-drive/view?id=${id}`;
         }
     }
 
@@ -77,10 +159,12 @@ export function getMediaPreviewUrl(url: string): string {
     if (!url) return '';
     
     // If it's a Google Drive direct link, convert to local proxy for rendering
-    if (url.includes('drive.google.com/uc') || url.includes('googleusercontent.com/d/')) {
+    if (isGoogleDriveUrl(url)) {
+        const id = extractGoogleDriveId(url);
         const urlObj = new URL(url);
-        const id = urlObj.searchParams.get('id') || url.split('/d/')[1]?.split(/[/?]/)[0];
-        const file = urlObj.searchParams.get('file') || 'media';
+        const file = urlObj.searchParams.get('file') || 
+                     urlObj.searchParams.get('filename') || 
+                     (urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : 'media');
         
         if (id) {
             return `/api/upload/google-drive/view?id=${id}&file=${encodeURIComponent(file)}`;
@@ -96,7 +180,29 @@ export function getMediaPreviewUrl(url: string): string {
  * @returns URL suitable for social media posting
  */
 export function getSocialMediaUrl(url: string): string {
-    // If it's already a public absolute URL, return as is
+    if (!url) return '';
+
+    // Transform Google Drive links to optimized CDN links for social media
+    if (isGoogleDriveUrl(url)) {
+        try {
+            const id = extractGoogleDriveId(url);
+            const urlObj = new URL(url);
+            const file = urlObj.searchParams.get('file') || 
+                         urlObj.searchParams.get('filename') || 
+                         urlObj.searchParams.get('name') || 
+                         (urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : 'media.jpg');
+            
+            // Only use lh3 for images, as it's an image-optimized CDN
+            if (id && isImageUrl(file)) {
+                // Return optimized URL without fragment for Meta crawler compliance
+                return `https://lh3.googleusercontent.com/d/${id}=w1000`;
+            }
+        } catch (e) {
+            console.warn('[MediaUtils] Failed to transform Drive URL:', e);
+        }
+    }
+
+    // If it's already a public absolute URL (or our transformed one), return as is
     if (isPublicUrl(url)) {
         return url;
     }
@@ -146,8 +252,11 @@ export function getFileExtension(url: string): string {
             if (ext && !ext.includes('/')) return ext;
         }
 
-        // 2. Try to get from a 'file' query parameter (used for Google Drive links)
-        const fileParam = urlObj.searchParams.get('file');
+        // 2. Try to get from filename parameters or fragment hint (used for Google Drive links)
+        const fileParam = urlObj.searchParams.get('file') || 
+                         urlObj.searchParams.get('filename') || 
+                         urlObj.searchParams.get('name') ||
+                         (urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : null);
         if (fileParam) {
             const lastDotInFile = fileParam.lastIndexOf('.');
             if (lastDotInFile !== -1) {

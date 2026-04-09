@@ -503,7 +503,9 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                 const newBlob = await uploadToServer(
                     file,
                     orgId,
-                    campaignId as string
+                    campaignId as string,
+                    type,
+                    isReel
                 );
 
                 console.log(`[Drive] Media tracked: ${newBlob.url}`);
@@ -563,7 +565,9 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
             const newBlob = await uploadToServer(
                 file,
                 orgId,
-                campaignId as string
+                campaignId as string,
+                type,
+                isReel
             );
 
             console.log(`[Drive] Thumbnail tracked: ${newBlob.url}`);
@@ -1493,89 +1497,28 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
 
             {/* Preview Dialog */}
             < Dialog open={showPreview} onOpenChange={setShowPreview} >
-                <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Post Preview - {type}</DialogTitle>
                         <DialogDescription>
-                            Preview how your post will look
+                            See how your post will look on {type?.toLowerCase()}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4">
-                        {subject && (
-                            <div>
-                                <p className="text-sm font-medium mb-1">Title:</p>
-                                <p className="text-sm font-semibold">{subject}</p>
-                            </div>
-                        )}
-
-                        {mediaUrls.length > 0 && (
-                            <div>
-                                <p className="text-sm font-medium mb-2">Media:</p>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {mediaUrls.map((url, index) => (
-                                        <div key={index} className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-                                            {(() => {
-                                                const isYouTube = type === 'YOUTUBE';
-                                                const isVideo = isVideoUrl(url) || isYouTube;
-
-                                                if (isYouTube) {
-                                                    let videoId = '';
-                                                    if (url.includes('v=')) videoId = url.split('v=')[1].split('&')[0];
-                                                    else if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
-                                                    else if (url.includes('embed/')) videoId = url.split('embed/')[1].split('?')[0];
-
-                                                    if (videoId) {
-                                                        return (
-                                                            <iframe
-                                                                src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
-                                                                className="w-full h-full border-0"
-                                                                allow="autoplay; encrypted-media"
-                                                                allowFullScreen
-                                                            />
-                                                        );
-                                                    }
-                                                }
-
-                                                if (isVideo) {
-                                                    return (
-                                                        <video
-                                                            src={url}
-                                                            className="w-full h-full object-cover"
-                                                            autoPlay
-                                                            muted
-                                                            loop
-                                                            playsInline
-                                                        />
-                                                    );
-                                                }
-
-                                                return (
-                                                    <img
-                                                        src={url}
-                                                        alt={`Media ${index + 1}`}
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                );
-                                            })()}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        <div>
-                            <p className="text-sm font-medium mb-1">Message:</p>
-                            <div className="p-4 border rounded-lg bg-muted/50 whitespace-pre-wrap">
-                                {message || <span className="text-muted-foreground italic">No message</span>}
-                            </div>
-                        </div>
-
-                        {isReel && (
-                            <div className="flex items-center gap-2 text-sm text-primary">
-                                <Video className="size-4" />
-                                <span>Will be posted as a Reel</span>
-                            </div>
-                        )}
+                    <div className="py-4">
+                        <WYSIWYGPreview
+                            platform={type || ''}
+                            subject={subject}
+                            message={message}
+                            mediaUrls={mediaUrls}
+                            thumbnailUrl={thumbnailUrl}
+                            isReel={isReel || youtubeContentType === 'SHORT'}
+                            onSubjectChange={setSubject}
+                            onMessageChange={setMessage}
+                            user={{
+                                name: user?.fullName || user?.firstName || 'Your Brand',
+                                image: user?.imageUrl
+                            }}
+                        />
                     </div>
                 </DialogContent>
             </Dialog >
