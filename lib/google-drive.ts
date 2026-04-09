@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { Readable } from 'stream';
+import { extractGoogleDriveId } from './media-utils';
 
 /**
  * Google Drive Storage Provider
@@ -291,17 +292,7 @@ export async function moveFile(fileId: string, targetFolderId: string): Promise<
  */
 export async function deleteFromDrive(fileIdOrUrl: string): Promise<boolean> {
   const drive = await getDriveClient();
-  let fileId = fileIdOrUrl;
-
-  // Extract ID if a URL was provided
-  // UC Format: ...?id=FILE_ID&...
-  if (fileIdOrUrl.includes('id=')) {
-    fileId = fileIdOrUrl.split('id=')[1].split('&')[0];
-  } 
-  // Direct Link Format: .../file/d/FILE_ID/view...
-  else if (fileIdOrUrl.includes('/file/d/')) {
-    fileId = fileIdOrUrl.split('/file/d/')[1].split('/')[0];
-  }
+  let fileId = extractGoogleDriveId(fileIdOrUrl) || fileIdOrUrl;
 
   console.log(`[DRIVE_API] Attempting to delete file ID: ${fileId}`);
 
