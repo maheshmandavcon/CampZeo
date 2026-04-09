@@ -273,6 +273,8 @@ async function waitForInstagramMediaProcessing(
                 throw e;
             }
             console.error(`[Instagram] Error checking status for ${containerId}`, e);
+
+            return;
         }
 
         await new Promise(resolve => setTimeout(resolve, pollInterval));
