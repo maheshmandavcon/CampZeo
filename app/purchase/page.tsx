@@ -592,7 +592,7 @@ function PurchaseContent() {
                 <div className="w-full max-w-xl space-y-8">
 
                     {/* Header */}
-                    <div className="space-y-2">
+                    <div className="space-y-2 text-center">
                         <h2 className="text-3xl font-bold tracking-tight">
                             {step === "DETAILS" && "Create your account"}
                             {step === "VERIFICATION" && "Verify your email"}
