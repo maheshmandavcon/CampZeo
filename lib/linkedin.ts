@@ -17,18 +17,30 @@ export async function postToLinkedIn(
     if (!authorUrn || authorUrn === 'personal' || authorUrn === 'urn:li:person:personal') {
         console.log("[LinkedIn] Author URN invalid or 'personal'. Fetching profile to resolve...");
         try {
-            const profileRes = await fetch("https://api.linkedin.com/v2/me", {
-                headers: { 
-                    "Authorization": `Bearer ${accessToken}`,
-                    "X-Restli-Protocol-Version": "2.0.0" 
-                },
+            const userInfoRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+                headers: { "Authorization": `Bearer ${accessToken}` },
             });
-            if (profileRes.ok) {
-                const profileData = await profileRes.json();
-                authorUrn = `urn:li:person:${profileData.id}`;
-                console.log(`[LinkedIn] Resolved Author URN to: ${authorUrn}`);
-            } else {
-                console.warn(`[LinkedIn] Failed to fetch profile: ${profileRes.status}`);
+            
+            if (userInfoRes.ok) {
+                const userInfo = await userInfoRes.json();
+                if (userInfo.sub) {
+                    authorUrn = `urn:li:person:${userInfo.sub}`;
+                    console.log(`[LinkedIn] Resolved Author URN via OIDC to: ${authorUrn}`);
+                }
+            }
+            
+            if (!authorUrn || authorUrn === 'personal' || authorUrn === 'urn:li:person:personal') {
+                const profileRes = await fetch("https://api.linkedin.com/v2/me", {
+                    headers: {
+                        "Authorization": `Bearer ${accessToken}`,
+                        "X-Restli-Protocol-Version": "2.0.0"
+                    },
+                });
+                if (profileRes.ok) {
+                    const profileData = await profileRes.json();
+                    authorUrn = `urn:li:person:${profileData.id}`;
+                    console.log(`[LinkedIn] Resolved Author URN via Legacy to: ${authorUrn}`);
+                }
             }
         } catch (e) {
             console.error("[LinkedIn] Error resolving profile URN:", e);
