@@ -37,8 +37,8 @@ async function getContactsHandler(request: NextRequest, context: any) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
     const campaignId = searchParams.get('campaignId');
-    const sortBy = searchParams.get('sortBy') || 'createdAt';
-    const sortOrder = searchParams.get('sortOrder') || 'desc';
+    const sortByParam = searchParams.get('sortBy') || 'createdAt';
+    const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
 
     const skip = (page - 1) * limit;
 
@@ -65,6 +65,20 @@ async function getContactsHandler(request: NextRequest, context: any) {
         };
     }
 
+    // Map frontend sort keys to Prisma fields
+    let orderBy: any = { createdAt: sortOrder };
+    if (sortByParam === 'name') {
+        orderBy = { contactName: sortOrder };
+    } else if (sortByParam === 'email') {
+        orderBy = { contactEmail: sortOrder };
+    } else if (sortByParam === 'mobile') {
+        orderBy = { contactMobile: sortOrder };
+    } else if (sortByParam === 'campaigns') {
+        orderBy = { campaigns: { _count: sortOrder } };
+    } else if (sortByParam === 'createdAt' || sortByParam === 'created') {
+        orderBy = { createdAt: sortOrder };
+    }
+
     // Get total count
     const total = await prisma.contact.count({ where });
 
@@ -84,9 +98,7 @@ async function getContactsHandler(request: NextRequest, context: any) {
         },
         skip,
         take: limit,
-        orderBy: {
-            [sortBy]: sortOrder
-        }
+        orderBy
     });
 
     return NextResponse.json({

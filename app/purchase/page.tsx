@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, Star, ArrowRight, Sparkles, Check, Download } from "lucide-react";
+import { Loader2, CheckCircle2, Star, ArrowRight, Sparkles, Check, Download, FileText } from "lucide-react";
 import { useSignUp, useSignIn, useClerk, useUser } from "@clerk/nextjs";
 import { usePlans } from "@/hooks/use-plans";
 import { formatPrice } from "@/lib/plans";
@@ -25,84 +25,86 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 
 const BLOCKED_DOMAINS = new Set([
-  "yopmail.com", "yopmail.fr", "cool.fr.nf", "jetable.fr.nf",
-  "nospam.ze.tc", "nomail.xl.cx", "mega.zik.dj", "speed.1s.fr",
-  "courriel.fr.nf", "moncourrier.fr.nf", "monemail.fr.nf",
+    "yopmail.com", "yopmail.fr", "cool.fr.nf", "jetable.fr.nf",
+    "nospam.ze.tc", "nomail.xl.cx", "mega.zik.dj", "speed.1s.fr",
+    "courriel.fr.nf", "moncourrier.fr.nf", "monemail.fr.nf",
 
-  "mailinator.com", "mailinator2.com", "trashmail.com",
-  "trashmail.me", "trashmail.net", "trashmail.at",
-  "trashmail.io", "trashmail.xyz",
+    "mailinator.com", "mailinator2.com", "trashmail.com",
+    "trashmail.me", "trashmail.net", "trashmail.at",
+    "trashmail.io", "trashmail.xyz",
 
-  "guerrillamail.com", "guerrillamail.net", "guerrillamail.org",
-  "guerrillamail.biz", "guerrillamail.de", "guerrillamail.info",
-  "grr.la", "spam4.me",
+    "guerrillamail.com", "guerrillamail.net", "guerrillamail.org",
+    "guerrillamail.biz", "guerrillamail.de", "guerrillamail.info",
+    "grr.la", "spam4.me",
 
-  "10minutemail.com", "10minutemail.net", "10minutemail.org",
-  "10minemail.com", "tempr.email", "discard.email",
+    "10minutemail.com", "10minutemail.net", "10minutemail.org",
+    "10minemail.com", "tempr.email", "discard.email",
 
-  "throwam.com", "throwaway.email", "throwam.com",
-  "spamgourmet.com", "spamgourmet.net", "spamgourmet.org",
+    "throwam.com", "throwaway.email", "throwam.com",
+    "spamgourmet.com", "spamgourmet.net", "spamgourmet.org",
 
-  "tempmail.com", "tempmail.net", "tempmail.org",
-  "temp-mail.org", "temp-mail.ru", "tempinbox.com",
-  "tempemail.com", "tempemail.net", "fakeinbox.com",
-  "fakeinbox.net", "mailnull.com", "spamex.com",
-  "mailexpire.com", "spamfree24.org", "spamfree.eu",
+    "tempmail.com", "tempmail.net", "tempmail.org",
+    "temp-mail.org", "temp-mail.ru", "tempinbox.com",
+    "tempemail.com", "tempemail.net", "fakeinbox.com",
+    "fakeinbox.net", "mailnull.com", "spamex.com",
+    "mailexpire.com", "spamfree24.org", "spamfree.eu",
 
-  "sharklasers.com", "guerrillamailblock.com", "grr.la",
-  "guerrillamail.info", "spam4.me", "yopmail.pp.ua",
+    "sharklasers.com", "guerrillamailblock.com", "grr.la",
+    "guerrillamail.info", "spam4.me", "yopmail.pp.ua",
 
-  "maildrop.cc", "dispostable.com", "mailnesia.com",
-  "spamgob.com", "mailzilla.com", "trashdevil.com",
-  "trashdevil.de", "wegwerfmail.de", "wegwerfmail.net",
-  "wegwerfmail.org", "spamzy.com", "spamspot.com",
+    "maildrop.cc", "dispostable.com", "mailnesia.com",
+    "spamgob.com", "mailzilla.com", "trashdevil.com",
+    "trashdevil.de", "wegwerfmail.de", "wegwerfmail.net",
+    "wegwerfmail.org", "spamzy.com", "spamspot.com",
 ]);
 
 const BLOCKED_TLDS = new Set([
-  "xyz", "gq", "ml", "cf", "tk", "ga",
+    "xyz", "gq", "ml", "cf", "tk", "ga",
 ]);
 
 export function validateEmail(email: string): {
-  valid: boolean;
-  error?: string;
+    valid: boolean;
+    error?: string;
 } {
-  if (!email || typeof email !== "string") {
-    return { valid: false, error: "Email is required" };
-  }
+    if (!email || typeof email !== "string") {
+        return { valid: false, error: "Email is required" };
+    }
 
-  const trimmed = email.trim().toLowerCase();
+    const trimmed = email.trim().toLowerCase();
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-  if (!emailRegex.test(trimmed)) {
-    return { valid: false, error: "Invalid email format" };
-  }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!emailRegex.test(trimmed)) {
+        return { valid: false, error: "Invalid email format" };
+    }
 
-  const [localPart, domain] = trimmed.split("@");
+    const [localPart, domain] = trimmed.split("@");
 
-  if (localPart.length < 2) {
-    return { valid: false, error: "Invalid email address" };
-  }
+    if (localPart.length < 2) {
+        return { valid: false, error: "Invalid email address" };
+    }
 
-  const tld = domain.split(".").pop() ?? "";
+    const tld = domain.split(".").pop() ?? "";
 
-  if (BLOCKED_TLDS.has(tld)) {
-    return { valid: false, error: "Email domain not allowed" };
-  }
+    if (BLOCKED_TLDS.has(tld)) {
+        return { valid: false, error: "Email domain not allowed" };
+    }
 
-  if (BLOCKED_DOMAINS.has(domain)) {
-    return { valid: false, error: "Disposable email addresses are not allowed" };
-  }
+    if (BLOCKED_DOMAINS.has(domain)) {
+        return { valid: false, error: "Disposable email addresses are not allowed" };
+    }
 
-  const isBlockedSubdomain = [...BLOCKED_DOMAINS].some(
-    (blocked) => domain.endsWith(`.${blocked}`) || domain === blocked
-  );
-  if (isBlockedSubdomain) {
-    return { valid: false, error: "Disposable email addresses are not allowed" };
-  }
+    const isBlockedSubdomain = [...BLOCKED_DOMAINS].some(
+        (blocked) => domain.endsWith(`.${blocked}`) || domain === blocked
+    );
+    if (isBlockedSubdomain) {
+        return { valid: false, error: "Disposable email addresses are not allowed" };
+    }
 
-  return { valid: true };
+    return { valid: true };
 }
 function PurchaseContent() {
     const searchParams = useSearchParams();
@@ -369,13 +371,13 @@ function PurchaseContent() {
             requiredFields.organisationName = "Organisation Name";
             requiredFields.taxNumber = "GST / Tax Number";
         }
-const emailValidation = validateEmail(formData.email);
-    if (!emailValidation.valid) {
-      toast.error("Invalid Email", {
-        description: emailValidation.error || "Please enter a valid email address.",
-      });
-      return;
-    }
+        const emailValidation = validateEmail(formData.email);
+        if (!emailValidation.valid) {
+            toast.error("Invalid Email", {
+                description: emailValidation.error || "Please enter a valid email address.",
+            });
+            return;
+        }
         for (const [field, label] of Object.entries(requiredFields)) {
             if (!formData[field as keyof typeof formData] || String(formData[field as keyof typeof formData]).trim() === "") {
                 toast.error(`${label} is required.`);
@@ -590,7 +592,7 @@ const emailValidation = validateEmail(formData.email);
                 <div className="w-full max-w-xl space-y-8">
 
                     {/* Header */}
-                    <div className="space-y-2">
+                    <div className="space-y-2 text-center">
                         <h2 className="text-3xl font-bold tracking-tight">
                             {step === "DETAILS" && "Create your account"}
                             {step === "VERIFICATION" && "Verify your email"}
@@ -856,58 +858,102 @@ const emailValidation = validateEmail(formData.email);
                         </div>
                     )}
 
+
                     {step === "SUCCESS" && (
-                        <div ref={invoiceRef} className="space-y-6">
-                            <div className="flex flex-col items-center justify-center text-center space-y-4 p-8 bg-green-50/50 dark:bg-green-900/10 rounded-xl border border-green-200 dark:border-green-800">
-                                <div className="h-16 w-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
-                                    <Check className="h-8 w-8 text-green-600 dark:text-green-400" />
+                        <div ref={invoiceRef} className="space-y-6 animate-in fade-in zoom-in duration-500">
+                            <div className="flex flex-col items-center justify-center text-center space-y-4 p-8 bg-primary/5 rounded-2xl border border-primary/20 relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-4">
+                                    <Badge className="bg-green-500 hover:bg-green-600 border-none px-3 py-1">PAID</Badge>
                                 </div>
-                                <h3 className="text-xl font-semibold">Payment Successful!</h3>
-                                <p className="text-muted-foreground max-w-sm">
-                                    Your organisation <strong>{formData.organisationName}</strong> has been successfully created.
-                                </p>
+                                <div className="h-20 w-20 bg-primary/10 rounded-full flex items-center justify-center">
+                                    <Check className="h-10 w-10 text-primary" />
+                                </div>
+                                <div className="space-y-2">
+                                    <h3 className="text-2xl font-bold tracking-tight">Payment Successful!</h3>
+                                    <p className="text-muted-foreground max-w-sm mx-auto">
+                                        Your account is ready. Organization <strong>{formData.organisationName || formData.name}</strong> has been created.
+                                    </p>
+                                </div>
                             </div>
 
                             {invoice && (
-                                <Card className="print:block border-primary/20">
-                                    <CardContent className="pt-6">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div>
-                                                <h4 className="font-semibold text-lg">Invoice Details</h4>
-                                                <p className="text-sm text-muted-foreground">{invoice.invoiceNumber}</p>
+                                <Card className="border-primary/20 shadow-lg overflow-hidden">
+                                    <div className="bg-primary/5 px-6 py-4 border-b border-primary/10 flex justify-between items-center">
+                                        <h4 className="font-bold flex items-center gap-2">
+                                            <FileText className="size-4 text-primary" />
+                                            Invoice Summary
+                                        </h4>
+                                        <span className="text-sm font-mono text-muted-foreground">{invoice.invoiceNumber}</span>
+                                    </div>
+                                    <CardContent className="p-6 space-y-6">
+                                        {/* Two Column Layout */}
+                                        <div className="grid md:grid-cols-2 gap-8">
+                                            {/* Column 1: Billing Info */}
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Billing To</h5>
+                                                    <p className="font-semibold text-base">{formData.name}</p>
+                                                    {accountType === 'business' && (
+                                                        <p className="text-sm text-muted-foreground">{formData.organisationName}</p>
+                                                    )}
+                                                    <p className="text-sm text-muted-foreground">{formData.email}</p>
+                                                    <p className="text-sm text-muted-foreground">{formData.mobile}</p>
+                                                </div>
+                                                <div>
+                                                    <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Address</h5>
+                                                    <p className="text-sm text-muted-foreground leading-relaxed">
+                                                        {formData.address},<br />
+                                                        {formData.city}, {formData.state} {formData.postalCode}<br />
+                                                        {formData.country}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-sm text-muted-foreground">Date</p>
-                                                <p className="font-medium">{new Date(invoice.invoiceDate).toLocaleDateString()}</p>
-                                            </div>
-                                        </div>
-                                        <div className="space-y-2 text-sm">
-                                            <div className="flex justify-between">
-                                                <span>Plan</span>
-                                                <span>{invoice.description}</span>
-                                            </div>
-                                            <div className="flex justify-between font-bold text-lg pt-2 border-t mt-2">
-                                                <span>Total Paid</span>
-                                                <span>{formatPrice(invoice.amount, invoice.currency)}</span>
+
+                                            {/* Column 2: Order Info */}
+                                            <div className="space-y-4">
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Date</h5>
+                                                        <p className="text-sm font-medium">{new Date(invoice.invoiceDate).toLocaleDateString()}</p>
+                                                    </div>
+                                                    <div>
+                                                        <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Method</h5>
+                                                        <p className="text-sm font-medium">Razorpay</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-muted/50 rounded-xl p-4 space-y-3">
+                                                    <div className="flex justify-between text-sm">
+                                                        <span className="text-muted-foreground">Plan: {invoice.description.replace('Subscription for ', '')}</span>
+                                                        <span className="font-medium">{formatPrice(invoice.amount, invoice.currency)}</span>
+                                                    </div>
+                                                    <Separator className="bg-primary/10" />
+                                                    <div className="flex justify-between items-baseline pt-1">
+                                                        <span className="font-bold">Total Paid</span>
+                                                        <span className="text-xl font-extrabold text-primary">
+                                                            {formatPrice(invoice.amount, invoice.currency)}
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </CardContent>
                                 </Card>
                             )}
 
-                            <div className="flex flex-col md:flex-row gap-4 print:hidden">
-                                <Button className="flex-1" size="lg" onClick={() => router.push('/organisation')}>
-                                    Go to Dashboard <ArrowRight className="ml-2 h-4 w-4" />
+                            <div className="flex flex-col md:flex-row gap-4 print:hidden pt-4">
+                                <Button className="flex-1 h-12 text-base font-semibold shadow-lg shadow-primary/20" size="lg" onClick={() => router.push('/organisation')}>
+                                    Go to Dashboard <ArrowRight className="ml-2 h-5 w-5" />
                                 </Button>
                                 {invoice && (
                                     <Button
                                         variant="outline"
-                                        className="flex-1"
+                                        className="flex-1 h-12 text-base font-semibold"
                                         size="lg"
                                         onClick={handleDownloadInvoice}
                                         disabled={isDownloading}
                                     >
-                                        <Download className="mr-2 h-4 w-4" />
+                                        <Download className="mr-2 h-5 w-5" />
                                         {isDownloading ? "Generating..." : "Download Invoice"}
                                     </Button>
                                 )}
