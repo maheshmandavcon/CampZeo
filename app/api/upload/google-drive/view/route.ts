@@ -35,29 +35,59 @@ export async function GET(req: Request) {
       supportsAllDrives: true,
     });
 
-    // 3. Fetch the actual file content using native fetch to get a Web Stream compatible with NextResponse
+    // 3. Fetch the actual file content 
+    // Forward the Range header to support video ingestion (Meta crawler needs this)
+    const incomingRange = req.headers.get('range');
     const client = await auth.getClient();
     const token = await client.getAccessToken();
     
+    const googleHeaders: Record<string, string> = {
+      Authorization: `Bearer ${token.token}`
+    };
+    if (incomingRange) {
+      googleHeaders['Range'] = incomingRange;
+    }
+
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
-      headers: {
-        Authorization: `Bearer ${token.token}`
-      }
+      headers: googleHeaders
     });
 
-    if (!res.ok) {
+    if (!res.ok && res.status !== 206) {
       const text = await res.text();
       console.error('Failed to fetch from drive:', text);
       return new NextResponse('Error fetching media from Google Drive', { status: res.status });
     }
 
     // 4. Return the Web stream with the correct headers
+    // Meta's video ingestion crawler requires Accept-Ranges, Content-Length, and often Content-Range
+    const fileName = metadata.data.name || 'media';
+    let mimeType = metadata.data.mimeType || 'application/octet-stream';
+    
+    // Force video/mp4 for common video extensions if Google returns generic type
+    if (mimeType === 'application/octet-stream' || mimeType === 'video/x-matroska') {
+      if (fileName.toLowerCase().endsWith('.mp4')) mimeType = 'video/mp4';
+      else if (fileName.toLowerCase().endsWith('.mov')) mimeType = 'video/quicktime';
+      else if (fileName.toLowerCase().endsWith('.webm')) mimeType = 'video/webm';
+    }
+
+    console.log(`[Proxy Log] Serving file: ${fileName} (${mimeType}) | Status: ${res.status} | Range: ${incomingRange || 'None'}`);
+
+    const headers = new Headers({
+      'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Content-Disposition': `inline; filename="${fileName}"`,
+      'Accept-Ranges': 'bytes',
+    });
+
+    const contentLength = res.headers.get('content-length');
+    const contentRange = res.headers.get('content-range');
+
+    if (contentLength) headers.set('Content-Length', contentLength);
+    if (contentRange) headers.set('Content-Range', contentRange);
+
     return new NextResponse(res.body, {
-      headers: {
-        'Content-Type': metadata.data.mimeType || 'application/octet-stream',
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        'Content-Disposition': `inline; filename="${metadata.data.name}"`,
-      },
+      status: res.status, // Return 200 or 206 based on Google's response
+      headers: headers,
     });
   } catch (error: any) {
     console.error('Proxy View Error:', error);

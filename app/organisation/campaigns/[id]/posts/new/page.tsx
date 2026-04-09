@@ -506,7 +506,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 const newBlob = await uploadToServer(
                     file, 
                     orgId, 
-                    campaignId
+                    campaignId,
+                    selectedPlatform,
+                    isReel
                 );
 
                 console.log(`[Drive] Media tracked: ${newBlob.url}`);
@@ -564,7 +566,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             const newBlob = await uploadToServer(
                 file, 
                 orgId, 
-                campaignId
+                campaignId,
+                selectedPlatform,
+                isReel
             );
 
             console.log(`[Drive] Thumbnail tracked: ${newBlob.url}`);

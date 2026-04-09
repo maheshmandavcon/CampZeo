@@ -1,7 +1,9 @@
 export async function uploadToServer(
   file: File, 
   organisationId?: string, 
-  campaignId?: string
+  campaignId?: string,
+  platform?: string | null,
+  isReel?: boolean
 ): Promise<{ url: string }> {
   const provider = process.env.NEXT_PUBLIC_STORAGE_PROVIDER || 'custom_server';
   const serverUrl = process.env.NEXT_PUBLIC_UPLOAD_SERVER_URL || '';
@@ -13,6 +15,26 @@ export async function uploadToServer(
       throw new Error("Organisation ID is required for Google Drive folder organization.");
     }
 
+    const isImage = file.type.startsWith('image/');
+
+    // For images with platform context, use the optimization path (server-side processing)
+    if (isImage && platform) {
+      console.log(`[Upload] Image with platform ${platform} - using server-side optimization path`);
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const res = await fetch(`/api/upload/google-drive?organisationId=${organisationId}&campaignId=${campaignId || ''}&platform=${platform}&isReel=${isReel || false}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error(`Image upload failed: ${res.statusText}`);
+      }
+
+      return await res.json();
+    }
+
     // 1. Initiate resumable upload session
     const initRes = await fetch('/api/upload/google-drive/resumable', {
       method: 'POST',
@@ -21,7 +43,9 @@ export async function uploadToServer(
         fileName: file.name,
         mimeType: file.type,
         organisationId,
-        campaignId
+        campaignId,
+        platform,
+        isReel
       })
     });
 
@@ -80,17 +104,19 @@ export async function uploadToServer(
     }
 
     // 3. Construct a direct, publicly accessible Google Drive URL
-    // We append the filename as a query param so getFileExtension() can still detect the type (e.g., .mp4)
+    // We use the same format as the standard upload path for consistency
     const url = `https://drive.google.com/uc?id=${fileId}&export=download&file=${encodeURIComponent(file.name)}`;
     
-    console.log("File uploaded and public at:", url);
+    console.log(`[Upload] Resumable upload successful: ${url}`);
     return { url };
   } else {
-    // Legacy / Custom Server path
     const formData = new FormData();
-    let uploadUrl = `${serverUrl}/api/upload`;
-    formData.append('files', file); // Custom server expects 'files'
-    console.log(`[Upload] Using custom server storage provider: ${serverUrl}`);
+    let uploadUrl = `${serverUrl}/api/upload?platform=${platform || ''}&isReel=${isReel || false}`;
+    if (organisationId) uploadUrl += `&organisationId=${organisationId}`;
+    if (campaignId) uploadUrl += `&campaignId=${campaignId}`;
+
+    formData.append('file', file); // Sync naming with /api/upload/google-drive
+    console.log(`[Upload] Using custom server storage provider: ${uploadUrl}`);
 
     const res = await fetch(uploadUrl, {
       method: 'POST',
