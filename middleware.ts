@@ -25,7 +25,7 @@ const isApiRoute = createRouteMatcher([
 const isPublicApiRoute = createRouteMatcher([
     "/api/enquiries",
     "/api/webhooks/(.*)",
-    "/api/upload/google-drive/view/(.*)",
+    "/api/upload/google-drive/view(.*)",
 ]);
 
 /**
