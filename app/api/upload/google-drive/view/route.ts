@@ -108,6 +108,18 @@ export async function GET(req: Request) {
     });
   } catch (error: any) {
     console.error('Proxy View Error:', error);
+    
+    try {
+      const { prisma } = await import('@/lib/prisma');
+      await prisma.logEvents.create({
+        data: {
+          message: `Proxy View Error: ${error.message || 'Unknown error'}`,
+          level: 'Error',
+          properties: JSON.stringify({ fileId, stack: error.stack })
+        }
+      });
+    } catch (ignore) {}
+
     return new NextResponse('Error fetching file from Google Drive', { status: 500 });
   }
 }

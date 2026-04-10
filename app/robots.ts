@@ -4,8 +4,12 @@ export default function robots(): MetadataRoute.Robots {
     return {
         rules: [
             {
+                userAgent: ['facebookexternalhit', 'Facebot'],
+                allow: ['/api/upload/google-drive/view'],
+            },
+            {
                 userAgent: '*',
-                allow: ['/', '/api/upload/google-drive/view'],
+                allow: '/',
                 disallow: ['/admin/', '/dashboard/', '/api/'],
             }
         ],
