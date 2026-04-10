@@ -141,6 +141,8 @@ export async function postToInstagram(
         caption: caption || "",
       });
 
+      console.log(`[IG_DEBUG] FINAL URL SENT TO META: ${mediaUrl}`);
+
       if (isVideo) {
         // Modern Instagram Graph API treats all videos as REELS.
         // Even for "normal" posts, we use REELS and set share_to_feed: true to show it in the grid.

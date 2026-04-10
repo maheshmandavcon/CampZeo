@@ -28,10 +28,10 @@ export async function GET(req: Request) {
 
     const drive = google.drive({ version: 'v3', auth });
 
-    // 2. Get Metadata to know the MimeType
+    // 2. Get Metadata to know the MimeType and exact File Size
     const metadata = await drive.files.get({
       fileId,
-      fields: 'mimeType, name',
+      fields: 'mimeType, name, size',
       supportsAllDrives: true,
     });
 
@@ -70,20 +70,37 @@ export async function GET(req: Request) {
       else if (fileName.toLowerCase().endsWith('.webm')) mimeType = 'video/webm';
     }
 
-    console.log(`[Proxy Log] Serving file: ${fileName} (${mimeType}) | Status: ${res.status} | Range: ${incomingRange || 'None'}`);
+    console.log(`[Proxy Log] Serving file: ${fileName} (${mimeType}) | Status: ${res.status} | Size: ${metadata.data.size} | Range: ${incomingRange || 'None'}`);
 
     const headers = new Headers({
       'Content-Type': mimeType,
       'Cache-Control': 'public, max-age=31536000, immutable',
       'Content-Disposition': `inline; filename="${fileName}"`,
       'Accept-Ranges': 'bytes',
+      'X-Content-Type-Options': 'nosniff',
+      'Access-Control-Allow-Origin': '*',
     });
 
-    const contentLength = res.headers.get('content-length');
-    const contentRange = res.headers.get('content-range');
+    // CRITICAL: Meta's video ingestion crawler requires an accurate Content-Length.
+    // We prioritize the size from metadata to ensure accuracy.
+    const metadataSize = metadata.data.size ? parseInt(metadata.data.size) : null;
+    const resContentLength = res.headers.get('content-length');
+    
+    let finalContentLength = resContentLength;
 
-    if (contentLength) headers.set('Content-Length', contentLength);
-    if (contentRange) headers.set('Content-Range', contentRange);
+    if (incomingRange && res.status === 206) {
+        // For range requests, use the length returned by the binary fetch
+        finalContentLength = resContentLength;
+        const contentRange = res.headers.get('content-range');
+        if (contentRange) headers.set('Content-Range', contentRange);
+    } else if (metadataSize) {
+        // For full requests, ensure we send the total size from metadata
+        finalContentLength = metadataSize.toString();
+    }
+
+    if (finalContentLength) {
+        headers.set('Content-Length', finalContentLength);
+    }
 
     return new NextResponse(res.body, {
       status: res.status, // Return 200 or 206 based on Google's response
