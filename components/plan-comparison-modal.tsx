@@ -36,8 +36,8 @@ export function PlanComparisonModal({
             <DialogContent className="sm:max-w-[95vw] md:max-w-[85vw] lg:max-w-[75vw] xl:max-w-[65vw] p-0 overflow-hidden rounded-[2rem] border-none bg-[#fafafa]  shadow-2xl">
                 <div className="relative h-full overflow-y-auto custom-scrollbar max-h-[90vh]">
                     {/* Background Accents */}
-                    <div className="absolute top-0 inset-x-0 h-64 bg-gradient-to-b from-primary/5 to-transparent pointer-events-none -z-10" />
-                    <div className="absolute top-12 left-12 w-32 h-32 bg-primary/10 rounded-full blur-[60px] pointer-events-none -z-10" />
+                    {/* <div className="absolute top-0 inset-x-0 h-64 bg-gradient-to-b from-primary/5 to-transparent pointer-events-none -z-10" /> */}
+                    {/* <div className="absolute top-12 left-12 w-32 h-32 bg-primary/10 rounded-full blur-[60px] pointer-events-none -z-10" /> */}
 
                     <div className="p-8 md:p-12">
                         {/* Header */}
@@ -55,7 +55,7 @@ export function PlanComparisonModal({
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.1 }}
-                                    className="text-4xl md:text-5xl text-center font-black tracking-tight "
+                                    className="text-3xl md:text-4xl text-center font-black tracking-tight "
                                 >
                                     Choose the perfect <span className="text-primary">plan.</span>
                                 </motion.h2>
@@ -84,50 +84,45 @@ export function PlanComparisonModal({
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: 0.3 + index * 0.1 }}
-                                        className="relative group"
+                                        className="relative group h-full"
                                     >
-                                        <Card className={`h-full border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)]  bg-white/50  backdrop-blur-xl rounded-[2rem] relative transition-all duration-500 hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)] hover:-translate-y-2 ${isPopular ? "ring-2 ring-primary" : ""} ${isCurrentPlan && planStatus?.toUpperCase() === 'ACTIVE' ? "ring-2 ring-[#dc2626] shadow-[0_0_20px_rgba(220,38,38,0.15)]" : ""}`}>
-                                            {isCurrentPlan && planStatus && (
+                                        <Card className={`h-full border-[1.5px] bg-white rounded-[1.5rem] relative transition-all duration-300 hover:shadow-xl ${isPopular ? "border-primary shadow-sm" : "border-primary/40"} ${isCurrentPlan && planStatus?.toUpperCase() === 'ACTIVE' ? "border-primary/60" : ""}`}>
+                                            {/* Status Badge */}
+                                            {isCurrentPlan && planStatus && planStatus.toUpperCase() !== 'ACTIVE' && (
                                                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
                                                     <Badge
-                                                        className={`${planStatus.toUpperCase() === 'ACTIVE'
-                                                            ? 'bg-[#dc2626] hover:bg-[#dc2626]/90 shadow-lg shadow-[#dc2626]/20'
-                                                            : planStatus.toUpperCase() === 'TRIAL'
-                                                                ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20'
-                                                                : planStatus.toUpperCase() === 'EXPIRED' || planStatus.toUpperCase() === 'CANCELLED'
-                                                                    ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20'
-                                                                    : 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20'
-                                                            } text-white text-[11px] font-bold px-4 py-1 rounded-full border-none transition-all duration-300 shadow-xl`}
+                                                        className="bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold px-3 py-0.5 rounded-full border-none shadow-md"
                                                     >
-                                                        {planStatus.toUpperCase() === 'ACTIVE' ? 'ACTIVE' : planStatus.toUpperCase()}
+                                                        {planStatus.toUpperCase()}
                                                     </Badge>
                                                 </div>
                                             )}
 
-                                            {isPopular && !isCurrentPlan && (
+                                            {/* Most Popular Badge */}
+                                            {isPopular && (
                                                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
-                                                    <Badge className="bg-primary text-white text-[11px] font-bold px-4 py-1 rounded-full border-none shadow-xl">MOST POPULAR</Badge>
+                                                    <Badge className="bg-primary hover:bg-primary/90 text-white text-[11px] font-bold px-4 py-1 rounded-full border-none shadow-lg whitespace-nowrap">
+                                                        Most Popular
+                                                    </Badge>
                                                 </div>
                                             )}
 
                                             <div className="p-8 pb-4">
-
                                                 <div className="space-y-1 mb-6">
-                                                    <h3 className="text-xl font-bold tracking-tight">{plan.name}</h3>
-                                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">For growing teams</p>
+                                                    <h3 className="text-sm font-bold tracking-wider uppercase text-gray-900">{plan.name}</h3>
                                                 </div>
 
-                                                <div className="flex items-baseline gap-1 mb-6">
-                                                    <span className="text-4xl font-black tracking-tighter">
+                                                <div className="flex items-baseline gap-1 mb-8">
+                                                    <span className="text-3xl font-black tracking-tight text-gray-950">
                                                         {formatPrice(plan.price, plan.currency)}
                                                     </span>
-                                                    <span className="text-muted-foreground font-medium text-sm">/{plan.interval}</span>
+                                                    <span className="text-muted-foreground/50 font-bold text-[10px] uppercase tracking-widest">/{plan.interval === 'month' ? 'MONTHLY' : plan.interval.toUpperCase()}</span>
                                                 </div>
 
                                                 <Button
-                                                    className={`w-full h-12 rounded-xl font-bold transition-all duration-300 ${isCurrentPlan
-                                                        ? "bg-muted text-muted-foreground cursor-not-allowed"
-                                                        : "bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20"}`}
+                                                    className={`w-full h-11 rounded-lg text-sm font-bold transition-all duration-300 ${isCurrentPlan
+                                                        ? "bg-white border border-gray-200 text-muted-foreground/40 hover:bg-white cursor-default shadow-none"
+                                                        : "bg-primary hover:bg-primary/90 text-white shadow shadow-primary/10"}`}
                                                     disabled={isCurrentPlan || plan.id === "FREE_TRIAL"}
                                                     onClick={() => {
                                                         onSelectPlan?.(plan.id);
@@ -138,14 +133,12 @@ export function PlanComparisonModal({
                                                 </Button>
                                             </div>
 
-                                            <div className="px-8 pb-8 pt-4">
+                                            <div className="px-8 pb-10 pt-2">
                                                 <div className="space-y-3">
-                                                    {plan.features.slice(0, 4).map((feature, idx) => (
-                                                        <div key={idx} className="flex gap-3 text-sm font-medium">
-                                                            <div className="size-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                                                <Check className="size-3 text-primary" />
-                                                            </div>
-                                                            <span className="text-muted-foreground/90">{feature}</span>
+                                                    {plan.features.slice(0, 6).map((feature, idx) => (
+                                                        <div key={idx} className="flex items-start gap-2.5 text-[12.5px] font-medium leading-[1.4]">
+                                                            <Check className="size-3.5 text-primary shrink-0 mt-0.5" />
+                                                            <span className="text-gray-800">{feature}.</span>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -168,7 +161,7 @@ export function PlanComparisonModal({
                                     <Star className="size-5 text-primary" />
                                 </div>
                                 <div>
-                                    <h3 className="text-2xl font-black tracking-tight">Feature Comparison</h3>
+                                    <h3 className="text-2xl font-bold ">Feature Comparison</h3>
                                     <p className="text-sm text-muted-foreground">Compare everything side-by-side</p>
                                 </div>
                             </div>

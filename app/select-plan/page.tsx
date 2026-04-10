@@ -36,7 +36,7 @@ export default function SelectPlanPage() {
                 }
 
                 const org = data.organisation;
-                const subscription = data.subscription;
+                const subscription = data.subscription || (org.subscriptions && org.subscriptions[0]);
 
                 const now = new Date();
                 const isTrialValid = org.isTrial && org.trialEndDate && new Date(org.trialEndDate) > now;
@@ -76,12 +76,17 @@ export default function SelectPlanPage() {
     // Filter out free trial plans
     const paidPlans = plans.filter(plan => plan.price > 0);
 
+    const subscription = organisation?.subscriptions?.[0];
+    const expiredPlanName = (subscription?.plan?.name || (organisation?.isTrial ? "Trial" : "Plan"))
+        .toLowerCase()
+        .replace("free ", "");
+
     return (
         <div className="container mx-auto py-16 px-4 max-w-6xl">
             <div className="text-center mb-12">
                 <h1 className="text-4xl font-bold mb-4">Choose Your Plan</h1>
                 <p className="text-xl text-muted-foreground">
-                    Your trial has expired. Please upgrade to continue using our services.
+                    Your {expiredPlanName} plan has expired. Please upgrade to continue using our services.
                 </p>
             </div>
 
@@ -103,7 +108,7 @@ export default function SelectPlanPage() {
                                 <CardTitle className="text-2xl">{plan.name}</CardTitle>
                                 <div className="mt-4">
                                     <span className="text-4xl font-bold">
-                                        {formatPrice(plan.price, "INR")}                              
+                                        {formatPrice(plan.price, "INR")}
                                     </span>
                                     <span className="text-muted-foreground">/{plan.billingCycle || 'month'}</span>
                                 </div>
@@ -136,11 +141,11 @@ export default function SelectPlanPage() {
                 })}
             </div>
 
-            <div className="mt-12 text-center">
+            {/* <div className="mt-12 text-center">
                 <p className="text-muted-foreground text-sm">
                     Need help? <Button variant="link" className="p-0 h-auto">Contact Support</Button>
                 </p>
-            </div>
+            </div> */}
         </div>
     );
 }
