@@ -42,9 +42,11 @@ async function sendPostHandler(
     const id = resolvedParams.id;
     const postId = resolvedParams.postId;
 
-    console.log("Params resolved:", { id, postId });
+    console.log(`[SendRoute] Resolved params: id=${id}, postId=${postId}`);
+    console.log(`[SendRoute] User: ${user.id}, Org: ${effectiveOrganisationId}`);
 
-    const { contactIds } = await req.json();
+    const { contactIds } = await req.json().catch(() => ({ contactIds: [] }));
+    console.log(`[SendRoute] Contact IDs:`, contactIds);
 
     // Fetch post and campaign - verify campaign belongs to the effective organisation
     const post = await prisma.campaignPost.findFirst({
@@ -66,9 +68,11 @@ async function sendPostHandler(
     });
 
     if (!post) {
+        console.error(`[SendRoute] Post not found or org mismatch: ID=${postId}, Campaign=${id}, Org=${effectiveOrganisationId}`);
         return NextResponse.json({ error: 'Post or Campaign not found' }, { status: 404 });
     }
 
+    console.log(`[SendRoute] Post found: ${post.subject || 'No subject'} (${post.type})`);
     const isSocialPlatform = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN', 'YOUTUBE', 'PINTEREST'].includes(post.type);
 
     if (!isSocialPlatform && (!contactIds || !Array.isArray(contactIds) || contactIds.length === 0)) {

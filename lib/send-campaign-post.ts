@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { del } from '@vercel/blob';
-import { isVideoUrl } from '@/lib/media-utils';
+import { isVideoUrl, validateMediaUrl } from '@/lib/media-utils';
 import { sendCampaignEmail } from '@/lib/email';
 import { postToLinkedIn, getLinkedInPostInsights } from '@/lib/linkedin';
 import { postToFacebook, getFacebookPostInsights } from '@/lib/facebook';
@@ -411,39 +411,25 @@ export async function sendCampaignPost(
         throw new Error('No Instagram Business Account found');
     }
 
-    // --- HELPER: Resolve Google Drive links to our stable Proxy ---
-    const resolveMediaUrl = (url: string | undefined): string => {
-        if (!url) return "";
-        if (url.includes('drive.google.com') || url.includes('drive.usercontent.google.com')) {
-            const match = url.match(/(?:id=|\/d\/|uc\?id=)([\w-]+)/);
-            const fileId = match ? match[1] : null;
-            if (fileId) {
-                // This bypasses G-Drive Sandbox headers and 303 redirects
-                return `https://campzeo.com/api/upload/google-drive/view?id=${fileId}`;
-            }
-        }
-        return url;
-    };
- console.log("IG MEDIA URLS:", post.mediaUrls);
-// 1. Resolve the URLs using your proxy helper
-// We use the stable proxy for Google Drive media to ensure compatibility with Meta.
-const resolvedVideoUrl = resolveMediaUrl(post.videoUrl); 
-const rawMediaUrls = Array.isArray(post.mediaUrls) ? post.mediaUrls : [];
-const igMediaUrls = rawMediaUrls.map((url:string) => resolveMediaUrl(url));
+    // 1. Resolve and validate media URLs using standardized utility
+    // This handles local file transformation, Google Drive proxying, and absolute URL conversion.
+    const rawMediaUrls = Array.isArray(post.mediaUrls) ? post.mediaUrls : [];
+    const validatedMedia = rawMediaUrls.map((url: string) => validateMediaUrl(url));
+    const igMediaUrls = validatedMedia.filter((v:any) => v.valid).map((v:any) => v.url);
+    
+    const validatedVideo = post.videoUrl ? validateMediaUrl(post.videoUrl) : null;
+    const resolvedVideoUrl = validatedVideo?.url || "";
 
-// 2. Ensure mediaToUse ONLY contains these resolved URLs
-const isReel = !!(post.metadata as any)?.isReel;
+    // 2. Determine media to use
+    const isReel = !!(post.metadata as any)?.isReel;
+    const mediaToUse = isReel 
+        ? resolvedVideoUrl 
+        : (igMediaUrls.length > 1 ? igMediaUrls : (igMediaUrls[0] || resolvedVideoUrl));
 
-// FORCE the use of the resolved (Proxy) URL here
-const mediaToUse = isReel 
-    ? resolvedVideoUrl // This MUST be the https://campzeo.com/... link
-    : (igMediaUrls.length > 1 ? igMediaUrls : (igMediaUrls[0] || resolvedVideoUrl));
-
-// 3. Debug check (High visibility for terminal debugging)
-console.log(`\n==================================================`);
-console.log(`[Instagram] PLATFORM POST INITIATED`);
-console.log(`[Instagram] BASE APP URL:`, process.env.NEXT_PUBLIC_APP_URL);
-console.log(`[Instagram] FINAL MEDIA TO USE:`, mediaToUse);
+    // 3. Debug check
+    console.log(`\n==================================================`);
+    console.log(`[Instagram] PLATFORM POST INITIATED`);
+    console.log(`[Instagram] FINAL MEDIA TO USE:`, mediaToUse);
 
     if (!mediaToUse || (Array.isArray(mediaToUse) && mediaToUse.length === 0)) {
         throw new Error('Media is required for Instagram posts. Please upload an image or video.');

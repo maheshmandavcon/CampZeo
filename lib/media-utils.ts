@@ -182,7 +182,7 @@ export function getMediaPreviewUrl(url: string): string {
 export function getSocialMediaUrl(url: string): string {
     if (!url) return '';
 
-    // Transform Google Drive links to optimized CDN links for social media
+    // Transform Google Drive links to optimized CDN links or internal proxies for social media
     if (isGoogleDriveUrl(url)) {
         try {
             const id = extractGoogleDriveId(url);
@@ -190,12 +190,20 @@ export function getSocialMediaUrl(url: string): string {
             const file = urlObj.searchParams.get('file') || 
                          urlObj.searchParams.get('filename') || 
                          urlObj.searchParams.get('name') || 
-                         (urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : 'media.jpg');
+                         (urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : 'media');
             
-            // Only use lh3 for images, as it's an image-optimized CDN
-            if (id && isImageUrl(file)) {
-                // Return optimized URL without fragment for Meta crawler compliance
-                return `https://lh3.googleusercontent.com/d/${id}=w1000`;
+            if (id) {
+                // Determine if it's definitely an image based on the file hint (if available)
+                const isDefinitelyImage = isImageUrl(file);
+                
+                // For confirmed images, use the lh3 CDN (optimized, faster)
+                if (isDefinitelyImage) {
+                    return `https://lh3.googleusercontent.com/d/${id}=w1000`;
+                }
+                
+                // For videos OR unknown types, use our internal proxy.
+                // This is safer because the proxy handles any file type via the Drive API.
+                return getPublicMediaUrl(`/api/upload/google-drive/view?id=${id}`);
             }
         } catch (e) {
             console.warn('[MediaUtils] Failed to transform Drive URL:', e);

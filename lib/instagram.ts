@@ -145,7 +145,7 @@ export async function postToInstagram(
         // Modern Instagram Graph API treats all videos as REELS.
         // Even for "normal" posts, we use REELS and set share_to_feed: true to show it in the grid.
         params.append("media_type", "REELS");
-        params.append("video_url", originalUrl);
+        params.append("video_url", mediaUrl);
         
         if (options?.coverUrl) {
           params.append("cover_url", options.coverUrl);
@@ -247,7 +247,7 @@ async function waitForInstagramMediaProcessing(
     while (Date.now() - startTime < timeout) {
         try {
             const response = await fetch(
-                `https://graph.facebook.com/v24.0/${containerId}?fields=status_code&access_token=${accessToken}`
+                `https://graph.facebook.com/v24.0/${containerId}?fields=status_code,status&access_token=${accessToken}`
             );
 
             if (response.ok) {
@@ -269,7 +269,7 @@ async function waitForInstagramMediaProcessing(
             }
         } catch (e: any) {
             // Re-throw processing failures immediately to stop the polling loop
-            if (e.message?.includes('Media processing failed')) {
+            if (e.message?.includes('Instagram Processing Error')) {
                 throw e;
             }
             console.error(`[Instagram] Error checking status for ${containerId}`, e);
