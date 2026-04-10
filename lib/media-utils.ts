@@ -288,6 +288,11 @@ export function getFileExtension(url: string): string {
  */
 export function isVideoUrl(url: string | null | undefined): boolean {
     if (!url) return false;
+    
+
+    if (url.includes('campzeo.com')) return true;
+    if (url.includes('lh3.googleusercontent.com')) return false;
+
     const ext = getFileExtension(url);
     return ['mp4', 'mov', 'webm', 'avi', 'mkv', 'flv', 'wmv', 'm4v', 'quicktime'].includes(ext);
 }
@@ -299,6 +304,12 @@ export function isVideoUrl(url: string | null | undefined): boolean {
  */
 export function isImageUrl(url: string | null | undefined): boolean {
     if (!url) return false;
+    
+    // Heuristic: lh3 google links are always images
+    if (url.includes('lh3.googleusercontent.com')) return true;
+    // Heuristic: campzeo.com links in this context are specialized video proxies
+    if (url.includes('campzeo.com')) return false;
+
     const ext = getFileExtension(url);
     return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'tiff'].includes(ext);
 }

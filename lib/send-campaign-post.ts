@@ -420,11 +420,16 @@ export async function sendCampaignPost(
     const validatedVideo = post.videoUrl ? validateMediaUrl(post.videoUrl) : null;
     const resolvedVideoUrl = validatedVideo?.url || "";
 
-    // 2. Determine media to use
+    // 2. Consolidate ALL media to detect carousels (e.g. 1 image + 1 video)
+    const allMedia = [...igMediaUrls];
+    if (resolvedVideoUrl && !allMedia.includes(resolvedVideoUrl)) {
+        allMedia.push(resolvedVideoUrl);
+    }
+
     const isReel = !!(post.metadata as any)?.isReel;
     const mediaToUse = isReel 
         ? resolvedVideoUrl 
-        : (igMediaUrls.length > 1 ? igMediaUrls : (igMediaUrls[0] || resolvedVideoUrl));
+        : (allMedia.length > 1 ? allMedia : (allMedia[0] || resolvedVideoUrl));
 
     // 3. Debug check
     console.log(`\n==================================================`);

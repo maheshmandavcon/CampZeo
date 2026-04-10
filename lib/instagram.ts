@@ -1,5 +1,6 @@
 // BUG 1 FIX: Removed unused `prisma` import — it was imported but never used in this file.
 import { validateMediaUrl, isVideoUrl } from './media-utils';
+import { Buffer } from 'buffer';
 
 interface InstagramCredentials {
     accessToken: string;
@@ -54,39 +55,39 @@ export async function postToInstagram(
         const validation = validateMediaUrl(originalUrl);
         const mediaUrl = validation.url;
 
-        console.log(`[Instagram] Carousel item: ${mediaUrl} | isVideo: ${isVideo}`);
-
-        const params = new URLSearchParams({
+        console.log(`[IG_DEBUG] Creating carousel child: ${mediaUrl} | isVideo: ${isVideo}`);
+        
+        const childParams = new URLSearchParams({
           access_token: accessToken,
           is_carousel_item: "true",
-          // For carousel items, VIDEO and IMAGE are valid and documented
-          media_type: isVideo ? "VIDEO" : "IMAGE",
         });
-
+        
         if (isVideo) {
-          params.append("video_url", mediaUrl);
+          childParams.append("media_type", "VIDEO");
+        }
+
+        let childId = '';
+        if (isVideo) {
+          childId = await performResumableInstagramVideoUpload(credentials, mediaUrl, childParams);
         } else {
-          params.append("image_url", mediaUrl);
-        }
-
-        console.log(`[IG_DEBUG] Creating carousel child: ${mediaUrl} | isVideo: ${isVideo}`);
-        const res = await fetch(
-          `${baseUrl}/${userId}/media`,
-          { method: "POST", body: params }
-        );
-
-        if (!res.ok) {
-          const err = await res.json();
-          console.error(`[IG_DEBUG] Carousel Child Failed:`, JSON.stringify(err, null, 2));
-          throw new Error(
-            `Carousel child creation failed: ${JSON.stringify(err)}`
+          childParams.append("image_url", originalUrl);
+          const res = await fetch(
+            `${baseUrl}/${userId}/media`,
+            { method: "POST", body: childParams }
           );
+
+          if (!res.ok) {
+            const err = await res.json();
+            console.error(`[IG_DEBUG] Carousel Child Failed:`, JSON.stringify(err, null, 2));
+            throw new Error(`Carousel child creation failed: ${JSON.stringify(err)}`);
+          }
+
+          const data = await res.json();
+          childId = data.id;
         }
 
-        const data = await res.json();
-        childIds.push(data.id);
-
-        await waitForInstagramMediaProcessing(data.id, accessToken);
+        childIds.push(childId);
+        await waitForInstagramMediaProcessing(childId, accessToken);
       }
 
       // Create carousel container
@@ -136,59 +137,59 @@ export async function postToInstagram(
 
       console.log(`[Instagram] Posting single item. Original: ${originalUrl} | Public: ${mediaUrl} | isVideo: ${isVideo}`);
 
-      const params = new URLSearchParams({
+      const mediaParams = new URLSearchParams({
         access_token: accessToken,
         caption: caption || "",
       });
 
-      console.log(`[IG_DEBUG] FINAL URL SENT TO META: ${mediaUrl}`);
-
-      if (isVideo) {
-        // Modern Instagram Graph API treats all videos as REELS.
-        // Even for "normal" posts, we use REELS and set share_to_feed: true to show it in the grid.
-        params.append("media_type", "REELS");
-        params.append("video_url", mediaUrl);
-        
-        if (options?.coverUrl) {
-          params.append("cover_url", options.coverUrl);
-        }
-
-        // share_to_feed defaults to false for Reels; we enable it to ensure it appears in the Main Grid.
-        if (options?.shareToFeed !== false) {
-          params.append("share_to_feed", "true");
-        }
-      } else {
-        // For single IMAGE posts, media_type should be OMITTED as per Meta Docs example
-        params.append("image_url", mediaUrl);
-      }
-
       if (options?.scheduledPublishTime) {
-        params.append("publish", "false");
-        params.append(
+        mediaParams.append("publish", "false");
+        mediaParams.append(
           "scheduled_publish_time",
           options.scheduledPublishTime.toString()
         );
       }
 
-      console.log(`[IG_DEBUG] Request: POST ${baseUrl}/${userId}/media`);
-      console.log(`[IG_DEBUG] Params:`, Object.fromEntries(params.entries()));
+      console.log(`[IG_DEBUG] FINAL URL SENT TO META: ${mediaUrl}`);
 
-      const res = await fetch(
-        `${baseUrl}/${userId}/media`,
-        { method: "POST", body: params }
-      );
+      if (isVideo) {
+        // Use REELS for single videos by default (to ensure full-screen Reels presence)
+        // unless isVideo is false or it's a carousel child.
+        mediaParams.append("media_type", options?.isReel !== false ? "REELS" : "VIDEO");
+        
+        if (options?.coverUrl) {
+          mediaParams.append("cover_url", options.coverUrl);
+        }
 
-      if (!res.ok) {
-        const err = await res.json();
-        console.error(`[IG_DEBUG] Single Media Creation Failed:`, JSON.stringify(err, null, 2));
-        throw new Error(
-          `Media container creation failed: ${JSON.stringify(err)}`
-        );
+        // share_to_feed defaults to false for Reels; we enable it to ensure it appears in the Main Grid.
+        if (options?.shareToFeed !== false) {
+          mediaParams.append("share_to_feed", "true");
+        }
+
+        console.log(`[IG_DEBUG] Using Resumable Upload Flow for ${options?.isReel !== false ? "Reel" : "Video"}`);
+        creationId = await performResumableInstagramVideoUpload(credentials, mediaUrl, mediaParams);
+      } else {
+        // Use original URL for images as requested
+        mediaParams.append("image_url", originalUrl);
+        
+        console.log(`[IG_DEBUG] Request: POST ${baseUrl}/${userId}/media`);
+        const response = await fetch(`${baseUrl}/${userId}/media`, {
+          method: "POST",
+          body: mediaParams,
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          console.error(`[IG_DEBUG] Single Media Creation Failed:`, JSON.stringify(err, null, 2));
+          throw new Error(`Instagram media creation failed: ${JSON.stringify(err)}`);
+        }
+
+        const data = await response.json();
+        creationId = data.id;
+        console.log(`[IG_DEBUG] Container Created. ID: ${creationId}`);
       }
 
-      const data = await res.json();
-      console.log(`[IG_DEBUG] Single Media Container Created: ${data.id}`);
-      creationId = data.id;
+      console.log(`[IG_DEBUG] Single Media Container Created: ${creationId}`);
 
       if (isVideo) {
         await waitForInstagramMediaProcessing(creationId, accessToken);
@@ -234,6 +235,78 @@ export async function postToInstagram(
     console.error("[Instagram] Post failed:", error);
     throw error;
   }
+}
+
+async function performResumableInstagramVideoUpload(
+  credentials: InstagramCredentials,
+  mediaUrl: string,
+  initParams: URLSearchParams
+): Promise<string> {
+  const { accessToken, userId } = credentials;
+  const baseUrl = getBaseUrl(credentials);
+
+  console.log(`[Instagram] Initializing Resumable Upload for: ${mediaUrl}`);
+  initParams.set("upload_type", "resumable");
+  const initUrl = `${baseUrl}/${userId}/media?${initParams.toString()}`;
+  
+  console.log(`[IG_DEBUG] Initializing Resumable Session: POST ${initUrl.replace(accessToken, '***')}`);
+  const initRes = await fetch(initUrl, { method: "POST" });
+ 
+  if (!initRes.ok) {
+    const err = await initRes.json();
+    console.error(`[IG_DEBUG] Resumable Init Failed:`, JSON.stringify(err, null, 2));
+    throw new Error(`Resumable upload initialization failed: ${JSON.stringify(err)}`);
+  }
+
+  const { id, uri } = await initRes.json();
+  console.log(`[IG_DEBUG] Resumable Session Created. ID: ${id} | URI: ${uri}`);
+
+  const sourceRes = await fetch(mediaUrl, {
+    headers: { 'Accept-Encoding': 'identity' }
+  });
+  if (!sourceRes.ok) {
+    throw new Error(`Failed to fetch source video from ${mediaUrl}: ${sourceRes.statusText}`);
+  }
+
+  const videoBuffer = Buffer.from(await sourceRes.arrayBuffer());
+
+  const size = videoBuffer.length.toString();
+
+  const startBytes = videoBuffer.slice(0, 32).toString('hex');
+  const startText = videoBuffer.slice(0, 32).toString('utf-8');
+  console.log(`[IG_DEBUG] Binary Fetch Complete. Size: ${size} bytes | Hex(0-32): ${startBytes}`);
+
+  if (startText.toLowerCase().includes('<!doctype html') || startText.toLowerCase().includes('<html')) {
+    console.error(`[IG_DEBUG] RECEIVED HTML INSTEAD OF VIDEO BINARY! Content starts with: ${startText}`);
+    throw new Error('Google Drive proxy returned an HTML page (possibly a login or error page) instead of the video binary. Check if the file is public or the SERVICE_ACCOUNT_KEY is correct.');
+  }
+
+  if (videoBuffer.length < 100) {
+    console.error(`[IG_DEBUG] Video buffer suspiciously small: ${videoBuffer.length} bytes`);
+  }
+
+  const uploadRes = await fetch(uri, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Offset": "0",
+      "file_size": size,
+      "X-Entity-Length": size,
+      "X-Entity-Name": `sh_${Date.now()}.mp4`, 
+      "X-Entity-Type": "video/mp4",
+      "Content-Type": "application/octet-stream",
+    },
+    body: videoBuffer,
+  });
+
+  if (!uploadRes.ok) {
+    const err = await uploadRes.json();
+    console.error(`[IG_DEBUG] Resumable Upload Failed:`, JSON.stringify(err, null, 2));
+    throw new Error(`Resumable binary upload failed: ${JSON.stringify(err)}`);
+  }
+
+  console.log(`[IG_DEBUG] Resumable Upload Successful for ID: ${id}`);
+  return id;
 }
 
 async function waitForInstagramMediaProcessing(
