@@ -72,39 +72,38 @@ export async function GET(req: Request) {
 
     console.log(`[Proxy Log] Serving file: ${fileName} (${mimeType}) | Status: ${res.status} | Size: ${metadata.data.size} | Range: ${incomingRange || 'None'}`);
 
-    const headers = new Headers({
+    // Create a vanilla headers object to avoid any Next.js/Clerk defaults
+    const finalHeaders: Record<string, string> = {
       'Content-Type': mimeType,
+      'Accept-Ranges': 'bytes',
+      'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'public, max-age=31536000, immutable',
       'Content-Disposition': `inline; filename="${fileName}"`,
-      'Accept-Ranges': 'bytes',
       'X-Content-Type-Options': 'nosniff',
-      'Access-Control-Allow-Origin': '*',
-    });
+    };
 
     // CRITICAL: Meta's video ingestion crawler requires an accurate Content-Length.
-    // We prioritize the size from metadata to ensure accuracy.
     const metadataSize = metadata.data.size ? parseInt(metadata.data.size) : null;
     const resContentLength = res.headers.get('content-length');
     
     let finalContentLength = resContentLength;
 
     if (incomingRange && res.status === 206) {
-        // For range requests, use the length returned by the binary fetch
         finalContentLength = resContentLength;
         const contentRange = res.headers.get('content-range');
-        if (contentRange) headers.set('Content-Range', contentRange);
+        if (contentRange) finalHeaders['Content-Range'] = contentRange;
     } else if (metadataSize) {
-        // For full requests, ensure we send the total size from metadata
         finalContentLength = metadataSize.toString();
     }
 
     if (finalContentLength) {
-        headers.set('Content-Length', finalContentLength);
+        finalHeaders['Content-Length'] = finalContentLength;
     }
 
-    return new NextResponse(res.body, {
-      status: res.status, // Return 200 or 206 based on Google's response
-      headers: headers,
+    // Use native Response instead of NextResponse to avoid extra Next.js headers/logic
+    return new Response(res.body, {
+      status: res.status,
+      headers: finalHeaders,
     });
   } catch (error: any) {
     console.error('Proxy View Error:', error);
@@ -120,6 +119,6 @@ export async function GET(req: Request) {
       });
     } catch (ignore) {}
 
-    return new NextResponse('Error fetching file from Google Drive', { status: 500 });
+    return new Response('Error fetching file from Google Drive', { status: 500 });
   }
 }
