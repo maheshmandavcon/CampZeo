@@ -25,6 +25,7 @@ const isApiRoute = createRouteMatcher([
 const isPublicApiRoute = createRouteMatcher([
     "/api/enquiries",
     "/api/webhooks/(.*)",
+    "/api/upload/google-drive/view(.*)",
 ]);
 
 /**
@@ -52,67 +53,60 @@ function validateApiKey(request: NextRequest): boolean {
     return result === 0;
 }
 
-// Make the function handling the middleware async
-export default clerkMiddleware(async (auth, req) => {
-    const request = req as NextRequest;
- const { pathname } = request.nextUrl;
+// Define routes that should completely bypass Clerk (to avoid extra headers)
+const isBypassRoute = createRouteMatcher([
+    "/api/upload/google-drive/view(.*)",
+]);
 
-    // 1. EXPLICITLY ALLOW SEO FILES
-    if (pathname === '/robots.txt' || pathname === '/sitemap.xml') {
+/**
+ * Main middleware function
+ * We handle bypass routes first to ensure they don't get stamped with Clerk headers
+ */
+export default async function middleware(req: NextRequest, event: any) {
+    if (isBypassRoute(req)) {
         return NextResponse.next();
     }
 
-    // Allow public API routes without any authentication
-    if (isPublicApiRoute(request)) {
-        return NextResponse.next();
-    }
+    // Wrap the rest of the logic in clerkMiddleware
+    return clerkMiddleware(async (auth, req) => {
+        const request = req as NextRequest;
+        const { pathname } = request.nextUrl;
 
-    // Check for X-API-Key authentication on API routes (for mobile apps)
-    if (isApiRoute(request)) {
-        const apiKey = request.headers.get('x-api-key');
-
-        if (apiKey) {
-            // Mobile app is trying to authenticate with API key
-            if (validateApiKey(request)) {
-                // Valid API key - allow the request
-                // Note: The API route should still validate the user from the request body/params
-                console.log('[Middleware] Valid X-API-Key - Mobile app authenticated');
-                return NextResponse.next();
-            } else {
-                // Invalid API key
-                console.log('[Middleware] Invalid X-API-Key provided');
-                return NextResponse.json(
-                    { error: 'Invalid API key' },
-                    { status: 401 }
-                );
-            }
+        // 1. EXPLICITLY ALLOW SEO FILES
+        if (pathname === '/robots.txt' || pathname === '/sitemap.xml') {
+            return NextResponse.next();
         }
-        // No API key provided - fall through to Clerk auth
-    }
 
-    // If the request matches a protected route, protect it with Clerk
-    if (isProtectedRoute(request)) {
-        // Use auth.protect() directly as a method
-        await auth.protect();
+        // Allow public API routes
+        if (isPublicApiRoute(request)) {
+            return NextResponse.next();
+        }
 
-        // Check if this is an organization route and if admin is impersonating
-        if (isOrganisationRoute(request)) {
-            // Check for admin impersonation cookie
-            const adminImpersonation = request.cookies.get('admin_impersonation');
-
-            if (adminImpersonation?.value) {
-                // Admin is impersonating - allow access to organization routes
-                // The cookie will be cleared when the admin signs out or after expiry
-                console.log('Admin impersonation detected - allowing organization access');
+        // 2. API Key Authentication (Mobile)
+        if (isApiRoute(request)) {
+            const apiKey = request.headers.get('x-api-key');
+            if (apiKey && validateApiKey(request)) {
                 return NextResponse.next();
             }
         }
-    }
-});
+
+        // 3. Clerk Protected Routes
+        if (isProtectedRoute(request)) {
+            await auth.protect();
+
+            if (isOrganisationRoute(request)) {
+                const adminImpersonation = request.cookies.get('admin_impersonation');
+                if (adminImpersonation?.value) {
+                    return NextResponse.next();
+                }
+            }
+        }
+    })(req, event);
+}
 
 export const config = {
     matcher: [
-        // Skip Next.js internals and all static files, unless found in search params
+        // Skip Next.js internals and all static files
         '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
         // Always run for API routes
         '/(api|trpc)(.*)',

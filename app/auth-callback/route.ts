@@ -166,6 +166,7 @@ export async function GET(request: NextRequest) {
             const data = await res.json();
             if (data.error) throw new Error(data.error_description);
             accessToken = data.access_token;
+
             expiresIn = data.expires_in;
         } else if (platform === "YOUTUBE") {
             const tokenUrl = "https://oauth2.googleapis.com/token";
@@ -401,16 +402,26 @@ export async function GET(request: NextRequest) {
             }
         } else if (platform === "LINKEDIN") {
             updateData.linkedInAccessToken = accessToken;
-            // LinkedIn tokens are usually 60 days
-
-            // Fetch LinkedIn Member ID (URN)
             try {
-                const profileRes = await fetch("https://api.linkedin.com/v2/me", {
+                const userInfoRes = await fetch("https://api.linkedin.com/v2/userinfo", {
                     headers: { Authorization: `Bearer ${accessToken}` },
                 });
-                const profileData = await profileRes.json();
-                if (profileData.id) {
-                    updateData.linkedInAuthUrn = profileData.id;
+                
+                if (userInfoRes.ok) {
+                    const userInfo = await userInfoRes.json();
+                    if (userInfo.sub) {
+                        updateData.linkedInAuthUrn = `urn:li:person:${userInfo.sub}`;
+                        console.log(`[LinkedIn] Successfully resolved Member ID via userinfo: ${userInfo.sub}`);
+                    }
+                } else {
+                    console.warn("[LinkedIn] OIDC userinfo failed, falling back to legacy /v2/me...");
+                    const profileRes = await fetch("https://api.linkedin.com/v2/me", {
+                        headers: { Authorization: `Bearer ${accessToken}` },
+                    });
+                    const profileData = await profileRes.json();
+                    if (profileData.id) {
+                        updateData.linkedInAuthUrn = `urn:li:person:${profileData.id}`;
+                    }
                 }
             } catch (e) {
                 console.error("Failed to fetch LinkedIn Profile", e);

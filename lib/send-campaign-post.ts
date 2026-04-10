@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { del } from '@vercel/blob';
-import { isVideoUrl } from '@/lib/media-utils';
+import { isVideoUrl, validateMediaUrl } from '@/lib/media-utils';
 import { sendCampaignEmail } from '@/lib/email';
 import { postToLinkedIn, getLinkedInPostInsights } from '@/lib/linkedin';
 import { postToFacebook, getFacebookPostInsights } from '@/lib/facebook';
@@ -398,113 +398,121 @@ export async function sendCampaignPost(
             }
 
             // Instagram
-            if (post.type === 'INSTAGRAM') {
-                const metadata = (post.metadata || {}) as any;
-                const igToken = metadata?.facebookPageAccessToken || dbUser.instagramAccessToken;
-                const igUserId = metadata?.instagramBusinessId || dbUser.instagramUserId;
+           if (post.type === 'INSTAGRAM') {
+    const metadata = (post.metadata || {}) as any;
+    const igToken = metadata?.facebookPageAccessToken || dbUser.instagramAccessToken;
+    const igUserId = metadata?.instagramBusinessId || dbUser.instagramUserId;
 
-                if (!igToken || !igUserId) {
-                    throw new Error('Instagram credentials not found or expired. Please reconnect your account.');
-                }
+    if (!igToken || !igUserId) {
+        throw new Error('Instagram credentials not found or expired. Please reconnect your account.');
+    }
 
-                if (igUserId === 'no-business-account') {
-                    throw new Error('No Instagram Business Account found');
-                }
+    if (igUserId === 'no-business-account') {
+        throw new Error('No Instagram Business Account found');
+    }
 
-                // Consolidate all media for Instagram Carousel support
-                const igMediaUrls = Array.isArray(post.mediaUrls) ? post.mediaUrls : [];
-                const allIgMedia = [...igMediaUrls];
-                if (post.videoUrl && !allIgMedia.includes(post.videoUrl)) {
-                    allIgMedia.push(post.videoUrl);
-                }
+    // 1. Resolve and validate media URLs using standardized utility
+    // This handles local file transformation, Google Drive proxying, and absolute URL conversion.
+    const rawMediaUrls = Array.isArray(post.mediaUrls) ? post.mediaUrls : [];
+    const validatedMedia = rawMediaUrls.map((url: string) => validateMediaUrl(url));
+    const igMediaUrls = validatedMedia.filter((v:any) => v.valid).map((v:any) => v.url);
+    
+    const validatedVideo = post.videoUrl ? validateMediaUrl(post.videoUrl) : null;
+    const resolvedVideoUrl = validatedVideo?.url || "";
 
-                const isReel = !!(post.metadata as any)?.isReel;
-                const mediaToUse = isReel ? (post.videoUrl || allIgMedia[0]) : (allIgMedia.length > 1 ? allIgMedia : (allIgMedia[0] || post.videoUrl));
+    // 2. Consolidate ALL media to detect carousels (e.g. 1 image + 1 video)
+    const allMedia = [...igMediaUrls];
+    if (resolvedVideoUrl && !allMedia.includes(resolvedVideoUrl)) {
+        allMedia.push(resolvedVideoUrl);
+    }
 
-                if (!mediaToUse || (Array.isArray(mediaToUse) && mediaToUse.length === 0)) {
-                    throw new Error('Media is required for Instagram posts. Please upload an image or video.');
-                }
+    const isReel = !!(post.metadata as any)?.isReel;
+    const mediaToUse = isReel 
+        ? resolvedVideoUrl 
+        : (allMedia.length > 1 ? allMedia : (allMedia[0] || resolvedVideoUrl));
 
-                // If using videoUrl logic or isReel is set, treat as video
-                const isVideoContent = (!post.mediaUrls.length && !!post.videoUrl) || (post.metadata as any)?.isReel;
+    // 3. Debug check
+    console.log(`\n==================================================`);
+    console.log(`[Instagram] PLATFORM POST INITIATED`);
+    console.log(`[Instagram] FINAL MEDIA TO USE:`, mediaToUse);
 
-                // If forceSchedule is true and there is no scheduledPostTime, default to 1 day from now
-                let scheduledTime = options?.publishNow ? null : post.scheduledPostTime;
-                if (options?.forceSchedule && !scheduledTime) {
-                    scheduledTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
-                }
+    if (!mediaToUse || (Array.isArray(mediaToUse) && mediaToUse.length === 0)) {
+        throw new Error('Media is required for Instagram posts. Please upload an image or video.');
+    }
 
-                let platformResponse;
-                try {
-                    platformResponse = await postToInstagram(
-                        {
-                            accessToken: igToken!,
-                            userId: igUserId!,
-                            connectionType: dbUser.instagramConnectionType as 'FACEBOOK' | 'DIRECT' | undefined,
-                        },
-                        post.message || post.subject || "",
-                        mediaToUse, // Pass the full array or string
-                        {
-                            isReel: (post.metadata as any)?.isReel,
-                            coverUrl: (post.metadata as any)?.thumbnailUrl,
-                            shareToFeed: true,
-                            isVideo: isVideoContent,
-                            scheduledPublishTime: (scheduledTime && scheduledTime.getTime() > Date.now() + 960000) ? Math.floor(scheduledTime.getTime() / 1000) : undefined
-                        }
-                    );
-                } catch (igError: any) {
-                    // Normalize error message if it's an object or contains JSON
-                    let errorMsg = igError instanceof Error ? igError.message : String(igError);
+    const isVideoContent = isReel || isVideoUrl(post.videoUrl) || rawMediaUrls.some((url: string) => isVideoUrl(url));
 
-                    // If the error message contains a JSON block (common from lib/instagram.ts), extract it
-                    if (errorMsg.includes('{') && errorMsg.includes('}')) {
-                        try {
-                            const jsonContent = errorMsg.substring(errorMsg.indexOf('{'), errorMsg.lastIndexOf('}') + 1);
-                            const parsed = JSON.parse(jsonContent);
-                            errorMsg = parsed.error?.message || parsed.message || errorMsg;
-                        } catch (e) {
-                            // If parsing fails, stick with the original message
-                        }
-                    }
+    let scheduledTime = options?.publishNow ? null : post.scheduledPostTime;
+    if (options?.forceSchedule && !scheduledTime) {
+        scheduledTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    }
 
-                    console.error('[Instagram] Post failed:', errorMsg);
-                    throw new Error(errorMsg); // Re-throw to be caught by main handler
-                }
+    let platformResponse;
+    try {
+        platformResponse = await postToInstagram(
+            {
+                accessToken: igToken!,
+                userId: igUserId!,
+                connectionType: dbUser.instagramConnectionType as 'FACEBOOK' | 'DIRECT' | undefined,
+            },
+            post.message || post.subject || "",
+            mediaToUse, 
+            {
+                isReel: isReel,
+                coverUrl: (post.metadata as any)?.thumbnailUrl,
+                shareToFeed: true,
+                isVideo: isVideoContent,
+                scheduledPublishTime: (scheduledTime && scheduledTime.getTime() > Date.now() + 960000) ? Math.floor(scheduledTime.getTime() / 1000) : undefined
+            }
+        );
+    } catch (igError: any) {
+        let errorMsg = igError instanceof Error ? igError.message : String(igError);
+        if (errorMsg.includes('{') && errorMsg.includes('}')) {
+            try {
+                const jsonContent = errorMsg.substring(errorMsg.indexOf('{'), errorMsg.lastIndexOf('}') + 1);
+                const parsed = JSON.parse(jsonContent);
+                errorMsg = parsed.error?.message || parsed.message || errorMsg;
+            } catch (e) {}
+        }
+        console.error('[Instagram] Post failed:', errorMsg);
+        throw new Error(errorMsg);
+    }
 
-                let finalMediaUrls = post.mediaUrls;
-                let finalVideoUrl = post.videoUrl;
-                let finalLiveLink = post.liveLink;
-                try {
-                    const insights = await getInstagramPostInsights(platformResponse.id, igToken!);
-                    if (insights.media_url) {
-                        if ((post.metadata as any)?.isReel) finalVideoUrl = insights.media_url;
-                        else finalMediaUrls = [insights.media_url];
-                    }
-                    if (insights.permalink) finalLiveLink = insights.permalink;
-                } catch (e) {
-                    console.warn('[Instagram] Failed to fetch final URLs:', e);
-                }
+    let finalMediaUrls = igMediaUrls; // Use our resolved URLs
+    let finalVideoUrl = resolvedVideoUrl;
+    let finalLiveLink = post.liveLink;
+    console.error('[Instagram] video url:', resolvedVideoUrl)
+    try {
+        const insights = await getInstagramPostInsights(platformResponse.id, igToken!);
+        if (insights.media_url) {
+            if (isReel) finalVideoUrl = insights.media_url;
+            else finalMediaUrls = [insights.media_url];
+        }
+        if (insights.permalink) finalLiveLink = insights.permalink;
+    } catch (e) {
+        console.warn('[Instagram] Failed to fetch final URLs:', e);
+    }
 
-                const isIgPlatformScheduled = !!(scheduledTime && (scheduledTime instanceof Date ? scheduledTime.getTime() : new Date(scheduledTime).getTime()) > Date.now() + 960000);
-                const igIsScheduledTx = !!(options?.forceSchedule || (isIgPlatformScheduled && !options?.publishNow));
-                const igScheduledTimeTx = options?.publishNow ? null : (scheduledTime || post.scheduledPostTime || null);
+    const isIgPlatformScheduled = !!(scheduledTime && (scheduledTime instanceof Date ? scheduledTime.getTime() : new Date(scheduledTime).getTime()) > Date.now() + 960000);
+    const igIsScheduledTx = !!(options?.forceSchedule || (isIgPlatformScheduled && !options?.publishNow));
+    const igScheduledTimeTx = options?.publishNow ? null : (scheduledTime || post.scheduledPostTime || null);
 
-                await prisma.campaignPost.update({
-                    where: { id: post.id },
-                    data: {
-                        isPostSent: true,
-                        publishedDate: igIsScheduledTx ? null : new Date(),
-                        status: igIsScheduledTx ? 'SCHEDULED' : 'PUBLISHED',
-                        mediaUrls: finalMediaUrls,
-                        videoUrl: finalVideoUrl,
-                        liveLink: finalLiveLink,
-                        metadata: {
-                            ...(post.metadata || {}),
-                            facebookPostId: platformResponse.id,
-                            facebookPageId: dbUser.facebookPageId
-                        }
-                    }
-                });
+    await prisma.campaignPost.update({
+        where: { id: post.id },
+        data: {
+            isPostSent: true,
+            publishedDate: igIsScheduledTx ? null : new Date(),
+            status: igIsScheduledTx ? 'SCHEDULED' : 'PUBLISHED',
+            mediaUrls: finalMediaUrls,
+            videoUrl: finalVideoUrl,
+            liveLink: finalLiveLink,
+            metadata: {
+                ...(post.metadata || {}),
+                facebookPostId: platformResponse.id,
+                facebookPageId: dbUser.facebookPageId
+            }
+        }
+    });
 
                 // Determine post type based on media count and type
                 const mediaCount = finalMediaUrls.length;

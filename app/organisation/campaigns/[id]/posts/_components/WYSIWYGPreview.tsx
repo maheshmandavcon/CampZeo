@@ -133,13 +133,13 @@ export function WYSIWYGPreview({
                             playsInline
                         />
                     ) : isImg ? (
-                        <Image
-                            src={previewUrl}
-                            alt="Preview"
-                            fill
-                            className="object-fill"
-                            unoptimized
-                        />
+                                <Image
+                                    src={previewUrl}
+                                    alt="Preview"
+                                    fill
+                                    className="object-cover"
+                                    unoptimized
+                                />
                     ) : (
                         <div className="flex size-full flex-col items-center justify-center gap-2 bg-gray-50 p-4">
                             {getFileIcon(url)}
@@ -163,9 +163,19 @@ export function WYSIWYGPreview({
         // Platform specific layout logic
         if (platform === "INSTAGRAM" || platform === "PINTEREST") {
             const isInstagram = platform === "INSTAGRAM";
-            const containerClass = isInstagram
-                ? "relative aspect-square w-full overflow-hidden bg-black group"
-                : "relative aspect-[2/3] w-full overflow-hidden bg-black group rounded-2xl";
+            const isPinterest = platform === "PINTEREST";
+            
+            // Standard Instagram Feed usually allows 1:1 or 4:5.
+            // Reels MUST be 9:16.
+            let containerClass = "relative w-full overflow-hidden bg-black group";
+            
+            if (isReel) {
+                containerClass = cn(containerClass, "aspect-[9/16] rounded-2xl max-w-[340px] mx-auto shadow-2xl");
+            } else if (isInstagram) {
+                containerClass = cn(containerClass, "aspect-[4/5]");
+            } else if (isPinterest) {
+                containerClass = cn(containerClass, "aspect-[2/3] rounded-2xl");
+            }
 
             const nextSlide = () => {
                 setCurrentSlideIndex((prev) => (prev + 1) % mediaUrls.length);
@@ -420,6 +430,44 @@ export function WYSIWYGPreview({
                 );
 
             case "INSTAGRAM":
+                if (isReel) {
+                    return (
+                        <div className="rounded-2xl border bg-black shadow-2xl overflow-hidden h-[600px] relative max-w-[340px] mx-auto group">
+                            {renderMediaGallery()}
+                            
+                            {/* Reels Overlay */}
+                            <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/80 to-transparent space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="size-8 rounded-full border border-white/20 bg-zinc-800" />
+                                    <p className="font-semibold text-xs text-white">{userName.toLowerCase().replace(/\s/g, '')}</p>
+                                    <button className="h-6 px-3 rounded-md border border-white/50 text-[10px] font-bold text-white bg-transparent">Follow</button>
+                                </div>
+                                <div className="text-xs text-white line-clamp-2 pr-12">
+                                    {message || "Reels description..."}
+                                </div>
+                                <div className="flex items-center gap-1.5 text-[10px] text-zinc-300">
+                                    <Video className="size-3" />
+                                    <span>Original Audio</span>
+                                </div>
+                            </div>
+
+                            {/* Reels Sidebar */}
+                            <div className="absolute right-3 bottom-24 flex flex-col items-center gap-6 text-white">
+                                <div className="flex flex-col items-center gap-1">
+                                    <Heart className="size-8 stroke-[1.5]" />
+                                    <span className="text-[10px] font-medium">1.2k</span>
+                                </div>
+                                <div className="flex flex-col items-center gap-1">
+                                    <MessageCircle className="size-8 stroke-[1.5]" />
+                                    <span className="text-[10px] font-medium">84</span>
+                                </div>
+                                <Send className="size-8 stroke-[1.5]" />
+                                <MoreHorizontal className="size-6" />
+                            </div>
+                        </div>
+                    );
+                }
+
                 return (
                     <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
                         <div className="p-3">
@@ -454,6 +502,7 @@ export function WYSIWYGPreview({
 
                             <div className="text-sm">
                                 <span className="font-semibold text-gray-900 mr-2">{userName.toLowerCase().replace(/\s/g, '')}</span>
+                                {subject && <span className="font-bold mr-1">{subject}</span>}
                                 <span className="text-gray-900 whitespace-pre-wrap">{message || "Write a caption..."}</span>
                             </div>
                         </div>

@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     // 1. Initialize Auth
     const keyString = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '';
     const key = JSON.parse(keyString.startsWith("'") ? keyString.slice(1, -1) : keyString);
-    
+
     const auth = new google.auth.GoogleAuth({
       credentials: {
         client_email: key.client_email,
@@ -28,39 +28,97 @@ export async function GET(req: Request) {
 
     const drive = google.drive({ version: 'v3', auth });
 
-    // 2. Get Metadata to know the MimeType
+    // 2. Get Metadata to know the MimeType and exact File Size
     const metadata = await drive.files.get({
       fileId,
-      fields: 'mimeType, name',
+      fields: 'mimeType, name, size',
       supportsAllDrives: true,
     });
 
-    // 3. Fetch the actual file content using native fetch to get a Web Stream compatible with NextResponse
+    // 3. Fetch the actual file content 
+    // Forward the Range header to support video ingestion (Meta crawler needs this)
+    const incomingRange = req.headers.get('range');
     const client = await auth.getClient();
     const token = await client.getAccessToken();
-    
+
+    const googleHeaders: Record<string, string> = {
+      Authorization: `Bearer ${token.token}`
+    };
+    if (incomingRange) {
+      googleHeaders['Range'] = incomingRange;
+    }
+
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
-      headers: {
-        Authorization: `Bearer ${token.token}`
-      }
+      headers: googleHeaders
     });
 
-    if (!res.ok) {
+    if (!res.ok && res.status !== 206) {
       const text = await res.text();
       console.error('Failed to fetch from drive:', text);
       return new NextResponse('Error fetching media from Google Drive', { status: res.status });
     }
 
     // 4. Return the Web stream with the correct headers
-    return new NextResponse(res.body, {
-      headers: {
-        'Content-Type': metadata.data.mimeType || 'application/octet-stream',
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        'Content-Disposition': `inline; filename="${metadata.data.name}"`,
-      },
+    // Meta's video ingestion crawler requires Accept-Ranges, Content-Length, and often Content-Range
+    const fileName = metadata.data.name || 'media';
+    let mimeType = metadata.data.mimeType || 'application/octet-stream';
+
+    // Force video/mp4 for common video extensions if Google returns generic type
+    if (mimeType === 'application/octet-stream' || mimeType === 'video/x-matroska') {
+      if (fileName.toLowerCase().endsWith('.mp4')) mimeType = 'video/mp4';
+      else if (fileName.toLowerCase().endsWith('.mov')) mimeType = 'video/quicktime';
+      else if (fileName.toLowerCase().endsWith('.webm')) mimeType = 'video/webm';
+    }
+
+    console.log(`[Proxy Log] Serving file: ${fileName} (${mimeType}) | Status: ${res.status} | Size: ${metadata.data.size} | Range: ${incomingRange || 'None'}`);
+
+    // Create a vanilla headers object to avoid any Next.js/Clerk defaults
+    const finalHeaders: Record<string, string> = {
+      'Content-Type': mimeType,
+      'Accept-Ranges': 'bytes',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Content-Disposition': `inline; filename="${fileName}"`,
+      'X-Content-Type-Options': 'nosniff',
+    };
+
+    // CRITICAL: Meta's video ingestion crawler requires an accurate Content-Length.
+    const metadataSize = metadata.data.size ? parseInt(metadata.data.size) : null;
+    const resContentLength = res.headers.get('content-length');
+    
+    let finalContentLength = resContentLength;
+
+    if (incomingRange && res.status === 206) {
+        finalContentLength = resContentLength;
+        const contentRange = res.headers.get('content-range');
+        if (contentRange) finalHeaders['Content-Range'] = contentRange;
+    } else if (metadataSize) {
+        finalContentLength = metadataSize.toString();
+    }
+
+    if (finalContentLength) {
+        finalHeaders['Content-Length'] = finalContentLength;
+    }
+
+    // Use native Response instead of NextResponse to avoid extra Next.js headers/logic
+    return new Response(res.body, {
+      status: res.status,
+      headers: finalHeaders,
     });
   } catch (error: any) {
     console.error('Proxy View Error:', error);
-    return new NextResponse('Error fetching file from Google Drive', { status: 500 });
+    
+    try {
+      const { prisma } = await import('@/lib/prisma');
+      await prisma.logEvents.create({
+        data: {
+          message: `Proxy View Error: ${error.message || 'Unknown error'}`,
+          level: 'Error',
+          properties: JSON.stringify({ fileId, stack: error.stack })
+        }
+      });
+    } catch (ignore) {}
+
+    return new Response('Error fetching file from Google Drive', { status: 500 });
   }
 }
