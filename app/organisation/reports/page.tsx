@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Users, MapPin, Clock, Globe, BarChart3, TrendingUp, ThumbsUp, MessageSquare, Eye, AlertCircle, TrendingDown, Target, Zap, Archive, Activity, ChevronsLeft, ChevronsRight, LayoutList, LayoutGrid } from 'lucide-react';
 import { toast } from 'sonner';
+import { getMediaPreviewUrl } from '@/lib/media-utils';
 import {
     BarChart,
     Bar,
@@ -1199,7 +1200,7 @@ export default function ReportsPage() {
                                                                                 return (
                                                                                     <div className="w-full aspect-video bg-black relative overflow-hidden mt-2">
                                                                                         <video
-                                                                                            src={imageUrl}
+                                                                                            src={getMediaPreviewUrl(imageUrl)}
                                                                                             className="w-full h-full object-cover"
                                                                                             autoPlay
                                                                                             muted
@@ -1213,7 +1214,7 @@ export default function ReportsPage() {
                                                                             return (
                                                                                 <div className="w-full aspect-video bg-slate-100 relative overflow-hidden mt-2">
                                                                                     <img
-                                                                                        src={imageUrl}
+                                                                                        src={getMediaPreviewUrl(imageUrl)}
                                                                                         alt="Post Media"
                                                                                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                                                                         loading="lazy"
@@ -1447,7 +1448,7 @@ export default function ReportsPage() {
                                                         <div className="size-2 rounded-full bg-white group-hover:scale-150 transition-transform" />
                                                         <span className="text-[10px] font-bold uppercase tracking-widest text-white/70">{item.name}</span>
                                                     </div>
-                                                    <span className="text-xs font-black">{item.val || item.value?.toLocaleString()}</span>
+                                                    <span className="text-xs font-black">{item.val || item?.value.toLocaleString()}</span>
                                                 </div>
                                             ))}
                                             {selectedPostId && (

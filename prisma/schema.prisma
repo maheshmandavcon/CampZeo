@@ -360,6 +360,7 @@ model PostTransaction {
   metaAdSetId        String?
   metaCampaignId     String?
   metaPostId         String?
+  metadata           Json?
 }
 
 model LogEvents {

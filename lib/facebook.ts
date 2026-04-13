@@ -630,6 +630,7 @@ export interface FacebookPostInsights {
     message?: string;
     full_picture?: string;
     permalink_url?: string;
+    attachments?: any[];
 }
 
 export async function getFacebookPostInsights(
@@ -640,7 +641,7 @@ export async function getFacebookPostInsights(
         // 1. Get basic interaction counts (likes, reactions, comments) and metadata
         // We use both 'likes' and 'reactions' because sometimes 'likes' summary is empty for certain post types/tokens.
         // We also handle the case where 'shares' field might not exist on some objects (like Photos).
-        let fields = 'likes.summary(true),reactions.summary(true),comments.summary(true),shares,engagement,message,full_picture,permalink_url';
+        let fields = 'likes.summary(true),reactions.summary(true),comments.summary(true),shares,engagement,message,full_picture,permalink_url,attachments{media,target,subattachments{media,target}}';
         let postResponse = await fetch(
             `https://graph.facebook.com/v24.0/${postId}?fields=${fields}&access_token=${accessToken}`
         );
@@ -790,15 +791,10 @@ export async function getFacebookPostInsights(
         } catch (insightError) {
             console.warn(`[Facebook] Could not fetch (deep) insights for post ${postId}`, insightError);
         }
-
-        // Calculate engagement rate
-        // (Likes + Comments + Shares) / Reach * 100
-        // If reach is 0, use impressions. If both 0, rate is 0.
-        const totalEngagements = likes + comments + shares;
+      const totalEngagements = likes + comments + shares;
         const base = reach > 0 ? reach : impressions;
         const engagementRate = base > 0 ? (totalEngagements / base) * 100 : 0;
-
-        return {
+        const result: FacebookPostInsights = {
             likes,
             comments,
             impressions,
@@ -808,8 +804,24 @@ export async function getFacebookPostInsights(
             isDeleted: false,
             message: postData.message || postData.name,
             full_picture: postData.full_picture,
-            permalink_url: postData.permalink_url
+            permalink_url: postData.permalink_url,
+            attachments: postData.attachments?.data || []
         };
+
+        return result;
+
+        // return {
+        //     likes,
+        //     comments,
+        //     impressions,
+        //     reach,
+        //     engagement: totalEngagements,
+        //     engagementRate,
+        //     isDeleted: false,
+        //     message: postData.message || postData.name,
+        //     full_picture: postData.full_picture,
+        //     permalink_url: postData.permalink_url
+        // };
 
     } catch (error) {
         console.error(`[Facebook] Error fetching insights for ${postId}:`, error);

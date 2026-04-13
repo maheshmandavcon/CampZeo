@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { getPlatformIcon, getStatusBadge } from '../../_components/post-helpers';
+import { getMediaPreviewUrl } from '@/lib/media-utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -20,7 +22,9 @@ import {
     Send,
     CheckCircle,
     MousePointerClick,
-    Download
+    Download,
+    ChevronLeft,
+    ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
@@ -75,6 +79,7 @@ export default function PostDetailsPage({ params }: { params: Promise<{ id: stri
 
     // Chart Ref for PDF Export
     const performanceChartRef = useRef<HTMLDivElement>(null);
+    const [activeMediaIndex, setActiveMediaIndex] = useState(0);
 
     useEffect(() => {
         const fetchPostDetails = async () => {
@@ -331,69 +336,119 @@ export default function PostDetailsPage({ params }: { params: Promise<{ id: stri
                                         <CardTitle className="text-lg">Post Details</CardTitle>
                                     </CardHeader>
                                     <CardContent className="space-y-4">
-                                        <div className="relative aspect-video bg-muted rounded-lg overflow-hidden border shadow-inner">
+                                        <div className="relative aspect-video bg-muted rounded-lg overflow-hidden border shadow-inner group">
                                             {(() => {
-                                                const mediaUrl = getCleanMediaUrl(post.mediaUrls);
-                                                const isYouTube = post.platform === 'YOUTUBE';
-                                                const isVid = post.postType === 'VIDEO' || mediaUrl.match(/\.(mp4|mov|webm|avi|mkv)(\?.*)?$/i);
-
-                                                if (isYouTube) {
-                                                    let videoId = '';
-                                                    if (mediaUrl.includes('v=')) {
-                                                        videoId = mediaUrl.split('v=')[1].split('&')[0];
-                                                    } else if (mediaUrl.includes('youtu.be/')) {
-                                                        videoId = mediaUrl.split('youtu.be/')[1].split('?')[0];
-                                                    } else if (mediaUrl.includes('embed/')) {
-                                                        videoId = mediaUrl.split('embed/')[1].split('?')[0];
-                                                    } else if (post.postId && post.platform === 'YOUTUBE') {
-                                                        videoId = post.postId;
-                                                    }
-
-                                                    if (videoId) {
-                                                        return (
-                                                            <div className="size-full bg-black">
-                                                                <iframe
-                                                                    src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
-                                                                    className="size-full border-0"
-                                                                    allow="autoplay; encrypted-media"
-                                                                    allowFullScreen
-                                                                />
-                                                            </div>
-                                                        );
-                                                    }
-                                                }
-
-                                                if (isVid && mediaUrl) {
+                                                const metadata = post.metadata || {};
+                                                const mediaList = metadata.allResolvedMediaUrls || (post.mediaUrls ? (typeof post.mediaUrls === 'string' && post.mediaUrls.startsWith('[') ? JSON.parse(post.mediaUrls) : [post.mediaUrls]) : []);
+                                                
+                                                if (mediaList.length === 0) {
                                                     return (
-                                                        <video
-                                                            src={mediaUrl}
-                                                            className="size-full object-cover"
-                                                            autoPlay
-                                                            muted
-                                                            loop
-                                                            playsInline
-                                                            controls
-                                                        />
+                                                        <div className="flex items-center justify-center h-full bg-slate-100">
+                                                            <ImageIcon className="size-12 text-slate-300" />
+                                                        </div>
                                                     );
                                                 }
 
-                                                if (mediaUrl && post.mediaUrls !== '[]') {
+                                                const currentUrl = mediaList[activeMediaIndex] || mediaList[0];
+                                                const isYouTube = post.platform === 'YOUTUBE';
+                                                const isVid = (post.postType === 'VIDEO' || post.postType === 'REEL' || currentUrl.match(/\.(mp4|mov|webm|avi|mkv|avif)(\?.*)?$/i)) && !isYouTube;
+
+                                                const renderMedia = (url: string) => {
+                                                    if (isYouTube) {
+                                                        let videoId = '';
+                                                        if (url.includes('v=')) {
+                                                            videoId = url.split('v=')[1].split('&')[0];
+                                                        } else if (url.includes('youtu.be/')) {
+                                                            videoId = url.split('youtu.be/')[1].split('?')[0];
+                                                        } else if (url.includes('embed/')) {
+                                                            videoId = url.split('embed/')[1].split('?')[0];
+                                                        } else if (post.postId && post.platform === 'YOUTUBE') {
+                                                            videoId = post.postId;
+                                                        }
+
+                                                        if (videoId) {
+                                                            return (
+                                                                <div className="size-full bg-black">
+                                                                    <iframe
+                                                                        src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
+                                                                        className="size-full border-0"
+                                                                        allow="autoplay; encrypted-media"
+                                                                        allowFullScreen
+                                                                    />
+                                                                </div>
+                                                            );
+                                                        }
+                                                    }
+
+                                                    if (isVid) {
+                                                        return (
+                                                            <video
+                                                                key={url}
+                                                                src={getMediaPreviewUrl(url)}
+                                                                className="size-full object-cover"
+                                                                autoPlay
+                                                                muted
+                                                                loop
+                                                                playsInline
+                                                                controls
+                                                            />
+                                                        );
+                                                    }
+
                                                     return (
                                                         <Image
-                                                            src={mediaUrl}
+                                                            key={url}
+                                                            src={getMediaPreviewUrl(url)}
                                                             alt="Post media"
                                                             fill
-                                                            className="object-cover"
+                                                            className="object-contain bg-black/5"
                                                             onError={(e) => { e.currentTarget.style.display = 'none'; }}
                                                             unoptimized
                                                         />
                                                     );
-                                                }
+                                                };
 
                                                 return (
-                                                    <div className="flex items-center justify-center h-full bg-slate-100">
-                                                        <ImageIcon className="size-12 text-slate-300" />
-                                                    </div>
+                                                    <>
+                                                        {renderMedia(currentUrl)}
+                                                        
+                                                        {mediaList.length > 1 && (
+                                                            <>
+                                                                <div className="absolute inset-x-0 bottom-4 flex justify-center gap-1.5 z-10">
+                                                                    {mediaList.map((_: any, idx: number) => (
+                                                                        <div 
+                                                                            key={idx}
+                                                                            className={`size-1.5 rounded-full transition-all ${idx === activeMediaIndex ? 'bg-white w-4' : 'bg-white/50'}`}
+                                                                        />
+                                                                    ))}
+                                                                </div>
+                                                                
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setActiveMediaIndex(prev => (prev === 0 ? mediaList.length - 1 : prev - 1));
+                                                                    }}
+                                                                    className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-black/20 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/40"
+                                                                >
+                                                                    <ChevronLeft className="size-5" />
+                                                                </button>
+                                                                
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setActiveMediaIndex(prev => (prev === mediaList.length - 1 ? 0 : prev + 1));
+                                                                    }}
+                                                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-black/20 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/40"
+                                                                >
+                                                                    <ChevronRight className="size-5" />
+                                                                </button>
+
+                                                                <div className="absolute top-2 right-2 px-2 py-1 rounded bg-black/50 text-white text-[10px] font-bold">
+                                                                    {activeMediaIndex + 1} / {mediaList.length}
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </>
                                                 );
                                             })()}
                                         </div>

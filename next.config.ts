@@ -62,10 +62,38 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'drive.google.com',
       },
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+        port: '',
+        pathname: '/**',
+      },
+
+      {
+        hostname: 'localhost',
+        pathname: '/api/upload/**',
+        search: '**',
+      },
+      {
+        hostname: 'storage.campzeo.com',
+        pathname: '/api/upload/**',
+        search: '**',
+      },
+      {
+        hostname: 'campzeo.com',
+        pathname: '/api/upload/**',
+        search: '**',
+      }
+    ],
+    localPatterns: [
+      {
+        pathname: '/api/upload/**',
+        search: '**',
+      },
     ],
   },
   experimental: {
-    middlewareClientMaxBodySize: '1024mb',
+    proxyClientMaxBodySize: '1024mb',
   },
   async headers() {
     return [

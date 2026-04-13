@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { getMediaPreviewUrl } from "@/lib/media-utils";
 import {
     MoreHorizontal,
     ThumbsUp,
@@ -39,8 +40,8 @@ const isVideoFile = (url: string) =>
 const getMediaThumbnail = (url: string): { src: string; isVideo: boolean } => {
     const ytId = getYouTubeId(url);
     if (ytId) return { src: `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`, isVideo: true };
-    if (isVideoFile(url)) return { src: url, isVideo: true };
-    return { src: url, isVideo: false };
+    if (isVideoFile(url)) return { src: getMediaPreviewUrl(url), isVideo: true };
+    return { src: getMediaPreviewUrl(url), isVideo: false };
 };
 
 export default function TemplatePreview({
@@ -59,7 +60,7 @@ export default function TemplatePreview({
         if (!url) return null;
         const media = getMediaThumbnail(url);
         const ytId = getYouTubeId(url);
-        const coverImageUrl = metadata?.thumbnailUrl;
+        const coverImageUrl = metadata?.thumbnailUrl ? getMediaPreviewUrl(metadata.thumbnailUrl) : null;
 
         // If playing, show the actual video/embed
         if (isPlaying) {
@@ -79,7 +80,7 @@ export default function TemplatePreview({
                 return (
                     <div className={`relative ${aspectRatio} w-full overflow-hidden rounded bg-black`}>
                         <video
-                            src={url}
+                            src={getMediaPreviewUrl(url)}
                             className="size-full object-cover"
                             controls
                             autoPlay

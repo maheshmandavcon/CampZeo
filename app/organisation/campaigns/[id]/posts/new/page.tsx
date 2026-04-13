@@ -61,7 +61,7 @@ import { uploadToServer, deleteFromDriveImmediate } from '@/lib/upload-helper';
 import { useMediaCleanup } from '@/hooks/use-media-cleanup';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { isVideoUrl, getPreviewUrl } from '@/lib/media-utils';
+import { isVideoUrl, getMediaPreviewUrl as getPreviewUrl } from '@/lib/media-utils';
 import {
     Tooltip,
     TooltipContent,

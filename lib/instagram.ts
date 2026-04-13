@@ -122,8 +122,6 @@ export async function postToInstagram(
 
       const containerData = await containerRes.json();
       creationId = containerData.id;
-
-      await waitForInstagramMediaProcessing(creationId, accessToken);
     }
 
     // ============================================================
@@ -190,10 +188,6 @@ export async function postToInstagram(
       }
 
       console.log(`[IG_DEBUG] Single Media Container Created: ${creationId}`);
-
-      if (isVideo) {
-        await waitForInstagramMediaProcessing(creationId, accessToken);
-      }
     }
 
     // ============================================================
@@ -202,6 +196,7 @@ export async function postToInstagram(
     // The container was already created with publish=false and a scheduled_publish_time.
     // Calling media_publish immediately would override that and publish right now.
     // ============================================================
+    await waitForInstagramMediaProcessing(creationId, accessToken);
     if (options?.scheduledPublishTime) {
       console.log(`[Instagram] Post scheduled (container: ${creationId}). Skipping immediate publish.`);
       return { id: creationId };
@@ -372,6 +367,8 @@ export interface InstagramPostInsights {
     caption?: string;
     media_url?: string;
     permalink?: string;
+    media_type?: string;
+    children?: { media_url: string; media_type: string; thumbnail_url?: string }[];
 }
 
 export async function getInstagramPostInsights(
@@ -379,7 +376,7 @@ export async function getInstagramPostInsights(
     accessToken: string,
     connectionType?: 'FACEBOOK' | 'DIRECT'
 ): Promise<InstagramPostInsights> { 
-    const mediaFields = 'like_count,comments_count,media_type,caption,media_url,permalink';
+    const mediaFields = 'like_count,comments_count,media_type,caption,media_url,permalink,children{media_url,media_type,thumbnail_url}';
     const baseUrl = "https://graph.facebook.com/v24.0";
     const mediaResponse = await fetch(
         `${baseUrl}/${mediaId}?fields=${mediaFields}&access_token=${accessToken}`
@@ -508,7 +505,9 @@ export async function getInstagramPostInsights(
         isDeleted: false,
         caption: mediaData.caption,
         media_url: mediaData.media_url,
-        permalink: mediaData.permalink
+        permalink: mediaData.permalink,
+        media_type: mediaData.media_type,
+        children: mediaData.children?.data || []
     };
 }
 

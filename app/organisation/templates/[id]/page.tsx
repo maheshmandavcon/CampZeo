@@ -11,6 +11,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { uploadToServer, deleteFromDriveImmediate } from '@/lib/upload-helper';
 import { useMediaCleanup } from '@/hooks/use-media-cleanup';
+import { getMediaPreviewUrl } from '@/lib/media-utils';
 
 const ALL_PLATFORMS = [
     { value: "EMAIL", label: "Email", icon: Mail },
@@ -258,7 +259,7 @@ export default function EditTemplatePage() {
 
         const renderMediaItem = (url: string, aspectRatio: string = "aspect-video") => {
             const ytId = getYouTubeId(url);
-            const coverImageUrl = formData.metadata?.thumbnailUrl;
+            const coverImageUrl = formData.metadata?.thumbnailUrl ? getMediaPreviewUrl(formData.metadata.thumbnailUrl) : null;
 
             return (
                 <div className="relative group">
@@ -284,7 +285,7 @@ export default function EditTemplatePage() {
                                 />
                             ) : isVideo(url) ? (
                                 <video
-                                    src={url}
+                                    src={getMediaPreviewUrl(url)}
                                     className="size-full object-cover"
                                     controls
                                     autoPlay
@@ -305,7 +306,7 @@ export default function EditTemplatePage() {
                                     />
                                 ) : (isVideo(url) && !ytId) ? (
                                     <video
-                                        src={url}
+                                        src={getMediaPreviewUrl(url)}
                                         className="size-full object-cover"
                                         preload="metadata"
                                         muted
@@ -313,7 +314,7 @@ export default function EditTemplatePage() {
                                     />
                                 ) : (
                                     <Image
-                                        src={ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : url}
+                                        src={ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : getMediaPreviewUrl(url)}
                                         alt="Preview"
                                         fill
                                         className="object-cover"
@@ -743,7 +744,7 @@ export default function EditTemplatePage() {
                                     </div>
                                     {formData.metadata.thumbnailUrl && (
                                         <div className="relative aspect-video w-32 overflow-hidden rounded border bg-muted">
-                                            <Image src={formData.metadata.thumbnailUrl} alt="Thumbnail" fill className="object-cover" unoptimized />
+                                            <Image src={getMediaPreviewUrl(formData.metadata.thumbnailUrl)} alt="Thumbnail" fill className="object-cover" unoptimized />
                                             <button
                                                 onClick={() => setFormData({ ...formData, metadata: { ...formData.metadata, thumbnailUrl: null } })}
                                                 className="absolute right-1 top-1 rounded-full bg-black/50 p-1 text-white hover:bg-black/70"
@@ -804,7 +805,7 @@ export default function EditTemplatePage() {
                                     </div>
                                     {formData.metadata.thumbnailUrl && (
                                         <div className="relative aspect-[9/16] w-20 overflow-hidden rounded border bg-muted">
-                                            <Image src={formData.metadata.thumbnailUrl} alt="Cover" fill className="object-cover" unoptimized />
+                                            <Image src={getMediaPreviewUrl(formData.metadata.thumbnailUrl)} alt="Cover" fill className="object-cover" unoptimized />
                                             <button
                                                 onClick={() => setFormData({ ...formData, metadata: { ...formData.metadata, thumbnailUrl: null } })}
                                                 className="absolute right-1 top-1 rounded-full bg-black/50 p-1 text-white hover:bg-black/70"
@@ -914,14 +915,14 @@ export default function EditTemplatePage() {
                                                             </div>
                                                         ) : (
                                                             <video
-                                                                src={url}
+                                                                src={getMediaPreviewUrl(url)}
                                                                 className="size-full object-cover"
                                                                 preload="metadata"
                                                             />
                                                         )
                                                     ) : (
                                                         <Image
-                                                            src={url}
+                                                            src={getMediaPreviewUrl(url)}
                                                             alt={`Upload ${index + 1}`}
                                                             fill
                                                             className="object-cover"

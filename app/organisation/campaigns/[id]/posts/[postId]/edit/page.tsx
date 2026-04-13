@@ -32,7 +32,7 @@ import { WYSIWYGPreview } from '../../_components/WYSIWYGPreview';
 import { useUser } from '@clerk/nextjs';
 import { uploadToServer, deleteFromDriveImmediate } from '@/lib/upload-helper';
 import { MetaBoostSection, MetaBoostOptions } from '../../_components/MetaBoostSection';
-import { isVideoUrl, getPreviewUrl } from '@/lib/media-utils';
+import { isVideoUrl, getMediaPreviewUrl as getPreviewUrl } from '@/lib/media-utils';
 import { useMediaCleanup } from '@/hooks/use-media-cleanup';
 
 

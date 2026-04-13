@@ -32,6 +32,8 @@ import {
     DialogFooter,
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getPlatformIcon, getStatusBadge, getPreviewContent } from './_components/post-helpers';
+import { getMediaPreviewUrl } from '@/lib/media-utils';
 import { MetaBoostSection, MetaBoostOptions } from './_components/MetaBoostSection';
 import { Rocket, Edit, Trash2, ExternalLink, Share2, Facebook, Instagram, Linkedin, Youtube, Pin, MoreVertical, Search, Filter, Calendar, CheckCircle2, AlertCircle, Clock, Sparkles, Send, ArrowLeft, Loader2, Plus, Mail, MessageSquare, Phone, Copy, Eye, Check, Paperclip, Globe, Download, Save, Users } from 'lucide-react';
 import { openNativeBoostPopup } from '@/lib/meta-boost-utils';
@@ -923,7 +925,7 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
                                             const allMedia = Array.from(new Set([
                                                 ...(previewPost.mediaUrls || []),
                                                 previewPost.videoUrl
-                                            ].filter(Boolean) as string[]));
+                                            ].filter(Boolean) as string[])).map(url => getMediaPreviewUrl(url));
 
                                             if (allMedia.length === 0) return null;
 

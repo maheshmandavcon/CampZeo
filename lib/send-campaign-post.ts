@@ -298,12 +298,21 @@ export async function sendCampaignPost(
                 let finalLiveLink = post.liveLink || `https://facebook.com/${platformResponse.id}`;
                 try {
                     const insights = await getFacebookPostInsights(platformResponse.id, fbToken);
-                    if (insights.full_picture) {
-                        finalMediaUrls = [insights.full_picture];
-                        if (post.videoUrl || metadata?.isReel) {
-                            finalVideoUrl = insights.full_picture;
+                    if (insights.attachments && insights.attachments.length > 0) {
+                        const firstAttachment = insights.attachments[0];
+                        if (firstAttachment.subattachments && firstAttachment.subattachments.data.length > 0) {
+                            finalMediaUrls = firstAttachment.subattachments.data.map((sa: any) => sa.media?.image?.src).filter(Boolean);
+                        } else if (firstAttachment.media?.image?.src) {
+                            finalMediaUrls = [firstAttachment.media.image.src];
                         }
+                    } else if (insights.full_picture) {
+                        finalMediaUrls = [insights.full_picture];
                     }
+
+                    if (post.videoUrl || metadata?.isReel) {
+                        finalVideoUrl = finalMediaUrls[0] || insights.full_picture || post.videoUrl;
+                    }
+
                     if (insights.permalink_url) finalLiveLink = insights.permalink_url;
                 } catch (e) {
                     console.warn('[Facebook] Failed to fetch final URLs:', e);
@@ -372,8 +381,8 @@ export async function sendCampaignPost(
                         postId: platformResponse.id,
                         accountId: fbPageId,
                         message: post.message || post.subject || "",
-                        mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
-                        postType: metadata?.isReel ? 'REEL' : ((finalMediaUrls.length > 0 || finalVideoUrl) ? 'IMAGE' : 'TEXT'),
+                        mediaUrls: finalMediaUrls[0] || (finalVideoUrl || ""),
+                        postType: metadata?.isReel ? 'REEL' : (finalMediaUrls.length > 1 ? 'CAROUSEL' : ((finalMediaUrls.length > 0 || finalVideoUrl) ? 'IMAGE' : 'TEXT')),
                         accessToken: fbToken,
                         isScheduled: fbIsScheduledTx,
                         scheduledTime: fbScheduledTimeTx,
@@ -388,6 +397,11 @@ export async function sendCampaignPost(
                         boostFailureReason: fbBoostFailureReason,
                         published: !fbIsScheduledTx,
                         publishedAt: fbIsScheduledTx ? null : new Date(),
+                        metadata: {
+                            ...(post.metadata || {}),
+                            allResolvedMediaUrls: finalMediaUrls,
+                            resolvedVideoUrl: finalVideoUrl
+                        }
                     }
                 });
 
@@ -485,8 +499,13 @@ export async function sendCampaignPost(
     try {
         const insights = await getInstagramPostInsights(platformResponse.id, igToken!);
         if (insights.media_url) {
-            if (isReel) finalVideoUrl = insights.media_url;
-            else finalMediaUrls = [insights.media_url];
+            if (isReel) {
+                finalVideoUrl = insights.media_url;
+            } else if (insights.media_type === 'CAROUSEL_ALBUM' && insights.children && insights.children.length > 0) {
+                finalMediaUrls = insights.children.map(child => child.media_url);
+            } else {
+                finalMediaUrls = [insights.media_url];
+            }
         }
         if (insights.permalink) finalLiveLink = insights.permalink;
     } catch (e) {
@@ -568,7 +587,7 @@ export async function sendCampaignPost(
                         postId: platformResponse.id,
                         accountId: igUserId!,
                         message: post.message || post.subject || "",
-                        mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
+                        mediaUrls: finalMediaUrls[0] || (finalVideoUrl || ""), // Store first one here for backward compatibility
                         postType,
                         accessToken: igToken!,
                         isScheduled: igIsScheduledTx,
@@ -584,8 +603,16 @@ export async function sendCampaignPost(
                         boostFailureReason: igBoostFailureReason,
                         published: !igIsScheduledTx,
                         publishedAt: igIsScheduledTx ? null : new Date(),
+                        metadata: {
+                            ...(post.metadata || {}),
+                            allResolvedMediaUrls: finalMediaUrls,
+                            resolvedVideoUrl: finalVideoUrl
+                        }
                     }
                 });
+ console.log('post media url ',finalMediaUrls );
+ console.log('video media url ', finalVideoUrl);
+ console.log('livelink media url ',finalLiveLink );
 
                 await logInfo(`Instagram post ${platformResponse.id} processed`, { postId: post.id, platform: 'INSTAGRAM', isScheduled: igIsScheduledTx, boostEnabled: !!metadata?.metaBoost?.enabled });
 
@@ -801,10 +828,14 @@ export async function sendCampaignPost(
                 let finalLiveLink = `https://www.pinterest.com/pin/${platformResponse.id}`;
                 try {
                     const insights = await getPinterestPostInsights(platformResponse.id, dbUser.pinterestAccessToken);
-                    if (insights.media?.images?.original?.url) {
-                        finalMediaUrls = [insights.media.images.original.url];
-                        if (post.videoUrl || isVideoPin) {
-                            finalVideoUrl = insights.media.images.original.url;
+                    if (insights.media) {
+                        if (insights.media.media_type === 'multiple_image_urls' && insights.media.items) {
+                            finalMediaUrls = insights.media.items.map((item: any) => item.url);
+                        } else if (insights.media.images?.original?.url) {
+                            finalMediaUrls = [insights.media.images.original.url];
+                            if (post.videoUrl || isVideoPin) {
+                                finalVideoUrl = insights.media.images.original.url;
+                            }
                         }
                     }
                 } catch (e) {
@@ -830,13 +861,18 @@ export async function sendCampaignPost(
                         postId: platformResponse.id,
                         accountId: 'pinterest-user',
                         message: post.message || post.subject || "",
-                        mediaUrls: finalMediaUrls.length > 0 ? finalMediaUrls[0] : (finalVideoUrl || ""),
-                        postType: isVideoPin ? 'VIDEO' : (Array.isArray(media) && media.length > 1 ? 'CAROUSEL' : 'IMAGE'),
+                        mediaUrls: finalMediaUrls[0] || (finalVideoUrl || ""),
+                        postType: isVideoPin ? 'VIDEO' : (finalMediaUrls.length > 1 ? 'CAROUSEL' : 'IMAGE'),
                         accessToken: dbUser.pinterestAccessToken,
                         isScheduled: !!(!options?.publishNow && post.scheduledPostTime),
                         scheduledTime: options?.publishNow ? null : (post.scheduledPostTime || null),
                         published: true,
                         publishedAt: new Date(),
+                        metadata: {
+                            ...(post.metadata || {}),
+                            allResolvedMediaUrls: finalMediaUrls,
+                            resolvedVideoUrl: finalVideoUrl
+                        }
                     }
                 });
 

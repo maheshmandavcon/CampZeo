@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import Image from "next/image";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LayoutDashboard, ChartBar, Download as DownloadIcon } from "lucide-react";
+import { getMediaPreviewUrl } from "@/lib/media-utils";
 import InsightsView from "./InsightsView";
 import ExportView from "./ExportView";
 
@@ -249,8 +250,8 @@ export default function CalendarView({ posts }: CalendarViewProps) {
     const renderPostCard = (post: Post, isLargeView = false) => {
         const config = getPlatformConfig(post.type);
         const hasMedia = post.mediaUrls && post.mediaUrls.length > 0;
-        const firstMedia = hasMedia ? post.mediaUrls![0] : null;
-        const isVideo = firstMedia?.match(/\.(mp4|webm|ogg|mov)$/i);
+        const firstMedia = hasMedia ? getMediaPreviewUrl(post.mediaUrls![0]) : null;
+        const isVideo = hasMedia && post.mediaUrls![0]?.match(/\.(mp4|webm|ogg|mov)$/i);
 
         // Day view uses horizontal layout with larger cards
         if (isLargeView) {
@@ -705,7 +706,7 @@ export default function CalendarView({ posts }: CalendarViewProps) {
                                                                 />
                                                             ) : isVid ? (
                                                                 <video
-                                                                    src={url}
+                                                                    src={getMediaPreviewUrl(url)}
                                                                     className="w-full h-full object-cover"
                                                                     autoPlay
                                                                     muted
@@ -715,7 +716,7 @@ export default function CalendarView({ posts }: CalendarViewProps) {
                                                                 />
                                                             ) : (
                                                                 <Image
-                                                                    src={url}
+                                                                    src={getMediaPreviewUrl(url)}
                                                                     alt={`Media ${index + 1}`}
                                                                     fill
                                                                     className="object-cover"

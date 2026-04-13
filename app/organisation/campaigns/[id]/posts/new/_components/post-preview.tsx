@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Heart, MessageCircle, Share2, MoreHorizontal, ThumbsUp, MessageSquare, Repeat, Send, Sparkles, Eye, Video, Image as ImageIcon } from 'lucide-react';
 import Image from 'next/image';
-import { getPreviewUrl } from '@/lib/media-utils';
+import { getMediaPreviewUrl as getPreviewUrl } from '@/lib/media-utils';
 
 interface PostPreviewProps {
     platforms: string[];

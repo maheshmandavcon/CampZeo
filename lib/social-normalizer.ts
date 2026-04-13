@@ -405,10 +405,36 @@ export class SocialNormalizerService {
             if (metrics.length > 0) {
                 await this.storeMetrics(orgId, platform as PlatformType, post.postId, metrics, false);
 
-                // Update lastInsightsCheck timestamp
+                const existingMetadata = (post as any).metadata || {};
+                let resolvedUrls = [];
+                let resolvedVideo = null;
+
+                if (platform === 'INSTAGRAM' && insights.children && insights.children.length > 0) {
+                    resolvedUrls = insights.children.map((c: any) => c.media_url);
+                } else if (platform === 'FACEBOOK' && insights.attachments && insights.attachments.length > 0) {
+                    const firstAtt = insights.attachments[0];
+                    if (firstAtt.subattachments?.data) {
+                        resolvedUrls = firstAtt.subattachments.data.map((sa: any) => sa.media?.image?.src).filter(Boolean);
+                    } else if (firstAtt.media?.image?.src) {
+                        resolvedUrls = [firstAtt.media.image.src];
+                    }
+                } else if (platform === 'PINTEREST' && insights.media) {
+                    if (insights.media.media_type === 'multiple_image_urls' && insights.media.items) {
+                        resolvedUrls = insights.media.items.map((item: any) => item.url);
+                    } else if (insights.media.images?.original?.url) {
+                        resolvedUrls = [insights.media.images.original.url];
+                    }
+                }
+
                 await prisma.postTransaction.update({
                     where: { id: post.id },
-                    data: { lastInsightsCheck: new Date() }
+                    data: { 
+                        lastInsightsCheck: new Date(),
+                        metadata: {
+                            ...existingMetadata,
+                            ...(resolvedUrls.length > 0 ? { allResolvedMediaUrls: resolvedUrls } : {})
+                        }
+                    }
                 });
 
                 return { success: true, isDeleted: false };

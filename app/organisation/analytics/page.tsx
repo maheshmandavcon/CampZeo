@@ -54,6 +54,7 @@ import {
 import * as XLSX from 'xlsx';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { exportChartToPDF } from '@/lib/chart-export';
+import { getMediaPreviewUrl } from '@/lib/media-utils';
 
 interface PostInsight {
     reach: string | number;
@@ -1103,11 +1104,12 @@ export default function AnalyticsPage() {
                                                                         </div>
                                                                     ) : (post.mediaUrls && post.mediaUrls !== '[]') ? (
                                                                         <Image
-                                                                            src={getCleanMediaUrl(post.mediaUrls)}
+                                                                            src={getMediaPreviewUrl(getCleanMediaUrl(post.mediaUrls))}
                                                                             alt="Post media"
                                                                             fill
                                                                             className="object-cover"
                                                                             onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                                            unoptimized
                                                                         />
                                                                     ) : (
                                                                         <div className="flex items-center justify-center h-full">

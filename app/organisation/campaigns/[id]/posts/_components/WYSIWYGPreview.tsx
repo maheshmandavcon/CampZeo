@@ -26,7 +26,7 @@ import {
     FileIcon,
     FileQuestion
 } from 'lucide-react';
-import { isVideoUrl, isImageUrl, isDocumentUrl, getPreviewUrl } from '@/lib/media-utils';
+import { isVideoUrl, isImageUrl, isDocumentUrl, getMediaPreviewUrl as getPreviewUrl } from '@/lib/media-utils';
 import {
     Dialog,
     DialogContent,
