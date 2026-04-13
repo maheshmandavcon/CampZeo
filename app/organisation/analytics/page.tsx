@@ -1417,7 +1417,7 @@ export default function AnalyticsPage() {
             ) : (
                 <Button
                     onClick={() => setIsGroqChatOpen(true)}
-                    className="rounded-full h-14 w-14 fixed bottom-4 left-4 z-40 shadow-xl hover:shadow-2xl hover:scale-110 transition-all duration-300 bg-indigo-600 text-white group"
+                    className="rounded-full h-14 w-14 fixed bottom-22 right-4 z-40 shadow-xl hover:shadow-2xl hover:scale-110 transition-all duration-300 bg-indigo-600 text-white group"
                 >
                     <Bot className="size-6 group-hover:rotate-12 transition-transform" />
                     <span className="sr-only">Open Groq AI Assistant</span>
