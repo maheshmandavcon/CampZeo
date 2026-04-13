@@ -139,6 +139,7 @@ function PurchaseContent() {
     const [locationOptions, setLocationOptions] = useState<LocationOption[]>([]);
     const [showLocationSelector, setShowLocationSelector] = useState(false);
     const [postalOptions, setPostalOptions] = useState<LocationOption[]>([]);
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
     const [isDownloading, setIsDownloading] = useState(false);
     const invoiceRef = useRef<HTMLDivElement>(null);
@@ -250,11 +251,29 @@ function PurchaseContent() {
             filteredValue = value.replace(/[^0-9+\s\(\)-]/g, "");
         }
 
-        setFormData({ ...formData, [name]: filteredValue });
+        setFormData(prev => ({ ...prev, [name]: filteredValue }));
+
+        // Clear error for this field
+        if (errors[name]) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[name];
+                return newErrors;
+            });
+        }
     };
 
-    const handleSelectChange = (name: string, value: string) =>
-        setFormData({ ...formData, [name]: value });
+    const handleSelectChange = (name: string, value: string) => {
+        setFormData(prev => ({ ...prev, [name]: value }));
+        // Clear error for this field
+        if (errors[name]) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[name];
+                return newErrors;
+            });
+        }
+    };
 
     // Pincode Auto-Detection
     useEffect(() => {
@@ -346,11 +365,10 @@ function PurchaseContent() {
         return () => clearTimeout(debounce);
     }, [formData.postalCode, formData.country]);
 
-    // Handle Initial Sign Up
-    const handleSignUp = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const validateForm = () => {
+        const newErrors: Record<string, string> = {};
 
-        // Basic Validation
+        // 1. Check required fields
         const requiredFields: Record<string, string> = {
             email: "Email",
             name: "Owner Name",
@@ -371,31 +389,49 @@ function PurchaseContent() {
             requiredFields.organisationName = "Organisation Name";
             requiredFields.taxNumber = "GST / Tax Number";
         }
+
+        Object.entries(requiredFields).forEach(([field, label]) => {
+            const val = formData[field as keyof typeof formData];
+            if (!val || (typeof val === 'string' && val.trim() === "")) {
+                newErrors[field] = `${label} is required`;
+            }
+        });
+
+        // 2. Email validation
         const emailValidation = validateEmail(formData.email);
-        if (!emailValidation.valid) {
-            toast.error("Invalid Email", {
-                description: emailValidation.error || "Please enter a valid email address.",
-            });
-            return;
+        if (formData.email && !emailValidation.valid) {
+            newErrors.email = emailValidation.error || "Invalid email format";
         }
-        for (const [field, label] of Object.entries(requiredFields)) {
-            if (!formData[field as keyof typeof formData] || String(formData[field as keyof typeof formData]).trim() === "") {
-                toast.error(`${label} is required.`);
-                return;
+
+        // 3. Mobile validation
+        const digits = formData.mobile.replace(/\D/g, '');
+        if (formData.mobile && (digits.length < 10 || digits.length > 15)) {
+            newErrors.mobile = "Mobile Number must contain 10-15 digits";
+        }
+
+        // 4. Password validation
+        if (!isSignedIn) {
+            const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+            if (formData.password && !passwordRegex.test(formData.password)) {
+                newErrors.password = "Min 8 chars, 1 uppercase, 1 lowercase, 1 number";
+            }
+            if (formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword) {
+                newErrors.confirmPassword = "Passwords do not match";
             }
         }
 
-        // const phoneRegex = /^\+[1-9]\d{0,2}[\d\s\-().]*$/;
-        const digits = formData.mobile.replace(/\D/g, '');
-        if (digits.length < 10 || digits.length > 15) {
-            toast.error("Invalid Mobile Number", {
-                description: "Must contain 10-15 digits.",
-            });
-            return;
-        }
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
 
-        if (!isSignedIn && formData.password !== formData.confirmPassword) {
-            toast.error("Passwords do not match.");
+    // Handle Initial Sign Up
+    const handleSignUp = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!validateForm()) {
+            toast.error("Validation Failed", {
+                description: "Please fill in all required fields correctly.",
+            });
             return;
         }
 
@@ -510,7 +546,7 @@ function PurchaseContent() {
                 setInvoice(data.invoice);
             }
 
-            if (!isSignedIn && formData.email && formData.password) {
+            if (!isSignedIn && formData.email && formData.password && signIn) {
                 try {
                     const result = await signIn.create({
                         identifier: formData.email,
@@ -627,32 +663,78 @@ function PurchaseContent() {
                                 {accountType === "business" && (
                                     <div className="space-y-2">
                                         <Label htmlFor="organisationName">Organisation Name <span className="text-destructive">*</span></Label>
-                                        <Input id="organisationName" name="organisationName" value={formData.organisationName} onChange={handleChange} placeholder="Acme Inc." />
+                                        <Input
+                                            id="organisationName"
+                                            name="organisationName"
+                                            value={formData.organisationName}
+                                            onChange={handleChange}
+                                            placeholder="Acme Inc."
+                                            className={`h-10 ${errors.organisationName ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                                        />
+                                        {errors.organisationName && <p className="text-red-500 text-xs font-medium px-1 mt-1">{errors.organisationName}</p>}
                                     </div>
                                 )}
                                 <div className={accountType === "individual" ? "col-span-1 md:col-span-2 space-y-2" : "space-y-2"}>
                                     <Label htmlFor="name">Owner Name <span className="text-destructive">*</span></Label>
-                                    <Input id="name" name="name" value={formData.name} onChange={handleChange} placeholder="John Doe" />
+                                    <Input
+                                        id="name"
+                                        name="name"
+                                        value={formData.name}
+                                        onChange={handleChange}
+                                        placeholder="John Doe"
+                                        className={`h-10 ${errors.name ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                                    />
+                                    {errors.name && <p className="text-red-500 text-xs font-medium px-1 mt-1">{errors.name}</p>}
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
-                                    <Input id="email" name="email" type="email" required value={formData.email} onChange={(e) => { handleChange(e); setEmailError(null); }} placeholder="john@example.com" className={`h-10 ${emailError ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
-                                    {emailError && <p className="text-red-500 text-sm">{emailError}</p>}
+                                    <Input
+                                        id="email"
+                                        name="email"
+                                        type="email"
+                                        value={formData.email}
+                                        onChange={(e) => { handleChange(e); setEmailError(null); }}
+                                        placeholder="john@example.com"
+                                        className={`h-10 ${(emailError || errors.email) ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                                    />
+                                    {(emailError || errors.email) && <p className="text-red-500 text-xs font-medium px-1 mt-1">{emailError || errors.email}</p>}
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="mobile">Mobile <span className="text-destructive">*</span></Label>
-                                    <Input id="mobile" name="mobile" required value={formData.mobile} onChange={handleChange} placeholder="+1 234 567 8900" />
+                                    <Input
+                                        id="mobile"
+                                        name="mobile"
+                                        value={formData.mobile}
+                                        onChange={handleChange}
+                                        placeholder="+1 234 567 8900"
+                                        className={`h-10 ${errors.mobile ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                                    />
+                                    {errors.mobile && <p className="text-red-500 text-xs font-medium px-1 mt-1">{errors.mobile}</p>}
                                 </div>
 
                                 <div className="col-span-1 md:col-span-2 space-y-2">
                                     <Label htmlFor="address">Address <span className="text-destructive">*</span></Label>
-                                    <Input id="address" name="address" required value={formData.address} onChange={handleChange} />
+                                    <Input
+                                        id="address"
+                                        name="address"
+                                        value={formData.address}
+                                        onChange={handleChange}
+                                        className={`h-10 ${errors.address ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                                    />
+                                    {errors.address && <p className="text-red-500 text-xs font-medium px-1 mt-1">{errors.address}</p>}
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4 col-span-1 md:col-span-2">
                                     <div className="space-y-2">
-                                        <Label htmlFor="postalCode">Postal Code</Label>
-                                        <Input id="postalCode" name="postalCode" required value={formData.postalCode} onChange={handleChange} />
+                                        <Label htmlFor="postalCode">Postal Code <span className="text-destructive">*</span></Label>
+                                        <Input
+                                            id="postalCode"
+                                            name="postalCode"
+                                            value={formData.postalCode}
+                                            onChange={handleChange}
+                                            className={`h-10 ${errors.postalCode ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                                        />
+                                        {errors.postalCode && <p className="text-red-500 text-xs font-medium px-1 mt-1">{errors.postalCode}</p>}
 
                                         {postalOptions.length > 0 && (
                                             <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg animate-in fade-in slide-in-from-top-2 duration-300">
@@ -691,11 +773,11 @@ function PurchaseContent() {
                                             <Input
                                                 id="city"
                                                 name="city"
-                                                required
                                                 value={formData.city}
                                                 onChange={handleChange}
-                                                className="pr-10"
+                                                className={`h-10 pr-10 ${errors.city ? 'border-red-500 ring-1 ring-red-500' : ''}`}
                                             />
+                                            {errors.city && <p className="text-red-500 text-xs font-medium px-1 mt-1">{errors.city}</p>}
                                             {isDetecting && (
                                                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
                                                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -709,11 +791,11 @@ function PurchaseContent() {
                                             <Input
                                                 id="state"
                                                 name="state"
-                                                required
                                                 value={formData.state}
                                                 onChange={handleChange}
-                                                className="pr-10"
+                                                className={`h-10 pr-10 ${errors.state ? 'border-red-500 ring-1 ring-red-500' : ''}`}
                                             />
+                                            {errors.state && <p className="text-red-500 text-xs font-medium px-1 mt-1">{errors.state}</p>}
                                             {isDetecting && (
                                                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
                                                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -728,9 +810,10 @@ function PurchaseContent() {
                                             onValueChange={(v) => handleSelectChange("country", v)}
                                             value={formData.country}
                                         >
-                                            <SelectTrigger className="border border-gray-200 h-10">
+                                            <SelectTrigger className={`border h-10 ${errors.country ? 'border-red-500 ring-red-500 ring-1' : 'border-gray-200'}`}>
                                                 <SelectValue placeholder="Select Country" />
                                             </SelectTrigger>
+                                            {errors.country && <p className="text-red-500 text-xs font-medium px-1 mt-1">{errors.country}</p>}
                                             <SelectContent>
                                                 {countries.map((c) => (
                                                     <SelectItem key={c.code} value={c.name}>
@@ -746,7 +829,15 @@ function PurchaseContent() {
                                 {accountType === "business" && (
                                     <div className="col-span-1 md:col-span-2 space-y-2">
                                         <Label htmlFor="taxNumber">Tax Number / GST <span className="text-destructive">*</span></Label>
-                                        <Input id="taxNumber" name="taxNumber" value={formData.taxNumber} onChange={handleChange} placeholder="GSTIN/TAX ID" />
+                                        <Input
+                                            id="taxNumber"
+                                            name="taxNumber"
+                                            value={formData.taxNumber}
+                                            onChange={handleChange}
+                                            placeholder="GSTIN/TAX ID"
+                                            className={`h-10 ${errors.taxNumber ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                                        />
+                                        {errors.taxNumber && <p className="text-red-500 text-xs font-medium px-1 mt-1">{errors.taxNumber}</p>}
                                     </div>
                                 )}
 
@@ -761,8 +852,9 @@ function PurchaseContent() {
                                                     type={showPassword ? "text" : "password"}
                                                     value={formData.password}
                                                     onChange={handleChange}
-                                                    className="pr-10"
+                                                    className={`h-10 pr-10 ${errors.password ? 'border-red-500 ring-1 ring-red-500' : ''}`}
                                                 />
+                                                {errors.password && <p className="text-red-500 text-xs font-medium px-1 mt-1">{errors.password}</p>}
                                                 <button
                                                     type="button"
                                                     onClick={() => setShowPassword(!showPassword)}
@@ -782,8 +874,9 @@ function PurchaseContent() {
                                                     type={showConfirmPassword ? "text" : "password"}
                                                     value={formData.confirmPassword}
                                                     onChange={handleChange}
-                                                    className="pr-10"
+                                                    className={`h-10 pr-10 ${errors.confirmPassword ? 'border-red-500 ring-1 ring-red-500' : ''}`}
                                                 />
+                                                {errors.confirmPassword && <p className="text-red-500 text-xs font-medium px-1 mt-1">{errors.confirmPassword}</p>}
                                                 <button
                                                     type="button"
                                                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
