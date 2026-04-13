@@ -31,6 +31,15 @@ async function postHandler(req: Request) {
             postalCode,
             taxNumber
         } = body;
+        
+        // Calculate billing and trial dates upfront
+        const now = new Date();
+        const nextBillingDate = new Date(now);
+        nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+
+        const trialPeriodDays = 14;
+        const trialEndDateCalculation = new Date(now);
+        trialEndDateCalculation.setDate(trialEndDateCalculation.getDate() + trialPeriodDays);
 
         if (!organizationName || !plan) {
             return NextResponse.json(
@@ -165,8 +174,8 @@ async function postHandler(req: Request) {
                     postalCode,
                     taxNumber,
                     isTrial: plan === 'FREE_TRIAL',
-                    trialStartDate: plan === 'FREE_TRIAL' ? new Date() : null,
-                    trialEndDate: plan === 'FREE_TRIAL' ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) : null,
+                    trialStartDate: plan === 'FREE_TRIAL' ? now : null,
+                    trialEndDate: plan === 'FREE_TRIAL' ? trialEndDateCalculation : null,
                 }
             });
         } else {
@@ -185,8 +194,8 @@ async function postHandler(req: Request) {
                     postalCode,
                     taxNumber,
                     isTrial: plan === 'FREE_TRIAL',
-                    trialStartDate: plan === 'FREE_TRIAL' ? new Date() : null,
-                    trialEndDate: plan === 'FREE_TRIAL' ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) : null,
+                    trialStartDate: plan === 'FREE_TRIAL' ? now : null,
+                    trialEndDate: plan === 'FREE_TRIAL' ? trialEndDateCalculation : null,
                     isApproved: true,
                 }
             });
@@ -249,12 +258,14 @@ async function postHandler(req: Request) {
                 data: {
                     organisationId: organisation.id,
                     planId: selectedPlan.id,
-                    startDate: new Date(),
+                    startDate: now,
+                    endDate: plan === 'FREE_TRIAL' ? trialEndDateCalculation : nextBillingDate,
+                    renewalDate: plan === 'FREE_TRIAL' ? trialEndDateCalculation : nextBillingDate,
                     status: 'ACTIVE',
                     autoRenew: true,
                     isTrial: plan === 'FREE_TRIAL',
-                    trialStartDate: plan === 'FREE_TRIAL' ? new Date() : null,
-                    trialEndDate: plan === 'FREE_TRIAL' ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) : null,
+                    trialStartDate: plan === 'FREE_TRIAL' ? now : null,
+                    trialEndDate: plan === 'FREE_TRIAL' ? trialEndDateCalculation : null,
                 }
             });
         } else {

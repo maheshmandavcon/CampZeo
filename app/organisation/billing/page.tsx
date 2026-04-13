@@ -385,7 +385,9 @@ export default function BillingPage() {
 
         <Tabs defaultValue="available-plans" className="w-full">
           <TabsList className="mb-6">
-            <TabsTrigger value="purchase-credits">Purchase Credits</TabsTrigger>
+            {walletData?.twilioAccess?.twilioAccessStatus === "APPROVED" && (
+              <TabsTrigger value="purchase-credits">Purchase Credits</TabsTrigger>
+            )}
             <TabsTrigger value="available-plans">Available Plans</TabsTrigger>
           </TabsList>
 
