@@ -48,7 +48,8 @@ async function cleanupBlobs(urls: (string | string[] | null | undefined)[]) {
                             { mediaUrls: { has: url } },
                             ...(fileId ? [{ mediaUrls: { has: canonicalUrl } }] : [])
                         ],
-                        isDeleted: false
+                        isDeleted: false,
+                        isPostSent: false
                     }
                 });
 
