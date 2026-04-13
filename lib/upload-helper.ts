@@ -3,7 +3,8 @@ export async function uploadToServer(
   organisationId?: string, 
   campaignId?: string,
   platform?: string | null,
-  isReel?: boolean
+  isReel?: boolean,
+  onProgress?: (progress: number) => void
 ): Promise<{ url: string }> {
   const provider = process.env.NEXT_PUBLIC_STORAGE_PROVIDER || 'custom_server';
   const serverUrl = process.env.NEXT_PUBLIC_UPLOAD_SERVER_URL || '';
@@ -19,6 +20,7 @@ export async function uploadToServer(
 
     // For images with platform context, use the optimization path (server-side processing)
     if (isImage && platform) {
+      if (onProgress) onProgress(1);
       console.log(`[Upload] Image with platform ${platform} - using server-side optimization path`);
       const formData = new FormData();
       formData.append('file', file);
@@ -32,8 +34,12 @@ export async function uploadToServer(
         throw new Error(`Image upload failed: ${res.statusText}`);
       }
 
-      return await res.json();
+      const result = await res.json();
+      if (onProgress) onProgress(100);
+      return result;
     }
+
+    if (onProgress) onProgress(1); // Set to 1% immediately to show activity
 
     // 1. Initiate resumable upload session
     const initRes = await fetch('/api/upload/google-drive/resumable', {
@@ -90,9 +96,11 @@ export async function uploadToServer(
         start = end;
         const progress = Math.round((start / totalSize) * 100);
         console.log(`[Upload] Progress: ${progress}%`);
+        if (onProgress) onProgress(progress);
       } else if (result.status === 200 || result.status === 201) {
         // Upload complete
         fileId = result.data.id;
+        if (onProgress) onProgress(100);
         break;
       } else {
         throw new Error(`Unexpected response from chunk upload: ${result.status}`);
