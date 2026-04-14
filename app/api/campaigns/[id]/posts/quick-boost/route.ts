@@ -30,6 +30,7 @@ export async function POST(
             contentType,
             thumbnailUrl,
             facebookPageId,
+            facebookPageName,
             facebookPageAccessToken,
             instagramBusinessId,
             metaBoost,
@@ -44,6 +45,7 @@ export async function POST(
             postType: contentType,
             thumbnailUrl,
             facebookPageId,
+            facebookPageName,
             facebookPageAccessToken,
             instagramBusinessId,
             metaBoost

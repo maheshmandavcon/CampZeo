@@ -146,6 +146,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [selectedFacebookPageId, setSelectedFacebookPageId] = useState<string>('');
     const [selectedFacebookPageAccessToken, setSelectedFacebookPageAccessToken] = useState<string>('');
     const [selectedInstagramBusinessId, setSelectedInstagramBusinessId] = useState<string>('');
+    const [selectedFacebookPageName, setSelectedFacebookPageName] = useState<string>('');
 
     const [uploadingMedia, setUploadingMedia] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0); // Add progress state
@@ -748,6 +749,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     contentType,
                     thumbnailUrl,
                     facebookPageId: selectedFacebookPageId,
+                    facebookPageName: selectedFacebookPageName,
                     facebookPageAccessToken: selectedFacebookPageAccessToken,
                     instagramBusinessId: selectedInstagramBusinessId,
                     linkedInUrn: selectedLinkedInUrn === 'personal' ? null : selectedLinkedInUrn
@@ -959,6 +961,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     contentType, // NEW: Facebook/Instagram content type (POST, REEL)
                     thumbnailUrl, // Send thumbnail
                     facebookPageId: selectedFacebookPageId, // NEW: Selected Facebook Page
+                    facebookPageName: selectedFacebookPageName,
                     facebookPageAccessToken: selectedFacebookPageAccessToken, // NEW: Selected Facebook Page Access Token
                     instagramBusinessId: selectedInstagramBusinessId, // NEW: Linked Instagram ID
                     linkedInUrn: selectedLinkedInUrn === 'personal' ? null : selectedLinkedInUrn, // NEW: Selected LinkedIn Author URN
@@ -1015,6 +1018,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     contentType,
                     thumbnailUrl,
                     facebookPageId: selectedFacebookPageId,
+                    facebookPageName: selectedFacebookPageName,
                     facebookPageAccessToken: selectedFacebookPageAccessToken,
                     instagramBusinessId: selectedInstagramBusinessId,
                     metaBoost: boostOptions.enabled ? boostOptions : undefined,
@@ -1756,6 +1760,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                         const page = facebookPages.find(p => p.id === val);
                                                         if (page) {
                                                             setSelectedFacebookPageAccessToken(page.access_token);
+                                                            setSelectedFacebookPageName(page.name);
                                                             if (page.instagram_business_account?.id) {
                                                                 setSelectedInstagramBusinessId(page.instagram_business_account.id);
                                                             } else {

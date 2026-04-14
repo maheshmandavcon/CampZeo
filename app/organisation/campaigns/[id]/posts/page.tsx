@@ -32,7 +32,7 @@ import {
     DialogFooter,
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getPlatformIcon, getStatusBadge, getPreviewContent } from './_components/post-helpers';
+// import { getPlatformIcon, getStatusBadge, getPreviewContent } from './_components/post-helpers';
 import { getMediaPreviewUrl } from '@/lib/media-utils';
 import { MetaBoostSection, MetaBoostOptions } from './_components/MetaBoostSection';
 import { Rocket, Edit, Trash2, ExternalLink, Share2, Facebook, Instagram, Linkedin, Youtube, Pin, MoreVertical, Search, Filter, Calendar, CheckCircle2, AlertCircle, Clock, Sparkles, Send, ArrowLeft, Loader2, Plus, Mail, MessageSquare, Phone, Copy, Eye, Check, Paperclip, Globe, Download, Save, Users } from 'lucide-react';
@@ -120,6 +120,7 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
     const [lastUsedAdAccountId, setLastUsedAdAccountId] = useState<string>('');
     const [boostDialogOptions, setBoostDialogOptions] = useState<MetaBoostOptions | null>(null);
     const [hasPaidPlan, setHasPaidPlan] = useState(false); // Default to false (Secure by default - no flash)
+    const [socialStatus, setSocialStatus] = useState<any>(null);
 
     // Fetch organisation platforms
     useEffect(() => {
@@ -150,8 +151,21 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
             }
         };
 
+        const fetchSocialStatus = async () => {
+            try {
+                const response = await fetch('/api/user/social-status');
+                if (response.ok) {
+                    const data = await response.json();
+                    setSocialStatus(data);
+                }
+            } catch (error) {
+                console.error('Error fetching social status:', error);
+            }
+        };
+
         fetchOrgPlatforms();
         fetchSubscriptionStatus();
+        fetchSocialStatus();
     }, []);
 
     // Fetch Meta Ads config
@@ -909,6 +923,19 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
                     </DialogHeader>
                     {previewPost && (
                         <div className="space-y-4">
+                            {(previewPost.type === 'FACEBOOK' || previewPost.type === 'INSTAGRAM') && ((previewPost.metadata as any)?.facebookPageName || socialStatus?.facebook?.pageName) && (
+                                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-center gap-2">
+                                    {previewPost.type === 'FACEBOOK' ? (
+                                        <Facebook className="size-4 text-blue-600" />
+                                    ) : (
+                                        <Instagram className="size-4 text-pink-600" />
+                                    )}
+                                    <span className="text-sm font-medium">
+                                        {previewPost.isPostSent ? 'Posted to:' : 'Posting to:'} <span className="font-bold">{(previewPost.metadata as any)?.facebookPageName || socialStatus?.facebook?.pageName}</span>
+                                    </span>
+                                </div>
+                            )}
+
                             {previewPost.subject && (
                                 <div>
                                     <p className="text-sm font-medium mb-1">Subject/Title:</p>

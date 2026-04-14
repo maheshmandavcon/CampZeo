@@ -142,6 +142,7 @@ async function createPostHandler(
             contentType,
             thumbnailUrl,
             facebookPageId,
+            facebookPageName,
             facebookPageAccessToken,
             instagramBusinessId,
             linkedInUrn,
@@ -211,6 +212,7 @@ async function createPostHandler(
                 thumbnailUrl,
                 postType: contentType,
                 facebookPageId,
+                facebookPageName,
                 facebookPageAccessToken,
                 instagramBusinessId,
                 metaBoost: metaBoost || undefined
