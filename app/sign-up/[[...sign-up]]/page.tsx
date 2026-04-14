@@ -346,14 +346,6 @@ export default function Page() {
       return;
     }
 
-    setLoading(true);
-
-    const submissionForm = {
-      ...form,
-      organisationName: accountType === 'individual' ? form.name : form.organisationName,
-      taxNumber: accountType === 'individual' ? (form.taxNumber || "N/A") : form.taxNumber,
-      captchaToken
-    };
     // Email validation
     const emailValidation = validateEmail(form.email);
     if (!emailValidation.valid) {
@@ -363,32 +355,23 @@ export default function Page() {
       return;
     }
 
-    // // Password validation
-    // const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    // if (!passwordRegex.test(form.password)) {
-    //   toast.error("Weak Password", {
-    //     description: "Password must be at least 8 characters with 1 uppercase, 1 lowercase, and 1 number.",
-    //   });
-    //   return;
-    // }
-
     // Mobile validation
-    //  const phoneRegex = /^\+[1-9]\d{0,2}[\d\s\-().]*$/;
-            const digits = form.mobile.replace(/\D/g, '');
-            if (digits.length < 10 || digits.length > 15) {
-                toast.error("Invalid Mobile Number", {
-                    description: "Must contain 10-15 digits.",
-                });
-                return;
-            }
-    // if (form.mobile.length < 10) {
-    //   toast.error("Invalid Mobile Number", {
-    //     description: "Mobile number must be at least 10 digits.",
-    //   });
-    //   return;
-    // }
+    const digits = form.mobile.replace(/\D/g, '');
+    if (digits.length < 10 || digits.length > 15) {
+      toast.error("Invalid Mobile Number", {
+        description: "Must contain 10-15 digits.",
+      });
+      return;
+    }
 
     setLoading(true);
+
+    const submissionForm = {
+      ...form,
+      organisationName: accountType === 'individual' ? form.name : form.organisationName,
+      taxNumber: accountType === 'individual' ? (form.taxNumber || "N/A") : form.taxNumber,
+      captchaToken
+    };
 
     try {
       const checkRes = await fetch('/api/check-email', {

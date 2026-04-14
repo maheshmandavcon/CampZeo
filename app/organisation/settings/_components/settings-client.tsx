@@ -71,6 +71,7 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
   const [showFacebookPageDialog, setShowFacebookPageDialog] = useState(false);
   const [facebookPages, setFacebookPages] = useState<any[]>([]);
   const [loadingFacebookPages, setLoadingFacebookPages] = useState(false);
+  const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
 
   const handleViewFacebookPosts = async () => {
     setShowFacebookPostsDialog(true);
@@ -169,6 +170,7 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
       return;
     }
 
+    setConnectingPlatform(platform);
     try {
       const res = await fetch(`/api/socialmedia/auth-url?platform=${platform}`);
       const data = await res.json();
@@ -195,6 +197,8 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
     } catch (error) {
       console.error(error);
       toast.error(`Failed to initiate connection for ${platform}`);
+    } finally {
+      setConnectingPlatform(null);
     }
   };
 
@@ -593,7 +597,13 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                           </div>
                         ) : (
                           !isImpersonating ? (
-                            <Button className="cursor-pointer" variant="outline" onClick={() => handleConnect(platform.id)}>
+                            <Button
+                              className="cursor-pointer"
+                              variant="outline"
+                              onClick={() => handleConnect(platform.id)}
+                              disabled={connectingPlatform === platform.id}
+                            >
+                              {connectingPlatform === platform.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                               Connect
                             </Button>
                           ) : (
@@ -770,10 +780,12 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
           </DialogHeader>
           <div className="space-y-4 py-4">
             {/* Option 1: Via Facebook (Business Account) */}
-            <div
-              className="flex items-start gap-4 p-4 border-2 rounded-lg cursor-pointer hover:border-primary hover:bg-accent transition-colors"
+            <Button
+              variant="outline"
+              className="w-full flex items-start gap-4 p-4 h-auto border-2 rounded-lg cursor-pointer hover:border-primary hover:bg-accent transition-colors justify-start"
+              disabled={connectingPlatform === 'INSTAGRAM'}
               onClick={async () => {
-                setShowInstagramDialog(false);
+                setConnectingPlatform('INSTAGRAM');
                 try {
                   const res = await fetch(`/api/socialmedia/auth-url?platform=INSTAGRAM`);
                   const data = await res.json();
@@ -788,18 +800,21 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                       'Connect Instagram',
                       `width=${width},height=${height},left=${left},top=${top},status=no,locations=no,toolbar=no,menubar=no`
                     );
+                    setShowInstagramDialog(false);
                   }
                 } catch (error) {
                   toast.error('Failed to connect');
+                } finally {
+                  setConnectingPlatform(null);
                 }
               }}
             >
-              <div className="p-2 rounded-full bg-blue-100">
-                <Facebook className="h-6 w-6 text-blue-600" />
+              <div className="p-2 rounded-full bg-blue-100 shrink-0">
+                {connectingPlatform === 'INSTAGRAM' ? <Loader2 className="h-6 w-6 animate-spin text-blue-600" /> : <Facebook className="h-6 w-6 text-blue-600" />}
               </div>
-              <div className="flex-1">
+              <div className="flex-1 text-left">
                 <h4 className="font-semibold text-sm">Via Facebook (Recommended)</h4>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1 whitespace-normal">
                   Connect your Instagram Business or Creator account through Facebook.
                   Enables posting, Reels, and analytics.
                 </p>
@@ -810,13 +825,15 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                   </Badge>
                 </div>
               </div>
-            </div>
+            </Button>
 
             {/* Option 2: Instagram Basic Display (Direct) */}
-            <div
-              className="flex items-start gap-4 p-4 border-2 rounded-lg cursor-pointer hover:border-primary hover:bg-accent transition-colors"
+            <Button
+              variant="outline"
+              className="w-full flex items-start gap-4 p-4 h-auto border-2 rounded-lg cursor-pointer hover:border-primary hover:bg-accent transition-colors justify-start"
+              disabled={connectingPlatform === 'INSTAGRAM_DIRECT'}
               onClick={async () => {
-                setShowInstagramDialog(false);
+                setConnectingPlatform('INSTAGRAM_DIRECT');
                 try {
                   const res = await fetch(`/api/socialmedia/auth-url?platform=INSTAGRAM_DIRECT`);
                   const data = await res.json();
@@ -831,18 +848,21 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                       'Connect Instagram',
                       `width=${width},height=${height},left=${left},top=${top},status=no,locations=no,toolbar=no,menubar=no`
                     );
+                    setShowInstagramDialog(false);
                   }
                 } catch (error) {
                   toast.error('Failed to connect');
+                } finally {
+                  setConnectingPlatform(null);
                 }
               }}
             >
-              <div className="p-2 rounded-full bg-pink-100">
-                <Instagram className="h-6 w-6 text-pink-600" />
+              <div className="p-2 rounded-full bg-pink-100 shrink-0">
+                {connectingPlatform === 'INSTAGRAM_DIRECT' ? <Loader2 className="h-6 w-6 animate-spin text-pink-600" /> : <Instagram className="h-6 w-6 text-pink-600" />}
               </div>
-              <div className="flex-1">
+              <div className="flex-1 text-left">
                 <h4 className="font-semibold text-sm">Instagram Direct Login</h4>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1 whitespace-normal">
                   Connect personal Instagram account. Limited to viewing posts and profile info only.
                 </p>
                 <div className="mt-2">
@@ -852,7 +872,7 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                   </Badge>
                 </div>
               </div>
-            </div>
+            </Button>
           </div>
 
           <div className="bg-muted p-3 rounded-lg">

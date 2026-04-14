@@ -1034,7 +1034,7 @@ function PurchaseContent() {
                                 </Card>
                             )}
 
-                            <div className="flex flex-col md:flex-row gap-4 print:hidden pt-4">
+                            <div className="flex flex-col md:flex-row gap-4 print:hidden pt-4" data-html2canvas-ignore="true">
                                 <Button className="flex-1 h-12 text-base font-semibold shadow-lg shadow-primary/20" size="lg" onClick={() => router.push('/organisation')}>
                                     Go to Dashboard <ArrowRight className="ml-2 h-5 w-5" />
                                 </Button>
