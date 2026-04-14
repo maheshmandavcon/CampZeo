@@ -206,7 +206,9 @@ async function waitForPinterestMedia(
                 console.log(`[Pinterest] Media ${mediaId} status: ${status}`);
 
                 if (status === 'registered') {
-                    console.log(`[Pinterest] Media ${mediaId} is registered and ready.`);
+                    console.log(`[Pinterest] Media ${mediaId} is registered , waiting for success indication.`);
+                } else  if (status === 'succeeded') {
+                    console.log(`[Pinterest] Media ${mediaId} is registered and succeeded.`);
                     return;
                 } else if (status === 'failed') {
                     throw new Error(`Pinterest media processing failed for ${mediaId}`);
