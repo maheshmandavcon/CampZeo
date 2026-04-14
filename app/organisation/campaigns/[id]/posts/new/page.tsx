@@ -149,7 +149,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [selectedFacebookPageName, setSelectedFacebookPageName] = useState<string>('');
 
     const [uploadingMedia, setUploadingMedia] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0); // Add progress state
+    const [uploadProgress, setUploadProgress] = useState(0); 
+    const [currentUploadIndex, setCurrentUploadIndex] = useState(0);
+    const [totalUploadCount, setTotalUploadCount] = useState(0);
     const [templates, setTemplates] = useState<any[]>([]);
     const [pinterestBoards, setPinterestBoards] = useState<{ id: string; name: string }[]>([]);
     const [loadingPinterestBoards, setLoadingPinterestBoards] = useState(false);
@@ -484,13 +486,18 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
         try {
             setUploadingMedia(true);
-            setUploadProgress(0); // Reset progress
+            setUploadProgress(0); 
+            setTotalUploadCount(files.length);
+            setCurrentUploadIndex(0);
 
             const newUrls: string[] = [];
             let currentVideos = mediaUrls.filter(url => isVideoUrl(url)).length;
             let newlyAddedVideos = 0;
 
-            for (const file of files) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                setCurrentUploadIndex(i);
+                
                 const isVideo = file.type.startsWith('video/');
 
                 if (selectedPlatform === 'LINKEDIN' && isVideo) {
@@ -509,12 +516,20 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     orgId, 
                     campaignId,
                     selectedPlatform,
-                    isReel
+                    isReel,
+                    (fileProgress: number) => {
+                        // Calculate total progress: ((completed_files * 100) + current_file_progress) / total_files
+                        const totalProgress = Math.round(((i * 100) + fileProgress) / files.length);
+                        setUploadProgress(totalProgress);
+                    }
                 );
 
                 console.log(`[Drive] Media tracked: ${newBlob.url}`);
                 trackUpload(newBlob.url);
                 newUrls.push(newBlob.url);
+                
+                // Ensure progress hits the "completed file" mark precisely
+                setUploadProgress(Math.round(((i + 1) * 100) / files.length));
             }
 
             const updatedMediaUrls = [...mediaUrls, ...newUrls];
@@ -560,6 +575,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         try {
             setUploadingMedia(true);
             setUploadProgress(0);
+            setTotalUploadCount(1);
+            setCurrentUploadIndex(0);
 
             const file = files[0];
 
@@ -569,7 +586,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 orgId, 
                 campaignId,
                 selectedPlatform,
-                isReel
+                isReel,
+                (progress:any) => setUploadProgress(progress)
             );
 
             console.log(`[Drive] Thumbnail tracked: ${newBlob.url}`);
@@ -1692,7 +1710,11 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                             {uploadingMedia ? (
                                                                 <div className="flex flex-col items-center">
                                                                     <Loader2 className="size-4 text-muted-foreground animate-spin mb-0.5" />
-                                                                    <span className="text-[10px] text-muted-foreground">{uploadProgress}%</span>
+                                                                    <span className="text-[10px] text-muted-foreground text-center line-clamp-2 px-1">
+                                                                        {totalUploadCount > 1 
+                                                                            ? `File ${currentUploadIndex + 1}/${totalUploadCount}\n(${uploadProgress}%)` 
+                                                                            : `${uploadProgress}%`}
+                                                                    </span>
                                                                 </div>
                                                             ) : (
                                                                 <div className="flex flex-col items-center">

@@ -25,7 +25,7 @@ async function getDriveClient() {
 
   try {
     const key = JSON.parse(keyString);
-    
+
     // Ensure the private key has correct newline characters
     const privateKey = key.private_key?.replace(/\\n/g, '\n');
 
@@ -188,7 +188,7 @@ export async function getResumableUploadUrl(
   folderId: string
 ): Promise<{ uploadUrl: string }> {
   const drive = await getDriveClient();
-  
+
   // Use manual fetch for the session URL to ensure it's compatible with client-side PUT
   const auth = drive.context._options.auth as any;
   const client = await auth.getClient();
@@ -266,14 +266,14 @@ export async function uploadChunkProxy(
  */
 export async function moveFile(fileId: string, targetFolderId: string): Promise<void> {
   const drive = await getDriveClient();
-  
+
   // 1. Get current parents
   const file = await drive.files.get({
     fileId,
     fields: 'parents',
     supportsAllDrives: true,
   });
-  
+
   const previousParents = (file.data.parents || []).join(',');
 
   // 2. Update parents
@@ -293,21 +293,35 @@ export async function moveFile(fileId: string, targetFolderId: string): Promise<
 export async function deleteFromDrive(fileIdOrUrl: string): Promise<boolean> {
   const drive = await getDriveClient();
   let fileId = extractGoogleDriveId(fileIdOrUrl) || fileIdOrUrl;
-
-  console.log(`[DRIVE_API] Attempting to delete file ID: ${fileId}`);
+  const check = await drive.files.get({
+    fileId,
+    fields: 'id, name',
+    supportsAllDrives: true // Required for Shared Drives
+  }); console.log("File exists and is accessible: -----------------------------------------------", check.data.name, check.data.id);
+  console.log(`[DRIVE_API] Attempting to delete file ${fileIdOrUrl}: ${fileId}`);
 
   try {
-    const res: any = await drive.files.delete({ 
-        fileId, 
-        supportsAllDrives: true 
-    });
+    const res: any =
+      // await drive.files.delete({
+      //   fileId,
+      //   supportsAllDrives: true
+      // });
+      await drive.files.update({
+        fileId,
+        requestBody: {
+          trashed: true,
+        },
+        supportsAllDrives: true,
+      });
     console.log(`[DRIVE_API] Delete result for ${fileId}: Status ${res.status}`);
     return true;
   } catch (error: any) {
     console.warn(`[DRIVE_API] Skip delete for ${fileId}: ${error?.message || error}`);
+    // Add this temporarily to debug
+
     // If it's already deleted or ID is bad, we return true to not get stuck,
     // but we log it as a warning.
-    return true; 
+    return true;
   }
 }
 
@@ -330,7 +344,7 @@ export async function cleanupPendingFiles(maxAgeHours: number = 24): Promise<{ d
 
     const pendingFolderIds = folderResponse.data.files?.map((f: any) => f.id) || [];
     console.log(`[DRIVE_CLEANUP] Found ${pendingFolderIds.length} 'pending' folders.`);
-    
+
     let deletedCount = 0;
     let errorCount = 0;
 
@@ -348,7 +362,7 @@ export async function cleanupPendingFiles(maxAgeHours: number = 24): Promise<{ d
 
       const files = fileResponse.data.files || [];
       if (files.length > 0) {
-          console.log(`[DRIVE_CLEANUP] Folder ${folderId} has ${files.length} expired files.`);
+        console.log(`[DRIVE_CLEANUP] Folder ${folderId} has ${files.length} expired files.`);
       }
 
       for (const file of files) {

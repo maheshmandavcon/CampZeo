@@ -43,6 +43,8 @@ export default function NewTemplatePage() {
     const [isSaving, setIsSaving] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [currentUploadIndex, setCurrentUploadIndex] = useState(0);
+    const [totalUploadCount, setTotalUploadCount] = useState(0);
     const [isPlayingVideo, setIsPlayingVideo] = useState(false);
     const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
 
@@ -94,17 +96,38 @@ export default function NewTemplatePage() {
 
         setIsUploading(true);
         setUploadProgress(0);
+        setTotalUploadCount(Array.from(files).length);
+        setCurrentUploadIndex(0);
+
         try {
             const uploadedUrls: string[] = [];
+            const filesArray = Array.from(files);
 
-            for (const file of Array.from(files)) {
-                const newBlob = await uploadToServer(file, organisationId || undefined);
+            for (let i = 0; i < filesArray.length; i++) {
+                const file = filesArray[i];
+                setCurrentUploadIndex(i);
+                
+                const newBlob = await uploadToServer(
+                    file, 
+                    organisationId || undefined, 
+                    undefined, 
+                    undefined, 
+                    undefined, 
+                    (fileProgress: number) => {
+                        // Calculate total progress: ((completed_files * 100) + fileProgress) / total_files
+                        const totalProgress = Math.round(((i * 100) + fileProgress) / filesArray.length);
+                        setUploadProgress(totalProgress);
+                    }
+                );
 
                 if (newBlob.url) {
                     console.log(`[Drive] Template Image tracked: ${newBlob.url}`);
                     trackUpload(newBlob.url);
                     uploadedUrls.push(newBlob.url);
                 }
+                
+                // Ensure progress hits the "completed file" mark precisely
+                setUploadProgress(Math.round(((i + 1) * 100) / filesArray.length));
             }
 
             setFormData(prev => ({
@@ -129,11 +152,24 @@ export default function NewTemplatePage() {
 
         setIsUploading(true);
         setUploadProgress(0);
+        setTotalUploadCount(1);
+        setCurrentUploadIndex(0);
+
         try {
             const file = files[0];
 
             // Use client-side upload
-            const newBlob = await uploadToServer(file, organisationId || undefined);
+            const newBlob = await uploadToServer(
+                file, 
+                organisationId || undefined, 
+                undefined, 
+                undefined, 
+                undefined, 
+                (progress) => {
+                    console.log(`[UI] Template Thumbnail progress: ${progress}%`);
+                    setUploadProgress(progress);
+                }
+            );
 
             if (newBlob.url) {
                 console.log(`[Drive] Template Thumbnail tracked: ${newBlob.url}`);
@@ -719,7 +755,11 @@ export default function NewTemplatePage() {
                                             disabled={isUploading}
                                             className="gap-2 w-full"
                                         >
-                                            {isUploading ? `Uploading... ${uploadProgress > 0 ? `${uploadProgress.toFixed(0)}%` : ''}` : "Upload Thumbnail"}
+                                            {isUploading ? (
+                                                `Uploading... ${totalUploadCount > 1 ? `${currentUploadIndex + 1}/${totalUploadCount} ` : ''}(${uploadProgress.toFixed(0)}%)`
+                                            ) : (
+                                                "Upload Thumbnail"
+                                            )}
                                         </Button>
                                         <input
                                             id="thumbnail-upload"
@@ -780,7 +820,11 @@ export default function NewTemplatePage() {
                                             disabled={isUploading}
                                             className="gap-2 w-full"
                                         >
-                                            {isUploading ? `Uploading... ${uploadProgress > 0 ? `${uploadProgress.toFixed(0)}%` : ''}` : "Upload Cover"}
+                                            {isUploading ? (
+                                                `Uploading... ${totalUploadCount > 1 ? `${currentUploadIndex + 1}/${totalUploadCount} ` : ''}(${uploadProgress.toFixed(0)}%)`
+                                            ) : (
+                                                "Upload Cover"
+                                            )}
                                         </Button>
                                         <input
                                             id="cover-upload"
