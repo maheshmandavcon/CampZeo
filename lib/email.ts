@@ -83,7 +83,7 @@ export async function sendOrganisationInvite(params: OrganisationInviteParams): 
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                     <h2>Welcome to ${organisationName}!</h2>
                     <p>Hi ${ownerName || 'there'},</p>
-                    <p>Your organisation "${organisationName}" has been created successfully.</p>
+                    <p>Your organisation "${organisationName}" has been approved successfully.</p>
                     ${credentialsHtml}
                 </div>
             `,

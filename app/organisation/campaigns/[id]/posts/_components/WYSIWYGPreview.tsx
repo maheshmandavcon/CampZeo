@@ -270,7 +270,7 @@ export function WYSIWYGPreview({
                         {renderMediaItem(mediaUrls[3], "size-full")}
                         {count > 4 && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-[1px]">
-                                <span className="text-xl font-bold text-white">+{count - 3}</span>
+                                <span className="text-xl font-bold text-white">+{count - 4}</span>
                             </div>
                         )}
                     </div>
