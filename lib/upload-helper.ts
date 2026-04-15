@@ -1,6 +1,6 @@
 export async function uploadToServer(
-  file: File, 
-  organisationId?: string, 
+  file: File,
+  organisationId?: string,
   campaignId?: string,
   platform?: string | null,
   isReel?: boolean,
@@ -11,32 +11,47 @@ export async function uploadToServer(
 
   if (provider === 'google_drive') {
     console.log("[Upload] Using Google Drive resumable storage provider...");
-    
+
     if (!organisationId) {
       throw new Error("Organisation ID is required for Google Drive folder organization.");
     }
 
     const isImage = file.type.startsWith('image/');
 
-    // For images with platform context, use the optimization path (server-side processing)
-    if (isImage && platform) {
-      if (onProgress) onProgress(1);
-      console.log(`[Upload] Image with platform ${platform} - using server-side optimization path`);
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      const res = await fetch(`/api/upload/google-drive?organisationId=${organisationId}&campaignId=${campaignId || ''}&platform=${platform}&isReel=${isReel || false}`, {
-        method: 'POST',
-        body: formData,
-      });
+    // For all files <= 5MB, use the single-shot path to avoid Vercel payload limits
+    // and provide a smooth fake progress experience. Larger files use the resumable path.
+    if (file.size <= 5 * 1024 * 1024) {
+      console.log(`[Upload] Single-shot path for ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
 
-      if (!res.ok) {
-        throw new Error(`Image upload failed: ${res.statusText}`);
+      let fakeProgress = 10;
+      const interval = setInterval(() => {
+        fakeProgress += Math.random() * 5;
+        if (fakeProgress >= 95) {
+          clearInterval(interval);
+        } else {
+          if (onProgress) onProgress(Math.round(fakeProgress));
+        }
+      }, 200);
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch(`/api/upload/google-drive?organisationId=${organisationId}&campaignId=${campaignId || ''}&platform=${platform || ''}&isReel=${isReel || false}`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!res.ok) {
+          throw new Error(`Image upload failed: ${res.statusText}`);
+        }
+
+        const result = await res.json();
+        return result;
+      } finally {
+        clearInterval(interval);
+        if (onProgress) onProgress(100);
       }
-
-      const result = await res.json();
-      if (onProgress) onProgress(100);
-      return result;
     }
 
     if (onProgress) onProgress(1); // Set to 1% immediately to show activity
@@ -90,7 +105,7 @@ export async function uploadToServer(
       }
 
       const result = await chunkRes.json();
-      
+
       if (result.status === 308) {
         // More chunks to come
         start = end;
@@ -114,7 +129,7 @@ export async function uploadToServer(
     // 3. Construct a direct, publicly accessible Google Drive URL
     // We use the same format as the standard upload path for consistency
     const url = `https://drive.google.com/uc?id=${fileId}&export=download&file=${encodeURIComponent(file.name)}`;
-    
+
     console.log(`[Upload] Resumable upload successful: ${url}`);
     return { url };
   } else {
@@ -126,24 +141,39 @@ export async function uploadToServer(
     formData.append('file', file); // Sync naming with /api/upload/google-drive
     console.log(`[Upload] Using custom server storage provider: ${uploadUrl}`);
 
-    const res = await fetch(uploadUrl, {
-      method: 'POST',
-      body: formData,
-    });
+    let fakeProgress = 1;
+    const interval = setInterval(() => {
+      fakeProgress += Math.random() * 5;
+      if (fakeProgress >= 95) {
+        clearInterval(interval);
+      } else {
+        if (onProgress) onProgress(Math.round(fakeProgress));
+      }
+    }, 200);
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`Upload failed: ${res.statusText}. ${errorText}`);
+    try {
+      const res = await fetch(uploadUrl, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Upload failed: ${res.statusText}. ${errorText}`);
+      }
+
+      const data = await res.json();
+      const url = data.urls && data.urls.length > 0 ? data.urls[0] : (data.url || null);
+
+      if (!url) {
+        throw new Error("Upload succeeded but no URL was returned by the server.");
+      }
+
+      return { url };
+    } finally {
+      clearInterval(interval);
+      if (onProgress) onProgress(100);
     }
-
-    const data = await res.json();
-    const url = data.urls && data.urls.length > 0 ? data.urls[0] : (data.url || null);
-
-    if (!url) {
-      throw new Error("Upload succeeded but no URL was returned by the server.");
-    }
-
-    return { url };
   }
 }
 
@@ -174,15 +204,15 @@ export async function deleteFromServer(publicUrl: string): Promise<boolean> {
 }
 export async function deleteFromDriveImmediate(urls: string[]): Promise<boolean> {
   if (!urls || urls.length === 0) return true;
-  
+
   try {
     console.log(`[DriveHelper] Immediate cleanup for ${urls.length} files via POST...`);
     const res = await fetch('/api/upload/google-drive', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         action: 'cleanup',
-        urls 
+        urls
       }),
       keepalive: true // Crucial for beforeunload cleanup
     });
