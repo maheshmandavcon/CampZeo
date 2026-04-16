@@ -62,6 +62,7 @@ export function WYSIWYGPreview({
 }: WYSIWYGPreviewProps) {
     const [isPlayingVideo, setIsPlayingVideo] = React.useState(false);
     const [currentSlideIndex, setCurrentSlideIndex] = React.useState(0);
+    const [videoRatios, setVideoRatios] = React.useState<Record<string, number>>({});
     const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
 
     // Reset slide index when media or platform changes
@@ -126,11 +127,17 @@ export function WYSIWYGPreview({
                     {isVid ? (
                         <video
                             src={previewUrl}
-                            className="size-full object-fill"
+                            className="size-full object-contain"
                             autoPlay
                             muted
                             loop
                             playsInline
+                            onLoadedMetadata={(e) => {
+                                const { videoWidth, videoHeight } = e.currentTarget;
+                                if (videoWidth && videoHeight) {
+                                    setVideoRatios(prev => ({ ...prev, [url]: videoWidth / videoHeight }));
+                                }
+                            }}
                         />
                     ) : isImg ? (
                         <Image
@@ -239,7 +246,13 @@ export function WYSIWYGPreview({
 
         if (platform === "FACEBOOK" || platform === "LINKEDIN" || platform === "WHATSAPP") {
             const count = mediaUrls.length;
-            if (count === 1) return renderMediaItem(mediaUrls[0], "aspect-video rounded-lg border");
+            
+            const hasVerticalVideo = mediaUrls.some(url => videoRatios[url] && videoRatios[url] < 1);
+            const isFacebookVideoOnly = platform === "FACEBOOK" && 
+                mediaUrls.every(url => isVideoUrl(url)) && 
+                hasVerticalVideo;
+
+            if (count === 1) return renderMediaItem(mediaUrls[0], cn(isFacebookVideoOnly ? "aspect-square" : "aspect-video", "rounded-lg border"));
 
             if (count === 2) {
                 return (
@@ -253,7 +266,7 @@ export function WYSIWYGPreview({
             if (count === 3) {
                 return (
                     <div className="grid grid-cols-2 gap-1 overflow-hidden rounded-lg border">
-                        {renderMediaItem(mediaUrls[0], "col-span-2 aspect-video")}
+                        {renderMediaItem(mediaUrls[0], cn("col-span-2", isFacebookVideoOnly ? "aspect-square" : "aspect-video"))}
                         {renderMediaItem(mediaUrls[1], "aspect-square")}
                         {renderMediaItem(mediaUrls[2], "aspect-square")}
                     </div>
@@ -355,7 +368,7 @@ export function WYSIWYGPreview({
                             ) : (
                                 renderMediaItem(videoUrl, "size-full opacity-80")
                             )}
-                            <button
+                            {/* <button
                                 type="button"
                                 onClick={() => setIsPlayingVideo(true)}
                                 disabled={!mediaUrls.length || (!isYouTubeUrl && !isVideoUrl(videoUrl))}
@@ -364,7 +377,7 @@ export function WYSIWYGPreview({
                                 <div className="flex size-14 items-center justify-center rounded-full bg-red-600/90 shadow-lg backdrop-blur-sm transition-transform group-hover:scale-110 disabled:opacity-50">
                                     <div className="ml-1 size-0 border-y-8 border-l-12 border-y-transparent border-l-white"></div>
                                 </div>
-                            </button>
+                            </button> */}
                             {isReel && (
                                 <div className="absolute bottom-4 left-4">
                                     <div className="rounded-full bg-white/20 px-2 py-0.5 backdrop-blur-md">

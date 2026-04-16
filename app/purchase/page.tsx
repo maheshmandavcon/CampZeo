@@ -953,13 +953,10 @@ function PurchaseContent() {
 
 
                     {step === "SUCCESS" && (
-                        <div ref={invoiceRef} className="space-y-6 animate-in fade-in zoom-in duration-500">
-                            <div className="flex flex-col items-center justify-center text-center space-y-4 p-8 bg-primary/5 rounded-2xl border border-primary/20 relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-4">
-                                    <Badge className="bg-green-500 hover:bg-green-600 border-none px-3 py-1">PAID</Badge>
-                                </div>
-                                <div className="h-20 w-20 bg-primary/10 rounded-full flex items-center justify-center">
-                                    <Check className="h-10 w-10 text-primary" />
+                        <div className="space-y-6 animate-in fade-in zoom-in duration-500">
+                            <div className="flex flex-col items-center justify-center text-center space-y-4 mb-8">
+                                <div className="h-16 w-16 bg-green-50 rounded-full flex items-center justify-center">
+                                    <Check className="h-8 w-8 text-green-600" />
                                 </div>
                                 <div className="space-y-2">
                                     <h3 className="text-2xl font-bold tracking-tight">Payment Successful!</h3>
@@ -970,68 +967,158 @@ function PurchaseContent() {
                             </div>
 
                             {invoice && (
-                                <Card className="border-primary/20 shadow-lg overflow-hidden">
-                                    <div className="bg-primary/5 px-6 py-4 border-b border-primary/10 flex justify-between items-center">
-                                        <h4 className="font-bold flex items-center gap-2">
-                                            <FileText className="size-4 text-primary" />
-                                            Invoice Summary
-                                        </h4>
-                                        <span className="text-sm font-mono text-muted-foreground">{invoice.invoiceNumber}</span>
-                                    </div>
-                                    <CardContent className="p-6 space-y-6">
-                                        {/* Two Column Layout */}
-                                        <div className="grid md:grid-cols-2 gap-8">
-                                            {/* Column 1: Billing Info */}
-                                            <div className="space-y-4">
-                                                <div>
-                                                    <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Billing To</h5>
-                                                    <p className="font-semibold text-base">{formData.name}</p>
-                                                    {accountType === 'business' && (
-                                                        <p className="text-sm text-muted-foreground">{formData.organisationName}</p>
-                                                    )}
-                                                    <p className="text-sm text-muted-foreground">{formData.email}</p>
-                                                    <p className="text-sm text-muted-foreground">{formData.mobile}</p>
+                                <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-sm border overflow-hidden" ref={invoiceRef}>
+                                    <div className="p-8 md:p-12">
+                                        <div className=" mx-auto relative">
+                                            {/* Status Watermark */}
+                                            {invoice.status !== 'PAID' && (
+                                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-45 pointer-events-none opacity-10 border-4 border-red-500 text-red-500 text-9xl font-black uppercase p-4 rounded-xl whitespace-nowrap z-0">
+                                                    {invoice.status}
                                                 </div>
-                                                <div>
-                                                    <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Address</h5>
-                                                    <p className="text-sm text-muted-foreground leading-relaxed">
-                                                        {formData.address},<br />
-                                                        {formData.city}, {formData.state} {formData.postalCode}<br />
-                                                        {formData.country}
-                                                    </p>
-                                                </div>
-                                            </div>
+                                            )}
 
-                                            {/* Column 2: Order Info */}
-                                            <div className="space-y-4">
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div>
-                                                        <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Date</h5>
-                                                        <p className="text-sm font-medium">{new Date(invoice.invoiceDate).toLocaleDateString()}</p>
+                                            {/* Header Section */}
+                                            <div className="flex justify-between items-start mb-12 relative z-10">
+                                                <div className="flex flex-col gap-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <img
+                                                            src="/logo-1.png"
+                                                            alt="CampZeo"
+                                                            className="h-12 w-auto object-contain"
+                                                            onError={(e) => {
+                                                                e.currentTarget.style.display = 'none';
+                                                            }}
+                                                        />
                                                     </div>
-                                                    <div>
-                                                        <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Method</h5>
-                                                        <p className="text-sm font-medium">Razorpay</p>
+                                                    <div className="text-sm text-slate-500 max-w-[200px]">
+                                                        <p>123 Innovation Drive</p>
+                                                        <p>Tech City, TC 90210</p>
+                                                        <p>support@campzeo.com</p>
                                                     </div>
                                                 </div>
 
-                                                <div className="bg-muted/50 rounded-xl p-4 space-y-3">
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="text-muted-foreground">Plan: {invoice.description.replace('Subscription for ', '')}</span>
-                                                        <span className="font-medium">{formatPrice(invoice.amount, invoice.currency)}</span>
-                                                    </div>
-                                                    <Separator className="bg-primary/10" />
-                                                    <div className="flex justify-between items-baseline pt-1">
-                                                        <span className="font-bold">Total Paid</span>
-                                                        <span className="text-xl font-extrabold text-primary">
-                                                            {formatPrice(invoice.amount, invoice.currency)}
+                                                <div className="text-right">
+                                                    <h1 className="text-4xl font-light text-slate-300 tracking-widest uppercase mb-2">Invoice</h1>
+                                                    <p className="font-mono text-lg font-medium text-slate-700">#{invoice.invoiceNumber}</p>
+                                                    <div className="mt-4">
+                                                        <span className={`inline-flex items-center rounded-md px-3 py-1 text-sm font-medium ${invoice.status === 'PAID' ? 'bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20' :
+                                                            invoice.status === 'PENDING' ? 'bg-yellow-50 text-yellow-800 ring-1 ring-inset ring-yellow-600/20' :
+                                                                'bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/20'
+                                                            }`}>
+                                                            {invoice.status || 'PAID'}
                                                         </span>
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            <hr className="border-slate-100 mb-12" />
+
+                                            {/* Client & Dates Grid */}
+                                            <div className="grid grid-cols-2 gap-12 mb-12 relative z-10 text-left">
+                                                <div>
+                                                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Bill To</h3>
+                                                    <div className="text-slate-900 font-bold text-lg mb-1">{formData.organisationName || formData.name}</div>
+                                                    <div className="text-slate-600 text-sm space-y-1">
+                                                        {formData.address ? <p>{formData.address}</p> : <p className="text-slate-400 italic">No address provided</p>}
+                                                        {(formData.city || formData.state || formData.postalCode) && (
+                                                            <p>{[formData.city, formData.state, formData.postalCode].filter(Boolean).join(', ')}</p>
+                                                        )}
+                                                        {formData.country && <p>{formData.country}</p>}
+                                                        {formData.email && <p className="text-indigo-600 mt-2">{formData.email}</p>}
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-6">
+                                                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                                                        <span className="text-slate-500 text-sm">Invoice Date</span>
+                                                        <span className="font-medium text-slate-900">{new Date(invoice.invoiceDate || Date.now()).toLocaleDateString()}</span>
+                                                    </div>
+                                                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                                                        <span className="text-slate-500 text-sm">Due Date</span>
+                                                        <span className="font-medium text-slate-900">{new Date(invoice.dueDate || Date.now()).toLocaleDateString()}</span>
+                                                    </div>
+                                                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                                                        <span className="text-slate-500 text-sm">Payment Method</span>
+                                                        <span className="font-medium capitalize text-slate-900">Razorpay</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Line Items Table */}
+                                            <div className="mb-12 relative z-10">
+                                                <table className="w-full">
+                                                    <thead>
+                                                        <tr className="bg-slate-50 border-y border-slate-200">
+                                                            <th className="py-4 pl-4 text-left font-semibold text-slate-700 text-sm uppercase tracking-wide w-2/3">Description</th>
+                                                            <th className="py-4 pr-4 text-right font-semibold text-slate-700 text-sm uppercase tracking-wide w-1/3">Amount</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        <tr>
+                                                            <td className="py-6 pl-4 text-left">
+                                                                <p className="font-bold text-slate-900">{invoice.description || "Subscription Plan"}</p>
+                                                                <p className="text-sm text-slate-500 mt-1">
+                                                                    Premium Subscription Plan
+                                                                </p>
+                                                            </td>
+                                                            <td className="py-6 pr-4 text-right font-mono text-slate-700">
+                                                                {formatPrice(Number(invoice.amount), invoice.currency)}
+                                                            </td>
+                                                        </tr>
+                                                        {Number(invoice.taxAmount) > 0 && (
+                                                            <tr>
+                                                                <td className="py-6 pl-4 text-left">
+                                                                    <p className="font-medium text-slate-900">Tax / VAT</p>
+                                                                </td>
+                                                                <td className="py-6 pr-4 text-right font-mono text-slate-700">
+                                                                    {formatPrice(Number(invoice.taxAmount), invoice.currency)}
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* Totals Section */}
+                                            <div className="flex justify-end mb-16 relative z-10">
+                                                <div className="w-full max-w-xs space-y-3">
+                                                    <div className="flex justify-between text-slate-600 text-sm">
+                                                        <span>Subtotal</span>
+                                                        <span className="font-mono">{formatPrice(Number(invoice.amount) - Number(invoice.taxAmount || 0), invoice.currency)}</span>
+                                                    </div>
+                                                    {Number(invoice.taxAmount) > 0 && (
+                                                        <div className="flex justify-between text-slate-600 text-sm">
+                                                            <span>Tax</span>
+                                                            <span className="font-mono">{formatPrice(Number(invoice.taxAmount), invoice.currency)}</span>
+                                                        </div>
+                                                    )}
+                                                    {Number(invoice.discountAmount) > 0 && (
+                                                        <div className="flex justify-between text-slate-600 text-sm">
+                                                            <span>Discount</span>
+                                                            <span className="font-mono text-green-600">-{formatPrice(Number(invoice.discountAmount), invoice.currency)}</span>
+                                                        </div>
+                                                    )}
+                                                    <div className="border-t border-slate-200 pt-3 mt-3 flex justify-between items-end">
+                                                        <span className="font-bold text-slate-900">Total</span>
+                                                        <span className="font-bold text-2xl text-indigo-600 font-mono">
+                                                            {formatPrice(Number(invoice.amount) - Number(invoice.discountAmount || 0), invoice.currency)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Footer */}
+                                            <div className="bg-slate-50 rounded-lg p-6 text-center break-inside-avoid relative z-10">
+                                                <p className="text-slate-600 font-medium mb-1">Thank you for your business!</p>
+                                                <p className="text-slate-500 text-sm">If you have any questions concerning this invoice, please contact support@campzeo.com</p>
+                                            </div>
+
+                                            <div className="mt-8 text-center relative z-10">
+                                                <p className="text-xs text-slate-300">Generated by CampZeo Platform</p>
+                                            </div>
                                         </div>
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </div>
                             )}
 
                             <div className="flex flex-col md:flex-row gap-4 print:hidden pt-4" data-html2canvas-ignore="true">
@@ -1053,6 +1140,8 @@ function PurchaseContent() {
                             </div>
                         </div>
                     )}
+
+
 
                 </div>
             </div>

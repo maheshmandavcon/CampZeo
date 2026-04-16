@@ -407,14 +407,6 @@ export async function sendPaymentReceipt(params: PaymentReceiptParams): Promise<
                         <p style="font-size: 18px;"><strong>Amount Paid:</strong> ${formattedAmount}</p>
                     </div>
 
-                    <p>You can view your invoice in your dashboard.</p>
-                    
-                    <p>
-                        <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/organisation/billing" 
-                           style="background-color: #0070f3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
-                           View Billing History
-                        </a>
-                    </p>
                 </div>
             `,
         };
