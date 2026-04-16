@@ -203,7 +203,7 @@ export function getSocialMediaUrl(url: string): string {
 
                 // For videos OR unknown types, use our internal proxy.
                 // This is safer because the proxy handles any file type via the Drive API.
-                return getPublicMediaUrl(`/api/upload/google-drive/view?id=${id}`);
+                return `https://storage.campzeo.com/api/upload/google-drive/view?id=${id}`;
             }
         } catch (e) {
             console.warn('[MediaUtils] Failed to transform Drive URL:', e);

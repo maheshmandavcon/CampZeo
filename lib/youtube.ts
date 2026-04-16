@@ -65,16 +65,9 @@ export async function postToYouTube(
 
         const contentLengthHeader = videoResponse.headers.get('content-length');
         if (!contentLengthHeader) {
-            console.warn('[YouTube] Warning: Missing content-length header, falling back to buffering');
+            console.warn('[YouTube] Warning: Missing content-length header. Stream will use chunked transfer encoding.');
         }
-        const videoSize = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
-
-        let videoBuffer: Buffer | null = null;
-        if (!videoSize) {
-            videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-        }
-
-        const actualVideoSize = videoSize || (videoBuffer ? videoBuffer.length : 0);
+        const actualVideoSize = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
         console.log(`[YouTube] Video size: ${actualVideoSize} bytes`);
 
         // Step 2: Initialize resumable upload session
@@ -130,89 +123,35 @@ export async function postToYouTube(
         // Step 3: Upload the video file (chunked stream)
         let videoId: string;
 
-        if (videoBuffer) {
-            // Fallback for when content-length was missing
-            const uploadResponse = await fetch(uploadUrl, {
-                method: 'PUT',
-                headers: {
-                    'Content-Length': actualVideoSize.toString(),
-                    'Content-Type': 'video/*',
-                },
-                body: videoBuffer,
-            });
-
-            if (!uploadResponse.ok) {
-                const error = await uploadResponse.text();
-                console.error('[YouTube] Video upload error:', error);
-                throw new Error(`YouTube video upload failed: ${error}`);
-            }
-
-            const videoData: any = await uploadResponse.json();
-            videoId = videoData.id;
-        } else {
-            if (!videoResponse.body) {
-                throw new Error('Response body is null');
-            }
-
-            let buffer = Buffer.alloc(0);
-            let uploadedBytes = 0;
-            let finalVideoData: any = null;
-
-            const uploadChunk = async (chunk: Buffer, start: number) => {
-                const end = start + chunk.length - 1;
-                console.log(`[YouTube] Uploading chunk: bytes ${start}-${end}/${actualVideoSize}`);
-                const res = await fetch(uploadUrl, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Length': chunk.length.toString(),
-                        'Content-Range': `bytes ${start}-${end}/${actualVideoSize}`,
-                        'Content-Type': 'video/*',
-                    },
-                    body: chunk,
-                });
-
-                if (res.status === 308) {
-                    return null; // Incomplete, expected
-                }
-                if (!res.ok && res.status !== 200 && res.status !== 201) {
-                    const err = await res.text();
-                    throw new Error(`Chunk upload failed with status ${res.status}: ${err}`);
-                }
-                return await res.json();
-            };
-
-            const reader = videoResponse.body.getReader();
-            const chunkSize = 10 * 1024 * 1024;
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (value) {
-                    buffer = Buffer.concat([buffer, Buffer.from(value)]);
-                }
-
-                // Only upload a chunk if it's not the last one, and ensures multiple of 256KB
-                while (buffer.length >= chunkSize && !done) {
-                    const chunk = buffer.subarray(0, chunkSize);
-                    buffer = buffer.subarray(chunkSize);
-                    const data = await uploadChunk(chunk, uploadedBytes);
-                    if (data) finalVideoData = data;
-                    uploadedBytes += chunkSize;
-                }
-
-                if (done) {
-                    if (buffer.length > 0) {
-                        const data = await uploadChunk(buffer, uploadedBytes);
-                        if (data) finalVideoData = data;
-                    }
-                    break;
-                }
-            }
-
-            if (!finalVideoData || !finalVideoData.id) {
-                throw new Error("Upload completed but didn't receive video ID from YouTube API");
-            }
-            videoId = finalVideoData.id;
+        if (!videoResponse.body) {
+            throw new Error('Response body is null');
         }
+
+        console.log(`[YouTube] Streaming video directly...`);
+        const uploadResponse = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'video/*',
+                ...(actualVideoSize > 0 && {
+                    'Content-Length': actualVideoSize.toString()
+                })
+            },
+            body: videoResponse.body as any,
+            duplex: 'half' // Required for streaming bodies in Node.js native fetch
+        } as any);
+
+        if (!uploadResponse.ok) {
+            const error = await uploadResponse.text();
+            console.error('[YouTube] Video direct upload error:', error);
+            throw new Error(`YouTube video upload failed: ${error}`);
+        }
+
+        const finalVideoData: any = await uploadResponse.json();
+
+        if (!finalVideoData || !finalVideoData.id) {
+            throw new Error("Upload completed but didn't receive video ID from YouTube API");
+        }
+        videoId = finalVideoData.id;
 
         console.log(`[YouTube] Video uploaded successfully: ${videoId}`);
 
