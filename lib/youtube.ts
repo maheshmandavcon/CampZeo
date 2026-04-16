@@ -68,10 +68,10 @@ export async function postToYouTube(
             console.warn('[YouTube] Warning: Missing content-length header, falling back to buffering');
         }
         const videoSize = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
-        
+
         let videoBuffer: Buffer | null = null;
         if (!videoSize) {
-           videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
+            videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
         }
 
         const actualVideoSize = videoSize || (videoBuffer ? videoBuffer.length : 0);
@@ -79,7 +79,7 @@ export async function postToYouTube(
 
         // Step 2: Initialize resumable upload session
         console.log(`[YouTube] Sending tags to API:`, metadata?.tags || []);
-        
+
         const initHeaders: Record<string, string> = {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
@@ -129,7 +129,7 @@ export async function postToYouTube(
 
         // Step 3: Upload the video file (chunked stream)
         let videoId: string;
-        
+
         if (videoBuffer) {
             // Fallback for when content-length was missing
             const uploadResponse = await fetch(uploadUrl, {
@@ -153,11 +153,11 @@ export async function postToYouTube(
             if (!videoResponse.body) {
                 throw new Error('Response body is null');
             }
-            
+
             let buffer = Buffer.alloc(0);
             let uploadedBytes = 0;
             let finalVideoData: any = null;
-            
+
             const uploadChunk = async (chunk: Buffer, start: number) => {
                 const end = start + chunk.length - 1;
                 console.log(`[YouTube] Uploading chunk: bytes ${start}-${end}/${actualVideoSize}`);
@@ -170,7 +170,7 @@ export async function postToYouTube(
                     },
                     body: chunk,
                 });
-                
+
                 if (res.status === 308) {
                     return null; // Incomplete, expected
                 }
@@ -182,14 +182,14 @@ export async function postToYouTube(
             };
 
             const reader = videoResponse.body.getReader();
-            const chunkSize = 50 * 1024 * 1024; // 50MB chunks (YouTube requires multiple of 256KB)
-            
+            const chunkSize = 10 * 1024 * 1024;
+
             while (true) {
                 const { done, value } = await reader.read();
                 if (value) {
                     buffer = Buffer.concat([buffer, Buffer.from(value)]);
                 }
-                
+
                 // Only upload a chunk if it's not the last one, and ensures multiple of 256KB
                 while (buffer.length >= chunkSize && !done) {
                     const chunk = buffer.subarray(0, chunkSize);
@@ -198,7 +198,7 @@ export async function postToYouTube(
                     if (data) finalVideoData = data;
                     uploadedBytes += chunkSize;
                 }
-                
+
                 if (done) {
                     if (buffer.length > 0) {
                         const data = await uploadChunk(buffer, uploadedBytes);
@@ -207,7 +207,7 @@ export async function postToYouTube(
                     break;
                 }
             }
-            
+
             if (!finalVideoData || !finalVideoData.id) {
                 throw new Error("Upload completed but didn't receive video ID from YouTube API");
             }
