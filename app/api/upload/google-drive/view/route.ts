@@ -48,7 +48,7 @@ export async function GET(req: Request) {
       googleHeaders['Range'] = incomingRange;
     }
 
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true&acknowledgeAbuse=true`, {
       headers: googleHeaders
     });
 

@@ -60,12 +60,12 @@ export function getPublicMediaUrl(url: string): string {
 
     // If relative URL, convert to absolute
     // Priority: Explicit App URL -> Vercel Deployment URL -> Localhost (Development)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
         (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 
     // Remove any accidental multiple slashes
     const cleanPath = url.startsWith('/') ? url : `/${url}`;
-    
+
     // Facebook/Instagram sometimes fail if fragments are present in the 'url' param
     const urlWithoutFragment = cleanPath.split('#')[0];
 
@@ -77,10 +77,10 @@ export function getPublicMediaUrl(url: string): string {
  */
 export function isGoogleDriveUrl(url: string | null | undefined): boolean {
     if (!url) return false;
-    return url.includes('drive.google.com/uc') || 
-           url.includes('googleusercontent.com/d/') || 
-           url.includes('/file/d/') ||
-           url.includes('/api/upload/google-drive/');
+    return url.includes('drive.google.com/uc') ||
+        url.includes('googleusercontent.com/d/') ||
+        url.includes('/file/d/') ||
+        url.includes('/api/upload/google-drive/');
 }
 
 /**
@@ -109,7 +109,7 @@ export function extractGoogleDriveId(url: string | null | undefined): string | n
         // Fallback for non-standard or malformed URLs (including relative internal paths)
         const ucMatch = url.match(/[?&]id=([^?&]+)/);
         if (ucMatch) return ucMatch[1];
-        
+
         const dMatch = url.match(/\/d\/([^/?=]+)/);
         if (dMatch) return dMatch[1];
     }
@@ -128,7 +128,7 @@ export function getPreviewUrl(url: string | null | undefined): string {
     if (isGoogleDriveUrl(url)) {
         const id = extractGoogleDriveId(url);
         if (id) {
-            return `/api/upload/google-drive/view?id=${id}`;
+            return `https://storage.campzeo.com/api/upload/google-drive/view?id=${id}`;
         }
     }
 
@@ -144,8 +144,8 @@ export function isPublicUrl(url: string): boolean {
     if (!url) return false;
 
     // A "public" url must be absolute and NOT localhost
-    const isLocal = url.includes('localhost') || 
-        url.includes('127.0.0.1') || 
+    const isLocal = url.includes('localhost') ||
+        url.includes('127.0.0.1') ||
         url.includes('0.0.0.0');
 
     return (url.startsWith('http://') || url.startsWith('https://')) && !isLocal;
@@ -157,20 +157,20 @@ export function isPublicUrl(url: string): boolean {
  */
 export function getMediaPreviewUrl(url: string): string {
     if (!url) return '';
-    
+
     // If it's a Google Drive direct link, convert to local proxy for rendering
     if (isGoogleDriveUrl(url)) {
         const id = extractGoogleDriveId(url);
         const urlObj = new URL(url);
-        const file = urlObj.searchParams.get('file') || 
-                     urlObj.searchParams.get('filename') || 
-                     (urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : 'media');
-        
+        const file = urlObj.searchParams.get('file') ||
+            urlObj.searchParams.get('filename') ||
+            (urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : 'media');
+
         if (id) {
-            return `/api/upload/google-drive/view?id=${id}&file=${encodeURIComponent(file)}`;
+            return `https://storage.campzeo.com/api/upload/google-drive/view?id=${id}&file=${encodeURIComponent(file)}`;
         }
     }
-    
+
     return url;
 }
 
@@ -187,20 +187,20 @@ export function getSocialMediaUrl(url: string): string {
         try {
             const id = extractGoogleDriveId(url);
             const urlObj = new URL(url);
-            const file = urlObj.searchParams.get('file') || 
-                         urlObj.searchParams.get('filename') || 
-                         urlObj.searchParams.get('name') || 
-                         (urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : 'media');
-            
+            const file = urlObj.searchParams.get('file') ||
+                urlObj.searchParams.get('filename') ||
+                urlObj.searchParams.get('name') ||
+                (urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : 'media');
+
             if (id) {
                 // Determine if it's definitely an image based on the file hint (if available)
                 const isDefinitelyImage = isImageUrl(file);
-                
+
                 // For confirmed images, use the lh3 CDN (optimized, faster)
                 if (isDefinitelyImage) {
                     return `https://lh3.googleusercontent.com/d/${id}=w1000`;
                 }
-                
+
                 // For videos OR unknown types, use our internal proxy.
                 // This is safer because the proxy handles any file type via the Drive API.
                 return getPublicMediaUrl(`/api/upload/google-drive/view?id=${id}`);
@@ -251,7 +251,7 @@ export function getFileExtension(url: string): string {
     if (!url) return '';
     try {
         const urlObj = new URL(url);
-        
+
         // 1. Try to get extension from the pathname
         const path = urlObj.pathname;
         const lastDotInPath = path.lastIndexOf('.');
@@ -261,10 +261,10 @@ export function getFileExtension(url: string): string {
         }
 
         // 2. Try to get from filename parameters or fragment hint (used for Google Drive links)
-        const fileParam = urlObj.searchParams.get('file') || 
-                         urlObj.searchParams.get('filename') || 
-                         urlObj.searchParams.get('name') ||
-                         (urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : null);
+        const fileParam = urlObj.searchParams.get('file') ||
+            urlObj.searchParams.get('filename') ||
+            urlObj.searchParams.get('name') ||
+            (urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : null);
         if (fileParam) {
             const lastDotInFile = fileParam.lastIndexOf('.');
             if (lastDotInFile !== -1) {
@@ -288,7 +288,7 @@ export function getFileExtension(url: string): string {
  */
 export function isVideoUrl(url: string | null | undefined): boolean {
     if (!url) return false;
-    
+
 
     if (url.includes('campzeo.com')) return true;
     if (url.includes('lh3.googleusercontent.com')) return false;
@@ -304,7 +304,7 @@ export function isVideoUrl(url: string | null | undefined): boolean {
  */
 export function isImageUrl(url: string | null | undefined): boolean {
     if (!url) return false;
-    
+
     // Heuristic: lh3 google links are always images
     if (url.includes('lh3.googleusercontent.com')) return true;
     // Heuristic: campzeo.com links in this context are specialized video proxies

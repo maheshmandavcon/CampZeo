@@ -70,7 +70,7 @@ export async function postToInstagram(
         if (isVideo) {
           childId = await performResumableInstagramVideoUpload(credentials, mediaUrl, childParams);
         } else {
-          childParams.append("image_url", originalUrl);
+          childParams.append("image_url", mediaUrl);
           const res = await fetch(
             `${baseUrl}/${userId}/media`,
             { method: "POST", body: childParams }
@@ -167,9 +167,7 @@ export async function postToInstagram(
         console.log(`[IG_DEBUG] Using Resumable Upload Flow for ${options?.isReel !== false ? "Reel" : "Video"}`);
         creationId = await performResumableInstagramVideoUpload(credentials, mediaUrl, mediaParams);
       } else {
-        // Use original URL for images as requested
-        mediaParams.append("image_url", originalUrl);
-        
+        mediaParams.append("image_url", mediaUrl);
         console.log(`[IG_DEBUG] Request: POST ${baseUrl}/${userId}/media`);
         const response = await fetch(`${baseUrl}/${userId}/media`, {
           method: "POST",

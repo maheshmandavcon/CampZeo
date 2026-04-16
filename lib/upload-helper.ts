@@ -1,6 +1,6 @@
 export async function uploadToServer(
-  file: File, 
-  organisationId?: string, 
+  file: File,
+  organisationId?: string,
   campaignId?: string,
   platform?: string | null,
   isReel?: boolean,
@@ -16,35 +16,41 @@ export async function uploadToServer(
       throw new Error("Organisation ID is required for Google Drive folder organization.");
     }
 
-    const isImage = file.type.startsWith('image/');
+    // const isImage = file.type.startsWith('image/');
 
     // For images with platform context, use the optimization path (server-side processing)
-    if (isImage && platform) {
-      if (onProgress) onProgress(1);
-      console.log(`[Upload] Image with platform ${platform} - using server-side optimization path`);
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      const res = await fetch(`/api/upload/google-drive?organisationId=${organisationId}&campaignId=${campaignId || ''}&platform=${platform}&isReel=${isReel || false}`, {
-        method: 'POST',
-        body: formData,
-      });
+    // if (isImage && platform) {
+    //   if (onProgress) onProgress(1);
+    //   console.log(`[Upload] Image with platform ${platform} - using server-side optimization path`);
+    //   const formData = new FormData();
+    //   formData.append('file', file);
 
-      if (!res.ok) {
-        throw new Error(`Image upload failed: ${res.statusText}`);
-      }
+    //   const res = await fetch(`https://storage.campzeo.com/upload/google-drive?organisationId=${organisationId}&campaignId=${campaignId || ''}&platform=${platform}&isReel=${isReel || false}`, {
+    //     method: 'POST',
+    //     headers: {
+    //       'x-api-key': process.env.NEXT_PUBLIC_APP_API_KEY || process.env.APP_API_KEY || '',
+    //     },
+    //     body: formData,
+    //   });
 
-      const result = await res.json();
-      if (onProgress) onProgress(100);
-      return result;
-    }
+    //   if (!res.ok) {
+    //     throw new Error(`Image upload failed: ${res.statusText}`);
+    //   }
+
+    //   const result = await res.json();
+    //   if (onProgress) onProgress(100);
+    //   return result;
+    // }
 
     if (onProgress) onProgress(1); // Set to 1% immediately to show activity
 
     // 1. Initiate resumable upload session
-    const initRes = await fetch('/api/upload/google-drive/resumable', {
+    const initRes = await fetch('https://storage.campzeo.com/upload/google-drive/resumable', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.NEXT_PUBLIC_APP_API_KEY || process.env.APP_API_KEY || ''
+      },
       body: JSON.stringify({
         fileName: file.name,
         mimeType: file.type,
@@ -74,12 +80,13 @@ export async function uploadToServer(
       const end = Math.min(start + CHUNK_SIZE, totalSize);
       const chunk = file.slice(start, end);
 
-      const chunkRes = await fetch('/api/upload/google-drive/resumable', {
+      const chunkRes = await fetch('https://storage.campzeo.com/upload/google-drive/resumable', {
         method: 'PUT',
         headers: {
           'x-upload-url': uploadUrl,
           'x-total-size': totalSize.toString(),
           'x-range-start': start.toString(),
+          'x-api-key': process.env.NEXT_PUBLIC_APP_API_KEY || process.env.APP_API_KEY || ''
         },
         body: chunk
       });
@@ -90,7 +97,7 @@ export async function uploadToServer(
       }
 
       const result = await chunkRes.json();
-      
+
       if (result.status === 308) {
         // More chunks to come
         start = end;
@@ -114,7 +121,7 @@ export async function uploadToServer(
     // 3. Construct a direct, publicly accessible Google Drive URL
     // We use the same format as the standard upload path for consistency
     const url = `https://drive.google.com/uc?id=${fileId}&export=download&file=${encodeURIComponent(file.name)}`;
-    
+
     console.log(`[Upload] Resumable upload successful: ${url}`);
     return { url };
   } else {
@@ -128,6 +135,9 @@ export async function uploadToServer(
 
     const res = await fetch(uploadUrl, {
       method: 'POST',
+      headers: {
+        'x-api-key': process.env.NEXT_PUBLIC_APP_API_KEY || process.env.APP_API_KEY || '',
+      },
       body: formData,
     });
 
@@ -158,6 +168,9 @@ export async function deleteFromServer(publicUrl: string): Promise<boolean> {
 
     const res = await fetch(`${serverUrl}/api/file/${filename}`, {
       method: 'DELETE',
+      headers: {
+        'x-api-key': process.env.NEXT_PUBLIC_APP_API_KEY || process.env.APP_API_KEY || '',
+      },
     });
 
     if (!res.ok) {
@@ -174,15 +187,18 @@ export async function deleteFromServer(publicUrl: string): Promise<boolean> {
 }
 export async function deleteFromDriveImmediate(urls: string[]): Promise<boolean> {
   if (!urls || urls.length === 0) return true;
-  
+
   try {
     console.log(`[DriveHelper] Immediate cleanup for ${urls.length} files via POST...`);
-    const res = await fetch('/api/upload/google-drive', {
+    const res = await fetch('https://storage.campzeo.com/upload/google-drive', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.NEXT_PUBLIC_APP_API_KEY || process.env.APP_API_KEY || ''
+      },
+      body: JSON.stringify({
         action: 'cleanup',
-        urls 
+        urls
       }),
       keepalive: true // Crucial for beforeunload cleanup
     });
