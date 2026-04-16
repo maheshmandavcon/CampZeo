@@ -95,7 +95,7 @@ export default function NewTemplatePage() {
         if (!files || files.length === 0) return;
 
         setIsUploading(true);
-        setUploadProgress(0);
+        setUploadProgress(10); // Start with 10% to show immediate activity
         setTotalUploadCount(Array.from(files).length);
         setCurrentUploadIndex(0);
 
@@ -151,7 +151,7 @@ export default function NewTemplatePage() {
         if (!files || files.length === 0) return;
 
         setIsUploading(true);
-        setUploadProgress(0);
+        setUploadProgress(10); // Start with 10% for immediate feedback
         setTotalUploadCount(1);
         setCurrentUploadIndex(0);
 

@@ -133,13 +133,13 @@ export function WYSIWYGPreview({
                             playsInline
                         />
                     ) : isImg ? (
-                                <Image
-                                    src={previewUrl}
-                                    alt="Preview"
-                                    fill
-                                    className="object-cover"
-                                    unoptimized
-                                />
+                        <Image
+                            src={previewUrl}
+                            alt="Preview"
+                            fill
+                            className="object-cover"
+                            unoptimized
+                        />
                     ) : (
                         <div className="flex size-full flex-col items-center justify-center gap-2 bg-gray-50 p-4">
                             {getFileIcon(url)}
@@ -164,11 +164,11 @@ export function WYSIWYGPreview({
         if (platform === "INSTAGRAM" || platform === "PINTEREST") {
             const isInstagram = platform === "INSTAGRAM";
             const isPinterest = platform === "PINTEREST";
-            
+
             // Standard Instagram Feed usually allows 1:1 or 4:5.
             // Reels MUST be 9:16.
             let containerClass = "relative w-full overflow-hidden bg-black group";
-            
+
             if (isReel) {
                 containerClass = cn(containerClass, "aspect-[9/16] rounded-2xl max-w-[340px] mx-auto shadow-2xl");
             } else if (isInstagram) {
@@ -270,7 +270,7 @@ export function WYSIWYGPreview({
                         {renderMediaItem(mediaUrls[3], "size-full")}
                         {count > 4 && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-[1px]">
-                                <span className="text-xl font-bold text-white">+{count - 3}</span>
+                                <span className="text-xl font-bold text-white">+{count - 4}</span>
                             </div>
                         )}
                     </div>
@@ -434,7 +434,7 @@ export function WYSIWYGPreview({
                     return (
                         <div className="rounded-2xl border bg-black shadow-2xl overflow-hidden h-[600px] relative max-w-[340px] mx-auto group">
                             {renderMediaGallery()}
-                            
+
                             {/* Reels Overlay */}
                             <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/80 to-transparent space-y-4">
                                 <div className="flex items-center gap-3">
@@ -755,7 +755,7 @@ export function WYSIWYGPreview({
                 </div>
             </div>
 
-            <Dialog open={!!selectedFile}  onOpenChange={() => setSelectedFile(null)}>
+            <Dialog open={!!selectedFile} onOpenChange={() => setSelectedFile(null)}>
                 <DialogContent className="gap-0 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-0 border-none bg-transparent shadow-none">
                     <DialogHeader className="p-4 bg-white rounded-t-lg border-b">
                         <DialogTitle className="text-gray-900 truncate pr-8">
@@ -773,7 +773,7 @@ export function WYSIWYGPreview({
                                             src={getPreviewUrl(selectedFile)}
                                             alt="Preview"
                                             fill
-                                            className="object-contain"
+                                            className="object-fit: fill;"
                                             unoptimized
                                         />
                                     </div>

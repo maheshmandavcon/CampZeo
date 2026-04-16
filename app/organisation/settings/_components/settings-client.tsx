@@ -260,24 +260,38 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
     }
   };
 
-  const handleConfigureFacebookPages = async () => {
-    setShowFacebookPageDialog(true);
+  const handleConfigureFacebookPages = async (isAutoFlow = false) => {
+    if (!isAutoFlow) setShowFacebookPageDialog(true);
     setLoadingFacebookPages(true);
     try {
       const res = await fetch("/api/socialmedia/facebook/pages");
       if (res.ok) {
         const data = await res.json();
-        setFacebookPages(data.pages || []);
+        const pages = data.pages || [];
+        setFacebookPages(pages);
+
+        if (isAutoFlow) {
+          if (pages.length > 1) {
+            setShowFacebookPageDialog(true);
+          } else {
+            // Single page or no pages: backend already auto-assigned or nothing to select.
+            // Reload to reflect connected status.
+            window.location.reload();
+          }
+        }
+      } else {
+        if (isAutoFlow) window.location.reload();
       }
     } catch (error) {
       console.error(error);
       toast.error("Failed to fetch Facebook pages");
+      if (isAutoFlow) window.location.reload();
     } finally {
       setLoadingFacebookPages(false);
     }
   };
 
-  const handleSelectFacebookPage = async (pageId: string, pageAccessToken: string) => {
+  const handleSelectFacebookPage = async (pageId: string, pageAccessToken: string, pageName?: string) => {
     try {
       const res = await fetch("/api/socialmedia/facebook/save-page", {
         method: "POST",
@@ -286,7 +300,7 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
       });
 
       if (res.ok) {
-        toast.success("Facebook page linked");
+        toast.success(`Facebook page ${pageName ? `"${pageName}" ` : ""}linked`);
         setShowFacebookPageDialog(false);
         window.location.reload();
       } else {
@@ -325,7 +339,11 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
 
         if (status === 'success') {
           toast.success(`Successfully connected ${platform}!`);
-          window.location.reload();
+          if (platform === 'FACEBOOK') {
+            handleConfigureFacebookPages(true);
+          } else {
+            window.location.reload();
+          }
         } else {
           toast.error(`Failed to connect ${platform}: ${error || 'Unknown error'}`);
         }
@@ -567,7 +585,7 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                                     variant="outline"
                                     size="sm"
                                     className="mt-2 h-7 text-xs"
-                                    onClick={handleConfigureFacebookPages}
+                                    onClick={() => handleConfigureFacebookPages()}
                                   >
                                     {userData.facebookPageId ? 'Change Linked Page' : 'Link Facebook Page'}
                                   </Button>
@@ -828,7 +846,7 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
             </Button>
 
             {/* Option 2: Instagram Basic Display (Direct) */}
-            <Button
+            {/* <Button
               variant="outline"
               className="w-full flex items-start gap-4 p-4 h-auto border-2 rounded-lg cursor-pointer hover:border-primary hover:bg-accent transition-colors justify-start"
               disabled={connectingPlatform === 'INSTAGRAM_DIRECT'}
@@ -872,7 +890,7 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                   </Badge>
                 </div>
               </div>
-            </Button>
+            </Button> */}
           </div>
 
           <div className="bg-muted p-3 rounded-lg">
@@ -902,7 +920,7 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
                 <div
                   key={page.id}
                   className={`flex items-center justify-between p-3 border rounded-lg hover:bg-muted cursor-pointer ${userData.facebookPageId === page.id ? 'bg-muted border-primary' : ''}`}
-                  onClick={() => handleSelectFacebookPage(page.id, page.access_token)}
+                  onClick={() => handleSelectFacebookPage(page.id, page.access_token, page.name)}
                 >
                   <div className="flex-1">
                     <p className="font-medium text-sm">{page.name}</p>

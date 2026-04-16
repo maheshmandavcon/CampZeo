@@ -11,36 +11,51 @@ export async function uploadToServer(
 
   if (provider === 'google_drive') {
     console.log("[Upload] Using Google Drive resumable storage provider...");
-    
+
     if (!organisationId) {
       throw new Error("Organisation ID is required for Google Drive folder organization.");
     }
 
     // const isImage = file.type.startsWith('image/');
 
-    // For images with platform context, use the optimization path (server-side processing)
-    // if (isImage && platform) {
-    //   if (onProgress) onProgress(1);
-    //   console.log(`[Upload] Image with platform ${platform} - using server-side optimization path`);
-    //   const formData = new FormData();
-    //   formData.append('file', file);
+    // For all files <= 5MB, use the single-shot path to avoid Vercel payload limits
+    // and provide a smooth fake progress experience. Larger files use the resumable path.
+    if (file.size <= 5 * 1024 * 1024) {
+      console.log(`[Upload] Single-shot path for ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
 
-    //   const res = await fetch(`https://storage.campzeo.com/upload/google-drive?organisationId=${organisationId}&campaignId=${campaignId || ''}&platform=${platform}&isReel=${isReel || false}`, {
-    //     method: 'POST',
-    //     headers: {
-    //       'x-api-key': process.env.NEXT_PUBLIC_APP_API_KEY || process.env.APP_API_KEY || '',
-    //     },
-    //     body: formData,
-    //   });
+      let fakeProgress = 10;
+      const interval = setInterval(() => {
+        fakeProgress += Math.random() * 5;
+        if (fakeProgress >= 95) {
+          clearInterval(interval);
+        } else {
+          if (onProgress) onProgress(Math.round(fakeProgress));
+        }
+      }, 200);
 
-    //   if (!res.ok) {
-    //     throw new Error(`Image upload failed: ${res.statusText}`);
-    //   }
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
 
-    //   const result = await res.json();
-    //   if (onProgress) onProgress(100);
-    //   return result;
-    // }
+        const res = await fetch(`https://storage.campzeo.com/upload/google-drive?organisationId=${organisationId}&campaignId=${campaignId || ''}&platform=${platform || ''}&isReel=${isReel || false}`, {
+          method: 'POST',
+           headers: {
+          'x-api-key': process.env.NEXT_PUBLIC_APP_API_KEY || process.env.APP_API_KEY || '',
+        },
+          body: formData,
+        });
+
+        if (!res.ok) {
+          throw new Error(`Image upload failed: ${res.statusText}`);
+        }
+
+        const result = await res.json();
+        return result;
+      } finally {
+        clearInterval(interval);
+        if (onProgress) onProgress(100);
+      }
+    }
 
     if (onProgress) onProgress(1); // Set to 1% immediately to show activity
 
@@ -133,27 +148,42 @@ export async function uploadToServer(
     formData.append('file', file); // Sync naming with /api/upload/google-drive
     console.log(`[Upload] Using custom server storage provider: ${uploadUrl}`);
 
-    const res = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
+    let fakeProgress = 1;
+    const interval = setInterval(() => {
+      fakeProgress += Math.random() * 5;
+      if (fakeProgress >= 95) {
+        clearInterval(interval);
+      } else {
+        if (onProgress) onProgress(Math.round(fakeProgress));
+      }
+    }, 200);
+
+    try {
+      const res = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
         'x-api-key': process.env.NEXT_PUBLIC_APP_API_KEY || process.env.APP_API_KEY || '',
       },
       body: formData,
-    });
+      });
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`Upload failed: ${res.statusText}. ${errorText}`);
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Upload failed: ${res.statusText}. ${errorText}`);
+      }
+
+      const data = await res.json();
+      const url = data.urls && data.urls.length > 0 ? data.urls[0] : (data.url || null);
+
+      if (!url) {
+        throw new Error("Upload succeeded but no URL was returned by the server.");
+      }
+
+      return { url };
+    } finally {
+      clearInterval(interval);
+      if (onProgress) onProgress(100);
     }
-
-    const data = await res.json();
-    const url = data.urls && data.urls.length > 0 ? data.urls[0] : (data.url || null);
-
-    if (!url) {
-      throw new Error("Upload succeeded but no URL was returned by the server.");
-    }
-
-    return { url };
   }
 }
 
