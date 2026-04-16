@@ -1,3 +1,5 @@
+import { getSocialMediaUrl } from '@/lib/media-utils';
+
 interface YouTubeCredentials {
     accessToken: string;
     refreshToken?: string;
@@ -51,14 +53,8 @@ export async function postToYouTube(
         // Step 1: Fetch the video file from URL (works with Vercel Blob)
         console.log(`[YouTube] Fetching video from: ${videoUrl}`);
 
-        // Determine the full URL
-        let fetchUrl = videoUrl;
-        if (!videoUrl.startsWith('http://') && !videoUrl.startsWith('https://')) {
-            // Relative URL - convert to absolute
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
-                (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-            fetchUrl = `${baseUrl}${videoUrl.startsWith('/') ? videoUrl : `/${videoUrl}`}`;
-        }
+        // Determine the full URL using proper media routing
+        const fetchUrl = getSocialMediaUrl(videoUrl);
 
         console.log(`[YouTube] Fetching from URL: ${fetchUrl}`);
         const videoResponse = await fetch(fetchUrl);
@@ -67,21 +63,35 @@ export async function postToYouTube(
             throw new Error(`Failed to fetch video file: ${videoResponse.status} ${videoResponse.statusText}`);
         }
 
-        const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-        const videoSize = videoBuffer.length;
+        const contentLengthHeader = videoResponse.headers.get('content-length');
+        if (!contentLengthHeader) {
+            console.warn('[YouTube] Warning: Missing content-length header, falling back to buffering');
+        }
+        const videoSize = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
 
-        console.log(`[YouTube] Video size: ${videoSize} bytes`);
+        let videoBuffer: Buffer | null = null;
+        if (!videoSize) {
+            videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
+        }
+
+        const actualVideoSize = videoSize || (videoBuffer ? videoBuffer.length : 0);
+        console.log(`[YouTube] Video size: ${actualVideoSize} bytes`);
 
         // Step 2: Initialize resumable upload session
         console.log(`[YouTube] Sending tags to API:`, metadata?.tags || []);
+
+        const initHeaders: Record<string, string> = {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'X-Upload-Content-Type': 'video/*',
+        };
+        if (actualVideoSize > 0) {
+            initHeaders['X-Upload-Content-Length'] = actualVideoSize.toString();
+        }
+
         const initResponse = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json',
-                'X-Upload-Content-Length': videoSize.toString(),
-                'X-Upload-Content-Type': 'video/*',
-            },
+            headers: initHeaders,
             body: JSON.stringify({
                 snippet: {
                     title,
@@ -115,26 +125,95 @@ export async function postToYouTube(
             throw new Error('No upload URL received from YouTube');
         }
 
-        console.log(`[YouTube] Upload session created, uploading video...`);
+        console.log(`[YouTube] Upload session created, uploading video in chunks...`);
 
-        // Step 3: Upload the video file
-        const uploadResponse = await fetch(uploadUrl, {
-            method: 'PUT',
-            headers: {
-                'Content-Length': videoSize.toString(),
-                'Content-Type': 'video/*',
-            },
-            body: videoBuffer,
-        });
+        // Step 3: Upload the video file (chunked stream)
+        let videoId: string;
 
-        if (!uploadResponse.ok) {
-            const error = await uploadResponse.text();
-            console.error('[YouTube] Video upload error:', error);
-            throw new Error(`YouTube video upload failed: ${error}`);
+        if (videoBuffer) {
+            // Fallback for when content-length was missing
+            const uploadResponse = await fetch(uploadUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Length': actualVideoSize.toString(),
+                    'Content-Type': 'video/*',
+                },
+                body: videoBuffer,
+            });
+
+            if (!uploadResponse.ok) {
+                const error = await uploadResponse.text();
+                console.error('[YouTube] Video upload error:', error);
+                throw new Error(`YouTube video upload failed: ${error}`);
+            }
+
+            const videoData: any = await uploadResponse.json();
+            videoId = videoData.id;
+        } else {
+            if (!videoResponse.body) {
+                throw new Error('Response body is null');
+            }
+
+            let buffer = Buffer.alloc(0);
+            let uploadedBytes = 0;
+            let finalVideoData: any = null;
+
+            const uploadChunk = async (chunk: Buffer, start: number) => {
+                const end = start + chunk.length - 1;
+                console.log(`[YouTube] Uploading chunk: bytes ${start}-${end}/${actualVideoSize}`);
+                const res = await fetch(uploadUrl, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Length': chunk.length.toString(),
+                        'Content-Range': `bytes ${start}-${end}/${actualVideoSize}`,
+                        'Content-Type': 'video/*',
+                    },
+                    body: chunk,
+                });
+
+                if (res.status === 308) {
+                    return null; // Incomplete, expected
+                }
+                if (!res.ok && res.status !== 200 && res.status !== 201) {
+                    const err = await res.text();
+                    throw new Error(`Chunk upload failed with status ${res.status}: ${err}`);
+                }
+                return await res.json();
+            };
+
+            const reader = videoResponse.body.getReader();
+            const chunkSize = 10 * 1024 * 1024;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (value) {
+                    buffer = Buffer.concat([buffer, Buffer.from(value)]);
+                }
+
+                // Only upload a chunk if it's not the last one, and ensures multiple of 256KB
+                while (buffer.length >= chunkSize && !done) {
+                    const chunk = buffer.subarray(0, chunkSize);
+                    buffer = buffer.subarray(chunkSize);
+                    const data = await uploadChunk(chunk, uploadedBytes);
+                    if (data) finalVideoData = data;
+                    uploadedBytes += chunkSize;
+                }
+
+                if (done) {
+                    if (buffer.length > 0) {
+                        const data = await uploadChunk(buffer, uploadedBytes);
+                        if (data) finalVideoData = data;
+                    }
+                    break;
+                }
+            }
+
+            if (!finalVideoData || !finalVideoData.id) {
+                throw new Error("Upload completed but didn't receive video ID from YouTube API");
+            }
+            videoId = finalVideoData.id;
         }
 
-        const videoData: any = await uploadResponse.json();
-        const videoId = videoData.id;
         console.log(`[YouTube] Video uploaded successfully: ${videoId}`);
 
         // Step 4: Upload custom thumbnail if provided
