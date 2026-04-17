@@ -1122,10 +1122,27 @@ export async function sendCampaignPost(
                 data: {
                     failureReason: errorMessage.substring(0, 1000), // Ensure it's not too long just in case
                     isPostSent: false,
-                    status: 'DRAFT'
+                    status: 'FAILED'
                 }
             });
-            console.log(`[sendCampaignPost] Successfully saved failure reason. Updated record ID: ${updated.id}`);
+
+            // Create a notification for the organisation
+            const orgId = post.campaign?.organisationId || post.organisationId;
+            if (orgId) {
+                await prisma.notification.create({
+                    data: {
+                        message: `Failed to publish post: ${post.subject || post.type}. ${errorMessage.substring(0, 200)}`,
+                        isSuccess: false,
+                        type: 'POST_PUBLISH_FAILURE',
+                        platform: post.type,
+                        organisationId: orgId,
+                        referenceId: post.id,
+                        campaignId: post.campaignId
+                    }
+                });
+            }
+
+            console.log(`[sendCampaignPost] Successfully saved failure reason and created notification. Updated record ID: ${updated.id}`);
         } catch (dbError: any) {
             console.error('[sendCampaignPost] Failed to save failure reason:', dbError);
             // Append DB error to the returned error so it's visible in the UI/API response

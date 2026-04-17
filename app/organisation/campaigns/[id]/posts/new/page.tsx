@@ -149,7 +149,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [selectedFacebookPageName, setSelectedFacebookPageName] = useState<string>('');
 
     const [uploadingMedia, setUploadingMedia] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0); 
+    const [uploadProgress, setUploadProgress] = useState(0);
     const [currentUploadIndex, setCurrentUploadIndex] = useState(0);
     const [totalUploadCount, setTotalUploadCount] = useState(0);
     const [templates, setTemplates] = useState<any[]>([]);
@@ -486,7 +486,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
         try {
             setUploadingMedia(true);
-            setUploadProgress(0); 
+            setUploadProgress(0);
             setTotalUploadCount(files.length);
             setCurrentUploadIndex(0);
 
@@ -497,7 +497,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 setCurrentUploadIndex(i);
-                
+
                 const isVideo = file.type.startsWith('video/');
 
                 if (selectedPlatform === 'LINKEDIN' && isVideo) {
@@ -510,10 +510,10 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
                 // Use client-side upload with organization and campaign context
                 const orgId = campaign?.organisationId || campaign?.organisation?.id;
-                
+
                 const newBlob = await uploadToServer(
-                    file, 
-                    orgId, 
+                    file,
+                    orgId,
                     campaignId,
                     selectedPlatform,
                     isReel,
@@ -527,7 +527,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 console.log(`[Drive] Media tracked: ${newBlob.url}`);
                 trackUpload(newBlob.url);
                 newUrls.push(newBlob.url);
-                
+
                 // Ensure progress hits the "completed file" mark precisely
                 setUploadProgress(Math.round(((i + 1) * 100) / files.length));
             }
@@ -582,12 +582,12 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
             const orgId = campaign?.organisationId || campaign?.organisation?.id;
             const newBlob = await uploadToServer(
-                file, 
-                orgId, 
+                file,
+                orgId,
                 campaignId,
                 selectedPlatform,
                 isReel,
-                (progress:any) => setUploadProgress(progress)
+                (progress: any) => setUploadProgress(progress)
             );
 
             console.log(`[Drive] Thumbnail tracked: ${newBlob.url}`);
@@ -713,6 +713,43 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         }
     };
 
+    const backgroundSend = async (postId: number, platform: string, contactIds?: string[]) => {
+        const toastId = `send-${postId}`;
+        toast.loading(`Publishing ${platform.toLowerCase()} post...`, {
+            id: toastId,
+        });
+
+        try {
+            const sendResponse = await fetch(`/api/campaigns/${campaignId}/posts/${postId}/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contactIds })
+            });
+
+            if (!sendResponse.ok) {
+                const errorData = await sendResponse.json().catch(() => ({}));
+                const sendErrorMsg = errorData.error || 'Unknown error';
+                toast.error(`Failed to publish: ${sendErrorMsg}`, { id: toastId });
+            } else {
+                const sendData = await sendResponse.json();
+                if (sendData.queued) {
+                    toast.success(`Post queued for publishing!`, {
+                        id: toastId,
+                        description: 'We are processing it in the background. You will be notified of its status.',
+                    });
+                } else {
+                    toast.success(`Post published successfully!`, {
+                        id: toastId,
+                        description: sendData.sent !== undefined ? `Sent: ${sendData.sent}${sendData.failed ? `, Failed: ${sendData.failed}` : ''}` : undefined,
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error in background send:', error);
+            toast.error(`Error publishing post`, { id: toastId });
+        }
+    };
+
     const executeCreateAndSend = async (targetContactIds?: string[]) => {
         try {
             setSaving(true);
@@ -782,48 +819,26 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             const data = await response.json();
             const postId = data.post.id;
 
-            // 2. Send Post
-            // If targetContactIds is provided, use it. Otherwise send to ALL campaign contacts.
+            // 2. Trigger Background Send
             const contactsToSend = targetContactIds && targetContactIds.length > 0
                 ? targetContactIds
                 : campaignContacts.map(c => c.id);
 
             if (contactsToSend.length === 0) {
-                toast.error('No contacts available to send to.');
-                // But post was created. redirect.
-                router.push(`/organisation/campaigns/${campaignId}/posts`);
-                return;
-            }
-
-            const sendResponse = await fetch(`/api/campaigns/${campaignId}/posts/${postId}/send`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contactIds: contactsToSend })
-            });
-
-            if (!sendResponse.ok) {
-                const errorData = await sendResponse.json().catch(() => ({}));
-                // Post created but send failed.
-                const sendErrorMsg = errorData.error || 'Unknown error';
-                if (sendErrorMsg.toLowerCase().includes('credit')) {
-                    toast.warning(`Post created but failed to send: ${sendErrorMsg}`, {
-                        action: {
-                            label: 'Add Credits',
-                            onClick: () => router.push('/organisation/billing')
-                        },
-                    });
-                } else {
-                    toast.warning(`Post created but failed to send: ${sendErrorMsg}`);
-                }
+                toast.warning('Post created, but no contacts available to send to.');
             } else {
-                const sendData = await sendResponse.json();
-                toast.success(`Post sent successfully! Sent: ${sendData.sent}, Failed: ${sendData.failed}`);
+                // Run in background without await
+                backgroundSend(postId, selectedPlatform || 'direct', contactsToSend);
+                toast.success('Post created! Sending in background...', {
+                    description: `Sending to ${contactsToSend.length} contacts.`
+                });
             }
 
+            // Redirect immediately
             router.push(`/organisation/campaigns/${campaignId}/posts`);
 
         } catch (error) {
-            console.error('Error creating/sending post:', error);
+            console.error('Error creating post:', error);
             const errorMessage = error instanceof Error ? error.message : 'Failed to create post';
             if (errorMessage.toLowerCase().includes('credit')) {
                 toast.error(errorMessage, {
@@ -985,6 +1000,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     linkedInUrn: selectedLinkedInUrn === 'personal' ? null : selectedLinkedInUrn, // NEW: Selected LinkedIn Author URN
                     leadFormId: selectedLeadFormId && selectedLeadFormId !== 'none' ? selectedLeadFormId : null,
                     metaBoost: boostOptions.enabled ? boostOptions : undefined, // NEW: Meta Boost options
+                    skipImmediateSend: isSocialPlatform && !scheduledPostTime, // Background social send
                 }),
             });
 
@@ -993,8 +1009,19 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 throw new Error(error.error || 'Failed to create post');
             }
 
+            const data = await response.json();
+            const postId = data.post.id;
+
             markAsSubmitted();
-            toast.success('Post created successfully');
+
+            if (isSocialPlatform && !scheduledPostTime) {
+                // Trigger background send for social
+                backgroundSend(postId, selectedPlatform || 'social');
+                toast.success('Post created! Publishing in background...');
+            } else {
+                toast.success('Post created successfully');
+            }
+
             router.push(`/organisation/campaigns/${campaignId}/posts`);
         } catch (error) {
             console.error('Error creating post:', error);
@@ -1271,7 +1298,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                         description: `Your ${platform} access has been suspended. Please contact us or check billing.`,
                                                                         action: {
                                                                             label: 'Contact Support',
-                                                                            onClick: () => window.location.href="mailto:surya@mandavconsultancy.com"
+                                                                            onClick: () => window.location.href = "mailto:surya@mandavconsultancy.com"
                                                                         }
                                                                     });
                                                                 } else if (isAdminLocked) {
@@ -1341,9 +1368,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                                 ? "SMS and WhatsApp campaigns are not available during the free trial period. Please upgrade to a paid plan to unlock these channels."
                                                                                 : isSuspended
                                                                                     ? `Your access to ${platform} has been temporarily suspended by the administrator.`
-                                                                                : isAdminLocked
-                                                                                    ? "SMS and WhatsApp messaging requires admin approval and credit purchase."
-                                                                                    : `You have 0 ${platform} credits. Please purchase a pack to use this channel.`}
+                                                                                    : isAdminLocked
+                                                                                        ? "SMS and WhatsApp messaging requires admin approval and credit purchase."
+                                                                                        : `You have 0 ${platform} credits. Please purchase a pack to use this channel.`}
                                                                         </p>
                                                                         <Button
                                                                             size="sm"
@@ -1352,7 +1379,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                                 e.preventDefault();
                                                                                 e.stopPropagation();
                                                                                 if (isSuspended) {
-                                                                                    window.location.href="mailto:surya@mandavconsultancy.com";
+                                                                                    window.location.href = "mailto:surya@mandavconsultancy.com";
                                                                                 } else {
                                                                                     router.push('/organisation/billing');
                                                                                 }
@@ -1711,8 +1738,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                 <div className="flex flex-col items-center">
                                                                     <Loader2 className="size-4 text-muted-foreground animate-spin mb-0.5" />
                                                                     <span className="text-[10px] text-muted-foreground text-center line-clamp-2 px-1">
-                                                                        {totalUploadCount > 1 
-                                                                            ? `File ${currentUploadIndex + 1}/${totalUploadCount}\n(${uploadProgress}%)` 
+                                                                        {totalUploadCount > 1
+                                                                            ? `File ${currentUploadIndex + 1}/${totalUploadCount}\n(${uploadProgress}%)`
                                                                             : `${uploadProgress}%`}
                                                                     </span>
                                                                 </div>

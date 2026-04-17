@@ -55,6 +55,7 @@ async function schedulerHandler(request: NextRequest) {
     const scheduledPosts = await prisma.campaignPost.findMany({
         where: {
             isPostSent: false,
+            status: { not: 'FAILED' },
             scheduledPostTime: {
                 lte: now, // Posts scheduled for now or earlier
             },
@@ -197,7 +198,8 @@ async function schedulerHandler(request: NextRequest) {
                     where: { id: post.id },
                     data: {
                         failureReason: `Scheduler Error: ${errorMessage}`.substring(0, 1000),
-                        isPostSent: false
+                        isPostSent: false,
+                        status: 'FAILED'
                     }
                 });
             } catch (saveError) {
