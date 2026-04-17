@@ -116,11 +116,11 @@ export default function EditCampaignPage({ params }: { params: Promise<{ id: str
                 const data = await response.json();
                 const campaign: Campaign = data.campaign;
 
-                // Format dates for datetime-local input
+                // Format dates for date input
                 const start = new Date(campaign.startDate);
                 const end = new Date(campaign.endDate);
-                setStartDate(formatDateTimeLocal(start));
-                setEndDate(formatDateTimeLocal(end));
+                setStartDate(formatDateLocal(start));
+                setEndDate(formatDateLocal(end));
             } catch (error) {
                 console.error('Error fetching dates:', error);
             }
@@ -166,14 +166,12 @@ export default function EditCampaignPage({ params }: { params: Promise<{ id: str
         setCurrentPage(1); // Reset to first page on search
     };
 
-    // Format date for datetime-local input
-    const formatDateTimeLocal = (date: Date) => {
+    // Format date for date input
+    const formatDateLocal = (date: Date) => {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        return `${year}-${month}-${day}T${hours}:${minutes}`;
+        return `${year}-${month}-${day}`;
     };
 
     // Handle select all (current page)
@@ -305,7 +303,7 @@ export default function EditCampaignPage({ params }: { params: Promise<{ id: str
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}T00:00`;
+        return `${year}-${month}-${day}`;
     })();
 
     if (loadingCampaign) {
@@ -396,7 +394,7 @@ export default function EditCampaignPage({ params }: { params: Promise<{ id: str
                                             <Label htmlFor="startDate">Start Date *</Label>
                                             <Input
                                                 id="startDate"
-                                                type="datetime-local"
+                                                type="date"
                                                 value={startDate}
                                                 onChange={(e) => setStartDate(e.target.value)}
                                                 min={minDate}
@@ -415,7 +413,7 @@ export default function EditCampaignPage({ params }: { params: Promise<{ id: str
                                             <Label htmlFor="endDate">End Date *</Label>
                                             <Input
                                                 id="endDate"
-                                                type="datetime-local"
+                                                type="date"
                                                 value={endDate}
                                                 onChange={(e) => setEndDate(e.target.value)}
                                                 min={startDate || minDate}
