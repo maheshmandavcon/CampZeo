@@ -412,6 +412,18 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
         setSelectedTemplateId(templateId);
 
         if (!templateId || templateId === 'none') {
+            setSubject('');
+            setMessage('');
+            setMediaUrls([]);
+            setThumbnailUrl(null);
+            setIsReel(false);
+            setContentType('POST');
+            setYoutubeContentType('VIDEO');
+            setYoutubePrivacy('public');
+            setYoutubeTags('');
+            setYoutubePlaylistTitle('');
+            //setLeadForms([]);
+           // setTwilioStatus('NONE');
             return;
         }
 
@@ -494,7 +506,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 setCurrentUploadIndex(i);
-                
+
                 const isVideo = file.type.startsWith('video/');
 
                 if (type === 'LINKEDIN' && isVideo) {
@@ -523,7 +535,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                 console.log(`[Drive] Media tracked: ${newBlob.url}`);
                 trackUpload(newBlob.url);
                 newUrls.push(newBlob.url);
-                
+
                 // Ensure progress hits the "completed file" mark precisely
                 setUploadProgress(Math.round(((i + 1) * 100) / files.length));
             }
@@ -585,7 +597,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                 campaignId as string,
                 type,
                 isReel,
-                (progress:number) => setUploadProgress(progress)
+                (progress: number) => setUploadProgress(progress)
             );
 
             console.log(`[Drive] Thumbnail tracked: ${newBlob.url}`);
@@ -673,9 +685,9 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
 
             // User's logic: must be within campaign and not in the past
             // Add a 1-minute grace period to 'now' to allow selecting the current minute
-             const submissionTime = new Date();
+            const submissionTime = new Date();
             submissionTime.setSeconds(0, 0);
-            if (!scheduledDate && new Date(scheduledDate) < submissionTime)  {
+            if (!scheduledDate && new Date(scheduledDate) < submissionTime) {
                 if (new Date(scheduledDate) < submissionTime) {
                     toast.error('Scheduled time cannot be in the past');
                 } else {
@@ -1106,8 +1118,8 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                                                         <>
                                                             <Loader2 className="size-4 text-muted-foreground animate-spin mb-0.5" />
                                                             <span className="text-[10px] text-muted-foreground text-center line-clamp-2 px-1">
-                                                                {totalUploadCount > 1 
-                                                                    ? `File ${currentUploadIndex + 1}/${totalUploadCount}\n(${uploadProgress}%)` 
+                                                                {totalUploadCount > 1
+                                                                    ? `File ${currentUploadIndex + 1}/${totalUploadCount}\n(${uploadProgress}%)`
                                                                     : `${uploadProgress}%`}
                                                             </span>
                                                         </>

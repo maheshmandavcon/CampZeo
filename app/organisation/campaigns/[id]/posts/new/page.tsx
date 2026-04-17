@@ -1142,13 +1142,25 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         }
     };
 
-    // Handle template selection
+    
     // Handle template selection
     const handleTemplateSelect = (templateId: string) => {
         setSelectedTemplateId(templateId);
 
         if (!templateId || templateId === 'none') {
             // Clear the form if "none" is selected
+            setSubject('');
+            setMessage('');
+            setMediaUrls([]);
+            setThumbnailUrl(null);
+            setIsReel(false);
+            setContentType('POST');
+            setYoutubeContentType('VIDEO');
+            setYoutubePrivacy('public');
+            setYoutubeTags('');
+            setYoutubePlaylistTitle('');
+            setLeadForms([]);
+            setTwilioStatus('NONE');
             return;
         }
 
@@ -1404,39 +1416,40 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                 )}
                             </div>
 
+                            {/* Template Selection - Available for all platforms */}
+                            {selectedPlatform && !loadingTemplates && templates.length > 0 && (
+                                <div className="space-y-2 p-4 bg-muted/20 rounded-lg border border-dashed">
+                                    <Label htmlFor="template" className="text-xs font-semibold uppercase text-muted-foreground">Quick Start with Template</Label>
+                                    <Select value={selectedTemplateId || "none"} onValueChange={handleTemplateSelect}>
+                                        <SelectTrigger id="template" className="bg-background border border-2 border-gray-200">
+                                            <SelectValue placeholder="Select a template..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">None - Start from scratch</SelectItem>
+                                            {templates.map((template) => (
+                                                <SelectItem key={template.id} value={template.id.toString()}>
+                                                    <div className="flex items-center gap-2">
+                                                        <FileText className="size-4 text-primary" />
+                                                        <span>{template.name}</span>
+                                                        {template.category && (
+                                                            <span className="text-xs text-muted-foreground ml-2 px-1.5 py-0.5 rounded-full bg-muted">
+                                                                {template.category}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-[10px] text-muted-foreground">
+                                        Selecting a template will populate the fields below. You can still edit them.
+                                    </p>
+                                </div>
+                            )}
+
                             {/* Other Platforms Form */}
                             {selectedPlatform && selectedPlatform !== 'EMAIL' && (
                                 <div className="space-y-4">
-                                    {/* Template Selection */}
-                                    {!loadingTemplates && templates.length > 0 && (
-                                        <div className="space-y-2 p-4 bg-muted/20 rounded-lg border border-dashed">
-                                            <Label htmlFor="template" className="text-xs font-semibold uppercase text-muted-foreground">Quick Start with Template</Label>
-                                            <Select value={selectedTemplateId || "none"} onValueChange={handleTemplateSelect}>
-                                                <SelectTrigger id="template" className="bg-background border border-2 border-gray-200">
-                                                    <SelectValue placeholder="Select a template..." />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="none">None - Start from scratch</SelectItem>
-                                                    {templates.map((template) => (
-                                                        <SelectItem key={template.id} value={template.id.toString()}>
-                                                            <div className="flex items-center gap-2">
-                                                                <FileText className="size-4 text-primary" />
-                                                                <span>{template.name}</span>
-                                                                {template.category && (
-                                                                    <span className="text-xs text-muted-foreground ml-2 px-1.5 py-0.5 rounded-full bg-muted">
-                                                                        {template.category}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <p className="text-[10px] text-muted-foreground">
-                                                Selecting a template will populate the fields below. You can still edit them.
-                                            </p>
-                                        </div>
-                                    )}
                                     {/* Title Field for Social Media & WhatsApp */}
                                     {selectedPlatform !== 'SMS' && (
                                         <div className="space-y-2">
@@ -1661,10 +1674,21 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
                                             {mediaUrls.length < 10 && (
                                                 <label htmlFor="email-attachment-upload" className="flex flex-col items-center justify-center size-20 border-2 border-dashed rounded-md cursor-pointer hover:bg-muted/50 transition-colors">
-                                                    <div className="flex flex-col items-center">
-                                                        <Upload className="size-4 text-muted-foreground mb-0.5" />
-                                                        <span className="text-[10px] text-muted-foreground">Add</span>
-                                                    </div>
+                                                    {uploadingMedia ? (
+                                                        <div className="flex flex-col items-center">
+                                                            <Loader2 className="size-4 text-muted-foreground animate-spin mb-0.5" />
+                                                            <span className="text-[10px] text-muted-foreground text-center line-clamp-2 px-1">
+                                                                {totalUploadCount > 1
+                                                                    ? `File ${currentUploadIndex + 1}/${totalUploadCount}\n(${uploadProgress}%)`
+                                                                    : `${uploadProgress}%`}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-col items-center">
+                                                            <Upload className="size-4 text-muted-foreground mb-0.5" />
+                                                            <span className="text-[10px] text-muted-foreground">Add</span>
+                                                        </div>
+                                                    )}
                                                     <input
                                                         id="email-attachment-upload"
                                                         type="file"

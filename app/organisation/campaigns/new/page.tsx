@@ -203,7 +203,7 @@ export default function NewCampaignPage() {
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}T00:00`;
+        return `${year}-${month}-${day}`;
     })();
 
     return (
@@ -265,7 +265,7 @@ export default function NewCampaignPage() {
                                     <Label htmlFor="startDate">Start Date *</Label>
                                     <Input
                                         id="startDate"
-                                        type="datetime-local"
+                                        type="date"
                                         value={startDate}
                                         onChange={(e) => setStartDate(e.target.value)}
                                         min={minDate}
@@ -277,7 +277,7 @@ export default function NewCampaignPage() {
                                     <Label htmlFor="endDate">End Date *</Label>
                                     <Input
                                         id="endDate"
-                                        type="datetime-local"
+                                        type="date"
                                         value={endDate}
                                         onChange={(e) => setEndDate(e.target.value)}
                                         min={startDate || minDate}
