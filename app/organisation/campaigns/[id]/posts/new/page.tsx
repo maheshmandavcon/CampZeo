@@ -61,7 +61,7 @@ import { uploadToServer, deleteFromDriveImmediate } from '@/lib/upload-helper';
 import { useMediaCleanup } from '@/hooks/use-media-cleanup';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { isVideoUrl, getMediaPreviewUrl as getPreviewUrl } from '@/lib/media-utils';
+import { isVideoUrl, getMediaPreviewUrl as getPreviewUrl, getVideoMetadata } from '@/lib/media-utils';
 import {
     Tooltip,
     TooltipContent,
@@ -506,6 +506,36 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                         continue;
                     }
                     newlyAddedVideos++;
+                }
+
+                if (selectedPlatform === 'YOUTUBE' && isVideo) {
+                    try {
+                        const metadata = await getVideoMetadata(file);
+                        const { width, height, duration } = metadata;
+
+                        const isVerticalOrSquare = height >= width;
+                        const isUnder3Min = duration <= 180;
+
+                        if (isVerticalOrSquare && isUnder3Min) {
+                            setYoutubeContentType('SHORT');
+                            setIsReel(true);
+                            toast.success('Vertical/Square video under 3 mins detected: Switched to Shorts mode');
+
+                            if (!message.toLowerCase().includes('#shorts')) {
+                                setMessage(prev => prev ? `${prev}\n\n#Shorts` : '#Shorts');
+                            }
+                        } else {
+                            setYoutubeContentType('VIDEO');
+                            setIsReel(false);
+                            if (isVerticalOrSquare && !isUnder3Min) {
+                                toast.info('Vertical video detected but duration is over 3 mins: Switched to Standard Video');
+                            } else if (width > height) {
+                                toast.info('Horizontal video detected: Switched to Standard Video');
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error getting video metadata:', err);
+                    }
                 }
 
                 // Use client-side upload with organization and campaign context

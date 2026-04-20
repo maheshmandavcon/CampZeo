@@ -18,7 +18,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Download, Loader2, Users, RefreshCw, AlertCircle, Plus, Eye, Copy } from 'lucide-react';
+import { Download, Loader2, Users, RefreshCw, AlertCircle, Plus, Eye, Copy, Search, Facebook, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { LeadFormModal } from './_components/lead-form-modal';
@@ -311,31 +311,79 @@ export default function LeadsAnalyticsPage() {
                         </div>
                     </div>
                     {/* Filter Controls */}
-                    <div className="flex flex-col sm:flex-row gap-3 mt-4">
-                        <Input
-                            placeholder="Search by form name..."
-                            value={leadFormsFilter}
-                            onChange={(e) => {
-                                setLeadFormsFilter(e.target.value);
+                    {/* Filter Controls */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mt-6 items-end">
+                        <div className="md:col-span-4 space-y-2">
+                            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground ml-1">Search Forms</Label>
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search by form name..."
+                                    value={leadFormsFilter}
+                                    onChange={(e) => {
+                                        setLeadFormsFilter(e.target.value);
+                                        setLeadFormsPage(1); // Reset to first page on filter change
+                                    }}
+                                    className="pl-9 bg-muted/20 border-muted-foreground/10 focus-visible:ring-primary/20"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="md:col-span-3 space-y-2">
+                            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground ml-1">Status Filter</Label>
+                            <Select value={leadFormsStatusFilter} onValueChange={(val) => {
+                                setLeadFormsStatusFilter(val);
                                 setLeadFormsPage(1); // Reset to first page on filter change
-                            }}
-                            className="max-w-xs"
-                        />
-                        <Select value={leadFormsStatusFilter} onValueChange={(val) => {
-                            setLeadFormsStatusFilter(val);
-                            setLeadFormsPage(1); // Reset to first page on filter change
-                        }}>
-                            <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Filter by status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Status</SelectItem>
-                                <SelectItem value="ACTIVE">Active</SelectItem>
-                                <SelectItem value="ARCHIVED">Archived</SelectItem>
-                                <SelectItem value="DRAFT">Draft</SelectItem>
-                            </SelectContent>
-                        </Select>
+                            }}>
+                                <SelectTrigger className="bg-muted/20 border-muted-foreground/10">
+                                    <div className="flex items-center gap-2">
+                                        <Filter className="size-3.5 text-muted-foreground" />
+                                        <SelectValue placeholder="Filter by status" />
+                                    </div>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Status</SelectItem>
+                                    <SelectItem value="ACTIVE">Active</SelectItem>
+                                    <SelectItem value="ARCHIVED">Archived</SelectItem>
+                                    <SelectItem value="DRAFT">Draft</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="md:col-span-5 space-y-2">
+                            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground ml-1">Facebook Page Source</Label>
+                            <Select value={selectedPageId} onValueChange={(val) => {
+                                setSelectedPageId(val);
+                                const p = facebookPages.find(page => page.id === val);
+                                if (p) setSelectedPageAccessToken(p.access_token);
+                            }}>
+                                <SelectTrigger className="bg-blue-50/50 border-blue-100 hover:bg-blue-50 transition-colors">
+                                    <div className="flex items-center gap-2">
+                                        <div className="p-1 bg-blue-600 rounded-sm">
+                                            <Facebook className="size-3 text-white" />
+                                        </div>
+                                        <SelectValue placeholder="Select a Page" />
+                                    </div>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {loadingPages ? (
+                                        <div className="p-2 text-center"><Loader2 className="size-4 animate-spin inline mr-2" /> Loading...</div>
+                                    ) : facebookPages.length === 0 ? (
+                                        <div className="p-2 text-center text-sm text-muted-foreground">No pages found. Connect Facebook in Settings.</div>
+                                    ) : (
+                                        facebookPages.map((page) => (
+                                            <SelectItem key={page.id} value={page.id}>
+                                                <div className="flex items-center gap-2">
+                                                    <span>{page.name}</span>
+                                                </div>
+                                            </SelectItem>
+                                        ))
+                                    )}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
+
                 </CardHeader>
                 <CardContent>
                     {(() => {

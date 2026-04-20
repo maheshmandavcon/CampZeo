@@ -324,3 +324,35 @@ export function isDocumentUrl(url: string | null | undefined): boolean {
     const ext = getFileExtension(url);
     return ['pdf', 'csv', 'xlsx', 'xls', 'doc', 'docx', 'txt', 'ppt', 'pptx'].includes(ext);
 }
+/**
+ * Gets video metadata (width, height, duration) from a File object
+ * @param file - The video File object
+ * @returns Promise with width, height, and duration
+ */
+export async function getVideoMetadata(file: File): Promise<{ width: number; height: number; duration: number }> {
+    return new Promise((resolve, reject) => {
+        if (!file.type.startsWith('video/')) {
+            reject(new Error('File is not a video'));
+            return;
+        }
+
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        
+        video.onloadedmetadata = () => {
+            window.URL.revokeObjectURL(video.src);
+            resolve({
+                width: video.videoWidth,
+                height: video.videoHeight,
+                duration: video.duration,
+            });
+        };
+
+        video.onerror = () => {
+            window.URL.revokeObjectURL(video.src);
+            reject(new Error('Failed to load video metadata'));
+        };
+
+        video.src = URL.createObjectURL(file);
+    });
+}

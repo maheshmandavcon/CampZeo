@@ -63,6 +63,7 @@ export function WYSIWYGPreview({
     const [isPlayingVideo, setIsPlayingVideo] = React.useState(false);
     const [currentSlideIndex, setCurrentSlideIndex] = React.useState(0);
     const [videoRatios, setVideoRatios] = React.useState<Record<string, number>>({});
+    const [imageRatios, setImageRatios] = React.useState<Record<string, number>>({});
     const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
 
     // Reset slide index when media or platform changes
@@ -106,7 +107,7 @@ export function WYSIWYGPreview({
             );
         }
 
-        const renderMediaItem = (url: string, className?: string) => {
+        const renderMediaItem = (url: string, className?: string, style?: React.CSSProperties) => {
             const isVid = isVideoUrl(url);
             const isImg = isImageUrl(url);
             const isDoc = isDocumentUrl(url);
@@ -118,6 +119,7 @@ export function WYSIWYGPreview({
                         "relative overflow-hidden bg-muted/20 cursor-pointer group/media",
                         className
                     )}
+                    style={style}
                     onClick={() => {
                         if (isDoc || isVid || !isImg) {
                             setSelectedFile(url);
@@ -144,8 +146,14 @@ export function WYSIWYGPreview({
                             src={previewUrl}
                             alt="Preview"
                             fill
-                            className="object-cover"
+                            className="object-contain"
                             unoptimized
+                            onLoad={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                if (target.naturalWidth && target.naturalHeight) {
+                                    setImageRatios(prev => ({ ...prev, [url]: target.naturalWidth / target.naturalHeight }));
+                                }
+                            }}
                         />
                     ) : (
                         <div className="flex size-full flex-col items-center justify-center gap-2 bg-gray-50 p-4">
@@ -252,7 +260,15 @@ export function WYSIWYGPreview({
                 mediaUrls.every(url => isVideoUrl(url)) && 
                 hasVerticalVideo;
 
-            if (count === 1) return renderMediaItem(mediaUrls[0], cn(isFacebookVideoOnly ? "aspect-square" : "aspect-video", "rounded-lg border"));
+            if (count === 1) {
+                const url = mediaUrls[0];
+                const ratio = isVideoUrl(url) ? videoRatios[url] : imageRatios[url];
+                return renderMediaItem(
+                    url, 
+                    cn("rounded-lg border", !ratio && (isFacebookVideoOnly ? "aspect-square" : "aspect-video")),
+                    ratio ? { aspectRatio: ratio } : {}
+                );
+            }
 
             if (count === 2) {
                 return (
@@ -391,7 +407,13 @@ export function WYSIWYGPreview({
             );
         }
 
-        return renderMediaItem(mediaUrls[0], "aspect-video rounded-lg");
+        const url = mediaUrls[0];
+        const ratio = isVideoUrl(url) ? videoRatios[url] : imageRatios[url];
+        return renderMediaItem(
+            url, 
+            cn("rounded-lg", !ratio && "aspect-video"),
+            ratio ? { aspectRatio: ratio } : {}
+        );
     };
 
     const renderPlatformPreview = () => {
