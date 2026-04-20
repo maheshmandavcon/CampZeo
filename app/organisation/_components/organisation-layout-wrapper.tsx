@@ -18,7 +18,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
-import { useState } from "react";
+import { useState,  useCallback, useRef } from "react";
 import { SignedIn, UserButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -94,6 +94,53 @@ export function OrganisationLayoutWrapper({
     document.cookie = "admin_impersonation=; path=/; max-age=0";
     window.location.href = "/admin";
   };
+
+  const lastRefreshTime = useRef<number>(0);
+  const COOLDOWN_MS = 60000 * 30; 
+
+  const triggerSocialRefresh = useCallback(async (source: string) => {
+    if (isImpersonating) return;
+
+    const now = Date.now();
+    if (now - lastRefreshTime.current < COOLDOWN_MS) {
+      return;
+    }
+
+    lastRefreshTime.current = now;
+    try {
+      const response = await fetch('/api/socialmedia/refresh', { method: 'POST' });
+      if (!response.ok) {
+        console.warn(`[SocialRefresh] Token refresh failed (Source: ${source})`);
+      } else {
+        console.log(`[SocialRefresh] Tokens refreshed successfully (Source: ${source})`);
+      }
+    } catch (error) {
+      console.error(`[SocialRefresh] Error during token refresh (Source: ${source}):`, error);
+    }
+  }, [isImpersonating]);
+
+  useEffect(() => {
+    triggerSocialRefresh('navigation');
+  }, [pathname, triggerSocialRefresh]);
+
+  useEffect(() => {
+    const handleFocus = () => triggerSocialRefresh('focus');
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        triggerSocialRefresh('visibility');
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('click', handleFocus); 
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('click', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [triggerSocialRefresh]);
 
   useEffect(() => {
     // Prevent the body from scrolling while in the organisation layout
