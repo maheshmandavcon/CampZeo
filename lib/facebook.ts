@@ -646,9 +646,10 @@ export async function getFacebookPostInsights(
             `https://graph.facebook.com/v24.0/${postId}?fields=${fields}&access_token=${accessToken}`
         );
 
+        let errorData: any = null;
         if (!postResponse.ok) {
-            const error = await postResponse.json();
-            const errorMessage = error.error?.message || "";
+            errorData = await postResponse.json();
+            const errorMessage = errorData.error?.message || "";
 
             // If the error is specifically about non-existing fields (common on Photo/Video nodes), retry without them
             if (errorMessage.includes('nonexisting field')) {
@@ -671,12 +672,17 @@ export async function getFacebookPostInsights(
                     postResponse = await fetch(
                         `https://graph.facebook.com/v24.0/${postId}?fields=${newFields}&access_token=${accessToken}`
                     );
+                    if (!postResponse.ok) {
+                        errorData = await postResponse.json();
+                    } else {
+                        errorData = null;
+                    }
                 }
             }
         }
 
         if (!postResponse.ok) {
-            const error = await postResponse.json();
+            const error = errorData || await postResponse.json(); // Fallback just in case
             console.error(`[Facebook] API Error for post ${postId}:`, error);
             // Check for specific error codes or status
             const errorCode = error.error?.code;
