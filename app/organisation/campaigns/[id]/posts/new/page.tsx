@@ -180,6 +180,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [loadingLeadForms, setLoadingLeadForms] = useState(false);
     const [selectedLeadFormId, setSelectedLeadFormId] = useState<string>('');
     const [hasPaidPlan, setHasPaidPlan] = useState(false); // Default to false (Secure by default - no flash)
+    const [isAutoDetected, setIsAutoDetected] = useState(false);
     const [isTrial, setIsTrial] = useState(false);
 
     // AI Assistant state
@@ -519,6 +520,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                         if (isVerticalOrSquare && isUnder3Min) {
                             setYoutubeContentType('SHORT');
                             setIsReel(true);
+                            setIsAutoDetected(true);
                             toast.success('Vertical/Square video under 3 mins detected: Switched to Shorts mode');
 
                             if (!message.toLowerCase().includes('#shorts')) {
@@ -527,6 +529,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                         } else {
                             setYoutubeContentType('VIDEO');
                             setIsReel(false);
+                            setIsAutoDetected(true);
                             if (isVerticalOrSquare && !isUnder3Min) {
                                 toast.info('Vertical video detected but duration is over 3 mins: Switched to Standard Video');
                             } else if (width > height) {
@@ -638,6 +641,11 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         const urlToRemove = mediaUrls[index];
         const updatedUrls = mediaUrls.filter((_, i) => i !== index);
         setMediaUrls(updatedUrls);
+
+        // Reset auto-detection if no videos left
+        if (updatedUrls.filter(url => isVideoUrl(url)).length === 0) {
+            setIsAutoDetected(false);
+        }
 
         // Immediate cleanup for manually removed files
         if (urlToRemove) {
@@ -956,10 +964,16 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             return;
         }
 
-        // YouTube specific validation
-        if (selectedPlatform === 'YOUTUBE' && mediaUrls.length > 0 && !mediaUrls[0].match(/\.(mp4|mov|webm)$/i)) {
-            toast.error('YouTube requires a video file');
-            return;
+        // YouTube specific validation - Allow Video OR Image (Community Posts)
+        if (selectedPlatform === 'YOUTUBE' && mediaUrls.length > 0) {
+            const fileName = mediaUrls[0].toLowerCase();
+            const isVideo = fileName.match(/\.(mp4|mov|webm)$/i);
+            const isImage = fileName.match(/\.(jpg|jpeg|png|gif)$/i);
+
+            if (!isVideo && !isImage) {
+                toast.error('YouTube requires a video or an image file (for Community posts)');
+                return;
+            }
         }
 
         // Page validation
@@ -2016,10 +2030,11 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                             key={type}
                                                             type="button"
                                                             onClick={() => setYoutubeContentType(type)}
+                                                            disabled={isAutoDetected && (type === 'VIDEO' || type === 'SHORT')}
                                                             className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-all ${youtubeContentType === type
-                                                                ? 'border-primary bg-primary/10 text-primary cursor-pointer'
-                                                                : 'border-border bg-background hover:bg-muted cursor-pointer'
-                                                                }`}
+                                                                ? 'border-primary bg-primary/10 text-primary'
+                                                                : 'border-border bg-background hover:bg-muted'
+                                                                } ${isAutoDetected && (type === 'VIDEO' || type === 'SHORT') ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                                         >
                                                             {type === 'VIDEO' ? 'Standard Video' : type === 'SHORT' ? 'YouTube Short' : 'Playlist'}
                                                         </button>

@@ -119,6 +119,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
     const [campaign, setCampaign] = useState<any>(null);
     const [existingPost, setExistingPost] = useState<Post | null>(null);
     const [hasPaidPlan, setHasPaidPlan] = useState<boolean>(false); // Default to false (Secure by default - no flash)
+    const [isAutoDetected, setIsAutoDetected] = useState(false);
 
     // Fetch subscription status
     useEffect(() => {
@@ -528,6 +529,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                         if (isVerticalOrSquare && isUnder3Min) {
                             setYoutubeContentType('SHORT');
                             setIsReel(true);
+                            setIsAutoDetected(true);
                             toast.success('Vertical/Square video under 3 mins detected: Switched to Shorts mode');
 
                             if (!message.toLowerCase().includes('#shorts')) {
@@ -536,6 +538,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                         } else {
                             setYoutubeContentType('VIDEO');
                             setIsReel(false);
+                            setIsAutoDetected(true);
                             if (isVerticalOrSquare && !isUnder3Min) {
                                 toast.info('Vertical video detected but duration is over 3 mins: Switched to Standard Video');
                             } else if (width > height) {
@@ -649,6 +652,11 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
         const updatedUrls = mediaUrls.filter((_, i) => i !== index);
         setMediaUrls(updatedUrls);
 
+        // Reset auto-detection if no videos left
+        if (updatedUrls.filter(url => isVideoUrl(url)).length === 0) {
+            setIsAutoDetected(false);
+        }
+
         // Immediate cleanup for manually removed files
         if (urlToRemove) {
             console.log(`[Drive] Manual removal: cleaning up ${urlToRemove}`);
@@ -740,6 +748,18 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
         if (['INSTAGRAM', 'YOUTUBE', 'PINTEREST'].includes(type) && mediaUrls.length === 0) {
             toast.error(`${type} posts require media (image/video)`);
             return;
+        }
+
+        // YouTube specific validation - Allow Video OR Image (Community Posts)
+        if (type === 'YOUTUBE' && mediaUrls.length > 0) {
+            const fileName = mediaUrls[0].toLowerCase();
+            const isVideo = fileName.match(/\.(mp4|mov|webm)$/i);
+            const isImage = fileName.match(/\.(jpg|jpeg|png|gif)$/i);
+
+            if (!isVideo && !isImage) {
+                toast.error('YouTube requires a video or an image file (for Community posts)');
+                return;
+            }
         }
 
         // Pinterest board validation
@@ -1312,10 +1332,11 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                                                     key={yType}
                                                     type="button"
                                                     onClick={() => setYoutubeContentType(yType)}
-                                                    className={`rounded-md cursor-pointer border px-3 py-1.5 text-sm font-medium transition-all ${youtubeContentType === yType
+                                                    disabled={isAutoDetected && (yType === 'VIDEO' || yType === 'SHORT')}
+                                                    className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-all ${youtubeContentType === yType
                                                         ? 'border-primary bg-primary/10 text-primary'
                                                         : 'border-border bg-background hover:bg-muted'
-                                                        }`}
+                                                        } ${isAutoDetected && (yType === 'VIDEO' || yType === 'SHORT') ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                                 >
                                                     {yType === 'VIDEO' ? 'Standard Video' : yType === 'SHORT' ? 'YouTube Short' : 'Playlist'}
                                                 </button>
