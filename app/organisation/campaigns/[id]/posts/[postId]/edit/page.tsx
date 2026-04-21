@@ -32,7 +32,7 @@ import { WYSIWYGPreview } from '../../_components/WYSIWYGPreview';
 import { useUser } from '@clerk/nextjs';
 import { uploadToServer, deleteFromDriveImmediate } from '@/lib/upload-helper';
 import { MetaBoostSection, MetaBoostOptions } from '../../_components/MetaBoostSection';
-import { isVideoUrl, getMediaPreviewUrl as getPreviewUrl } from '@/lib/media-utils';
+import { isVideoUrl, getMediaPreviewUrl as getPreviewUrl, getVideoMetadata } from '@/lib/media-utils';
 import { useMediaCleanup } from '@/hooks/use-media-cleanup';
 
 
@@ -119,6 +119,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
     const [campaign, setCampaign] = useState<any>(null);
     const [existingPost, setExistingPost] = useState<Post | null>(null);
     const [hasPaidPlan, setHasPaidPlan] = useState<boolean>(false); // Default to false (Secure by default - no flash)
+    const [isAutoDetected, setIsAutoDetected] = useState(false);
 
     // Fetch subscription status
     useEffect(() => {
@@ -412,6 +413,18 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
         setSelectedTemplateId(templateId);
 
         if (!templateId || templateId === 'none') {
+            setSubject('');
+            setMessage('');
+            setMediaUrls([]);
+            setThumbnailUrl(null);
+            setIsReel(false);
+            setContentType('POST');
+            setYoutubeContentType('VIDEO');
+            setYoutubePrivacy('public');
+            setYoutubeTags('');
+            setYoutubePlaylistTitle('');
+            //setLeadForms([]);
+           // setTwilioStatus('NONE');
             return;
         }
 
@@ -494,7 +507,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 setCurrentUploadIndex(i);
-                
+
                 const isVideo = file.type.startsWith('video/');
 
                 if (type === 'LINKEDIN' && isVideo) {
@@ -503,6 +516,38 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                         continue;
                     }
                     newlyAddedVideos++;
+                }
+
+                if (type === 'YOUTUBE' && isVideo) {
+                    try {
+                        const metadata = await getVideoMetadata(file);
+                        const { width, height, duration } = metadata;
+
+                        const isVerticalOrSquare = height >= width;
+                        const isUnder3Min = duration <= 180;
+
+                        if (isVerticalOrSquare && isUnder3Min) {
+                            setYoutubeContentType('SHORT');
+                            setIsReel(true);
+                            setIsAutoDetected(true);
+                            toast.success('Vertical/Square video under 3 mins detected: Switched to Shorts mode');
+
+                            if (!message.toLowerCase().includes('#shorts')) {
+                                setMessage(prev => prev ? `${prev}\n\n#Shorts` : '#Shorts');
+                            }
+                        } else {
+                            setYoutubeContentType('VIDEO');
+                            setIsReel(false);
+                            setIsAutoDetected(true);
+                            if (isVerticalOrSquare && !isUnder3Min) {
+                                toast.info('Vertical video detected but duration is over 3 mins: Switched to Standard Video');
+                            } else if (width > height) {
+                                toast.info('Horizontal video detected: Switched to Standard Video');
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error getting video metadata:', err);
+                    }
                 }
 
                 // Use client-side upload to avoid Vercel 4.5MB serverless limit
@@ -523,7 +568,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                 console.log(`[Drive] Media tracked: ${newBlob.url}`);
                 trackUpload(newBlob.url);
                 newUrls.push(newBlob.url);
-                
+
                 // Ensure progress hits the "completed file" mark precisely
                 setUploadProgress(Math.round(((i + 1) * 100) / files.length));
             }
@@ -585,7 +630,7 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                 campaignId as string,
                 type,
                 isReel,
-                (progress:number) => setUploadProgress(progress)
+                (progress: number) => setUploadProgress(progress)
             );
 
             console.log(`[Drive] Thumbnail tracked: ${newBlob.url}`);
@@ -606,6 +651,11 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
         const urlToRemove = mediaUrls[index];
         const updatedUrls = mediaUrls.filter((_, i) => i !== index);
         setMediaUrls(updatedUrls);
+
+        // Reset auto-detection if no videos left
+        if (updatedUrls.filter(url => isVideoUrl(url)).length === 0) {
+            setIsAutoDetected(false);
+        }
 
         // Immediate cleanup for manually removed files
         if (urlToRemove) {
@@ -673,9 +723,9 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
 
             // User's logic: must be within campaign and not in the past
             // Add a 1-minute grace period to 'now' to allow selecting the current minute
-             const submissionTime = new Date();
+            const submissionTime = new Date();
             submissionTime.setSeconds(0, 0);
-            if (!scheduledDate && new Date(scheduledDate) < submissionTime)  {
+            if (!scheduledDate && new Date(scheduledDate) < submissionTime) {
                 if (new Date(scheduledDate) < submissionTime) {
                     toast.error('Scheduled time cannot be in the past');
                 } else {
@@ -698,6 +748,18 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
         if (['INSTAGRAM', 'YOUTUBE', 'PINTEREST'].includes(type) && mediaUrls.length === 0) {
             toast.error(`${type} posts require media (image/video)`);
             return;
+        }
+
+        // YouTube specific validation - Allow Video OR Image (Community Posts)
+        if (type === 'YOUTUBE' && mediaUrls.length > 0) {
+            const fileName = mediaUrls[0].toLowerCase();
+            const isVideo = fileName.match(/\.(mp4|mov|webm)$/i);
+            const isImage = fileName.match(/\.(jpg|jpeg|png|gif)$/i);
+
+            if (!isVideo && !isImage) {
+                toast.error('YouTube requires a video or an image file (for Community posts)');
+                return;
+            }
         }
 
         // Pinterest board validation
@@ -1106,8 +1168,8 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                                                         <>
                                                             <Loader2 className="size-4 text-muted-foreground animate-spin mb-0.5" />
                                                             <span className="text-[10px] text-muted-foreground text-center line-clamp-2 px-1">
-                                                                {totalUploadCount > 1 
-                                                                    ? `File ${currentUploadIndex + 1}/${totalUploadCount}\n(${uploadProgress}%)` 
+                                                                {totalUploadCount > 1
+                                                                    ? `File ${currentUploadIndex + 1}/${totalUploadCount}\n(${uploadProgress}%)`
                                                                     : `${uploadProgress}%`}
                                                             </span>
                                                         </>
@@ -1270,10 +1332,11 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                                                     key={yType}
                                                     type="button"
                                                     onClick={() => setYoutubeContentType(yType)}
-                                                    className={`rounded-md cursor-pointer border px-3 py-1.5 text-sm font-medium transition-all ${youtubeContentType === yType
+                                                    disabled={isAutoDetected && (yType === 'VIDEO' || yType === 'SHORT')}
+                                                    className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-all ${youtubeContentType === yType
                                                         ? 'border-primary bg-primary/10 text-primary'
                                                         : 'border-border bg-background hover:bg-muted'
-                                                        }`}
+                                                        } ${isAutoDetected && (yType === 'VIDEO' || yType === 'SHORT') ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                                 >
                                                     {yType === 'VIDEO' ? 'Standard Video' : yType === 'SHORT' ? 'YouTube Short' : 'Playlist'}
                                                 </button>

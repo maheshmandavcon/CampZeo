@@ -399,8 +399,10 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
 
         try {
             setSendingShare(true);
-            const response = await fetch(`/api/campaigns/${campaignId}/posts/${sharePost.id}/send`,
+            const toastId = `send-${sharePost.id}`;
+            toast.loading(`Publishing ${sharePost.type.toLowerCase()} post...`, { id: toastId });
 
+            const response = await fetch(`/api/campaigns/${campaignId}/posts/${sharePost.id}/send`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -409,41 +411,40 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || 'Failed to send post');
+                const errMsg = errorData.error || 'Failed to send post';
+                toast.error(errMsg, { id: toastId });
+                throw new Error(errMsg);
             }
 
             const data = await response.json();
 
-            if (isSocialPlatform) {
-                toast.success('Post published successfully!');
+            if (data.queued) {
+                toast.success('Post queued for publishing!', {
+                    id: toastId,
+                    description: 'We are processing it in the background. You will be notified of its status.',
+                });
+            } else if (isSocialPlatform) {
+                toast.success('Post published successfully!', { id: toastId });
             } else {
                 if (!data.success && data.sent === 0) {
                     const firstError = data.errors?.[0]?.split(': ')[1] || data.error || 'Failed to send post';
-                    if (firstError.toLowerCase().includes('credit')) {
-                        toast.error(`Failed: ${firstError}`, {
-                            action: {
-                                label: 'Add Credits',
-                                onClick: () => router.push('/organisation/billing')
-                            },
-                        });
-                    } else {
-                        toast.error(`Failed: ${firstError}`);
-                    }
+                    toast.error(`Failed: ${firstError}`, { id: toastId });
                 } else if (data.failed > 0) {
-                    toast.warning(`Sent: ${data.sent}, Failed: ${data.failed}`);
+                    toast.warning(`Sent: ${data.sent}, Failed: ${data.failed}`, { id: toastId });
                 } else {
-                    toast.success('Post shared successfully!');
+                    toast.success('Post shared successfully!', { id: toastId });
                 }
             }
+           
             setSharePost(null);
             setSelectedContacts([]);
-
             // Refresh posts to update status
             const postsResponse = await fetch(`/api/campaigns/${campaignId}/posts`);
             if (postsResponse.ok) {
                 const postsData = await postsResponse.json();
                 setPosts(postsData.posts);
             }
+
 
         } catch (error) {
             console.error('Error sharing post:', error);
@@ -1108,12 +1109,20 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
 
             {/* Share/Send Dialog */}
             <Dialog open={!!sharePost} onOpenChange={(open) => {
-                if (!open) {
+                if (!open && !sendingShare) {
                     setSharePost(null);
                     setContactSearchQuery('');
                 }
             }}>
-                <DialogContent className="max-w-3xl">
+                <DialogContent 
+                    className="max-w-3xl"
+                    onPointerDownOutside={(e) => {
+                        if (sendingShare) e.preventDefault();
+                    }}
+                    onEscapeKeyDown={(e) => {
+                        if (sendingShare) e.preventDefault();
+                    }}
+                >
                     <DialogHeader>
                         <DialogTitle>{isSocialPlatform ? 'Publish Post' : 'Share Post'}</DialogTitle>
                         <DialogDescription>
@@ -1217,7 +1226,7 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
                         )}
                     </div>
                     <DialogFooter>
-                        <Button className='cursor-pointer' variant="outline" onClick={() => setSharePost(null)}>Cancel</Button>
+                        <Button className='cursor-pointer' variant="outline" onClick={() => setSharePost(null)} disabled={sendingShare}>Cancel</Button>
                         <Button className='cursor-pointer' onClick={handleSendShare} disabled={sendingShare || (!isSocialPlatform && selectedContacts.length === 0)}>
                             {sendingShare ? (
                                 <>

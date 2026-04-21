@@ -61,7 +61,7 @@ import { uploadToServer, deleteFromDriveImmediate } from '@/lib/upload-helper';
 import { useMediaCleanup } from '@/hooks/use-media-cleanup';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { isVideoUrl, getMediaPreviewUrl as getPreviewUrl } from '@/lib/media-utils';
+import { isVideoUrl, getMediaPreviewUrl as getPreviewUrl, getVideoMetadata } from '@/lib/media-utils';
 import {
     Tooltip,
     TooltipContent,
@@ -149,7 +149,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [selectedFacebookPageName, setSelectedFacebookPageName] = useState<string>('');
 
     const [uploadingMedia, setUploadingMedia] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0); 
+    const [uploadProgress, setUploadProgress] = useState(0);
     const [currentUploadIndex, setCurrentUploadIndex] = useState(0);
     const [totalUploadCount, setTotalUploadCount] = useState(0);
     const [templates, setTemplates] = useState<any[]>([]);
@@ -180,6 +180,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
     const [loadingLeadForms, setLoadingLeadForms] = useState(false);
     const [selectedLeadFormId, setSelectedLeadFormId] = useState<string>('');
     const [hasPaidPlan, setHasPaidPlan] = useState(false); // Default to false (Secure by default - no flash)
+    const [isAutoDetected, setIsAutoDetected] = useState(false);
     const [isTrial, setIsTrial] = useState(false);
 
     // AI Assistant state
@@ -486,7 +487,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
         try {
             setUploadingMedia(true);
-            setUploadProgress(0); 
+            setUploadProgress(0);
             setTotalUploadCount(files.length);
             setCurrentUploadIndex(0);
 
@@ -497,7 +498,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 setCurrentUploadIndex(i);
-                
+
                 const isVideo = file.type.startsWith('video/');
 
                 if (selectedPlatform === 'LINKEDIN' && isVideo) {
@@ -508,12 +509,44 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     newlyAddedVideos++;
                 }
 
+                if (selectedPlatform === 'YOUTUBE' && isVideo) {
+                    try {
+                        const metadata = await getVideoMetadata(file);
+                        const { width, height, duration } = metadata;
+
+                        const isVerticalOrSquare = height >= width;
+                        const isUnder3Min = duration <= 180;
+
+                        if (isVerticalOrSquare && isUnder3Min) {
+                            setYoutubeContentType('SHORT');
+                            setIsReel(true);
+                            setIsAutoDetected(true);
+                            toast.success('Vertical/Square video under 3 mins detected: Switched to Shorts mode');
+
+                            if (!message.toLowerCase().includes('#shorts')) {
+                                setMessage(prev => prev ? `${prev}\n\n#Shorts` : '#Shorts');
+                            }
+                        } else {
+                            setYoutubeContentType('VIDEO');
+                            setIsReel(false);
+                            setIsAutoDetected(true);
+                            if (isVerticalOrSquare && !isUnder3Min) {
+                                toast.info('Vertical video detected but duration is over 3 mins: Switched to Standard Video');
+                            } else if (width > height) {
+                                toast.info('Horizontal video detected: Switched to Standard Video');
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error getting video metadata:', err);
+                    }
+                }
+
                 // Use client-side upload with organization and campaign context
                 const orgId = campaign?.organisationId || campaign?.organisation?.id;
-                
+
                 const newBlob = await uploadToServer(
-                    file, 
-                    orgId, 
+                    file,
+                    orgId,
                     campaignId,
                     selectedPlatform,
                     isReel,
@@ -527,7 +560,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 console.log(`[Drive] Media tracked: ${newBlob.url}`);
                 trackUpload(newBlob.url);
                 newUrls.push(newBlob.url);
-                
+
                 // Ensure progress hits the "completed file" mark precisely
                 setUploadProgress(Math.round(((i + 1) * 100) / files.length));
             }
@@ -582,12 +615,12 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
             const orgId = campaign?.organisationId || campaign?.organisation?.id;
             const newBlob = await uploadToServer(
-                file, 
-                orgId, 
+                file,
+                orgId,
                 campaignId,
                 selectedPlatform,
                 isReel,
-                (progress:any) => setUploadProgress(progress)
+                (progress: any) => setUploadProgress(progress)
             );
 
             console.log(`[Drive] Thumbnail tracked: ${newBlob.url}`);
@@ -608,6 +641,11 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         const urlToRemove = mediaUrls[index];
         const updatedUrls = mediaUrls.filter((_, i) => i !== index);
         setMediaUrls(updatedUrls);
+
+        // Reset auto-detection if no videos left
+        if (updatedUrls.filter(url => isVideoUrl(url)).length === 0) {
+            setIsAutoDetected(false);
+        }
 
         // Immediate cleanup for manually removed files
         if (urlToRemove) {
@@ -713,6 +751,43 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         }
     };
 
+    const backgroundSend = async (postId: number, platform: string, contactIds?: string[]) => {
+        const toastId = `send-${postId}`;
+        toast.loading(`Publishing ${platform.toLowerCase()} post...`, {
+            id: toastId,
+        });
+
+        try {
+            const sendResponse = await fetch(`/api/campaigns/${campaignId}/posts/${postId}/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contactIds })
+            });
+
+            if (!sendResponse.ok) {
+                const errorData = await sendResponse.json().catch(() => ({}));
+                const sendErrorMsg = errorData.error || 'Unknown error';
+                toast.error(`Failed to publish: ${sendErrorMsg}`, { id: toastId });
+            } else {
+                const sendData = await sendResponse.json();
+                if (sendData.queued) {
+                    toast.success(`Post queued for publishing!`, {
+                        id: toastId,
+                        description: 'We are processing it in the background. You will be notified of its status.',
+                    });
+                } else {
+                    toast.success(`Post published successfully!`, {
+                        id: toastId,
+                        description: sendData.sent !== undefined ? `Sent: ${sendData.sent}${sendData.failed ? `, Failed: ${sendData.failed}` : ''}` : undefined,
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error in background send:', error);
+            toast.error(`Error publishing post`, { id: toastId });
+        }
+    };
+
     const executeCreateAndSend = async (targetContactIds?: string[]) => {
         try {
             setSaving(true);
@@ -782,48 +857,26 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             const data = await response.json();
             const postId = data.post.id;
 
-            // 2. Send Post
-            // If targetContactIds is provided, use it. Otherwise send to ALL campaign contacts.
+            // 2. Trigger Background Send
             const contactsToSend = targetContactIds && targetContactIds.length > 0
                 ? targetContactIds
                 : campaignContacts.map(c => c.id);
 
             if (contactsToSend.length === 0) {
-                toast.error('No contacts available to send to.');
-                // But post was created. redirect.
-                router.push(`/organisation/campaigns/${campaignId}/posts`);
-                return;
-            }
-
-            const sendResponse = await fetch(`/api/campaigns/${campaignId}/posts/${postId}/send`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contactIds: contactsToSend })
-            });
-
-            if (!sendResponse.ok) {
-                const errorData = await sendResponse.json().catch(() => ({}));
-                // Post created but send failed.
-                const sendErrorMsg = errorData.error || 'Unknown error';
-                if (sendErrorMsg.toLowerCase().includes('credit')) {
-                    toast.warning(`Post created but failed to send: ${sendErrorMsg}`, {
-                        action: {
-                            label: 'Add Credits',
-                            onClick: () => router.push('/organisation/billing')
-                        },
-                    });
-                } else {
-                    toast.warning(`Post created but failed to send: ${sendErrorMsg}`);
-                }
+                toast.warning('Post created, but no contacts available to send to.');
             } else {
-                const sendData = await sendResponse.json();
-                toast.success(`Post sent successfully! Sent: ${sendData.sent}, Failed: ${sendData.failed}`);
+                // Run in background without await
+                backgroundSend(postId, selectedPlatform || 'direct', contactsToSend);
+                toast.success('Post created! Sending in background...', {
+                    description: `Sending to ${contactsToSend.length} contacts.`
+                });
             }
 
+            // Redirect immediately
             router.push(`/organisation/campaigns/${campaignId}/posts`);
 
         } catch (error) {
-            console.error('Error creating/sending post:', error);
+            console.error('Error creating post:', error);
             const errorMessage = error instanceof Error ? error.message : 'Failed to create post';
             if (errorMessage.toLowerCase().includes('credit')) {
                 toast.error(errorMessage, {
@@ -911,10 +964,16 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
             return;
         }
 
-        // YouTube specific validation
-        if (selectedPlatform === 'YOUTUBE' && mediaUrls.length > 0 && !mediaUrls[0].match(/\.(mp4|mov|webm)$/i)) {
-            toast.error('YouTube requires a video file');
-            return;
+        // YouTube specific validation - Allow Video OR Image (Community Posts)
+        if (selectedPlatform === 'YOUTUBE' && mediaUrls.length > 0) {
+            const fileName = mediaUrls[0].toLowerCase();
+            const isVideo = fileName.match(/\.(mp4|mov|webm)$/i);
+            const isImage = fileName.match(/\.(jpg|jpeg|png|gif)$/i);
+
+            if (!isVideo && !isImage) {
+                toast.error('YouTube requires a video or an image file (for Community posts)');
+                return;
+            }
         }
 
         // Page validation
@@ -985,6 +1044,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                     linkedInUrn: selectedLinkedInUrn === 'personal' ? null : selectedLinkedInUrn, // NEW: Selected LinkedIn Author URN
                     leadFormId: selectedLeadFormId && selectedLeadFormId !== 'none' ? selectedLeadFormId : null,
                     metaBoost: boostOptions.enabled ? boostOptions : undefined, // NEW: Meta Boost options
+                    skipImmediateSend: isSocialPlatform && !scheduledPostTime, // Background social send
                 }),
             });
 
@@ -993,8 +1053,19 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 throw new Error(error.error || 'Failed to create post');
             }
 
+            const data = await response.json();
+            const postId = data.post.id;
+
             markAsSubmitted();
-            toast.success('Post created successfully');
+
+            if (isSocialPlatform && !scheduledPostTime) {
+                // Trigger background send for social
+                backgroundSend(postId, selectedPlatform || 'social');
+                toast.success('Post created! Publishing in background...');
+            } else {
+                toast.success('Post created successfully');
+            }
+
             router.push(`/organisation/campaigns/${campaignId}/posts`);
         } catch (error) {
             console.error('Error creating post:', error);
@@ -1115,13 +1186,25 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
         }
     };
 
-    // Handle template selection
+    
     // Handle template selection
     const handleTemplateSelect = (templateId: string) => {
         setSelectedTemplateId(templateId);
 
         if (!templateId || templateId === 'none') {
             // Clear the form if "none" is selected
+            setSubject('');
+            setMessage('');
+            setMediaUrls([]);
+            setThumbnailUrl(null);
+            setIsReel(false);
+            setContentType('POST');
+            setYoutubeContentType('VIDEO');
+            setYoutubePrivacy('public');
+            setYoutubeTags('');
+            setYoutubePlaylistTitle('');
+            setLeadForms([]);
+            setTwilioStatus('NONE');
             return;
         }
 
@@ -1271,7 +1354,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                         description: `Your ${platform} access has been suspended. Please contact us or check billing.`,
                                                                         action: {
                                                                             label: 'Contact Support',
-                                                                            onClick: () => window.location.href="mailto:surya@mandavconsultancy.com"
+                                                                            onClick: () => window.location.href = "mailto:surya@mandavconsultancy.com"
                                                                         }
                                                                     });
                                                                 } else if (isAdminLocked) {
@@ -1341,9 +1424,9 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                                 ? "SMS and WhatsApp campaigns are not available during the free trial period. Please upgrade to a paid plan to unlock these channels."
                                                                                 : isSuspended
                                                                                     ? `Your access to ${platform} has been temporarily suspended by the administrator.`
-                                                                                : isAdminLocked
-                                                                                    ? "SMS and WhatsApp messaging requires admin approval and credit purchase."
-                                                                                    : `You have 0 ${platform} credits. Please purchase a pack to use this channel.`}
+                                                                                    : isAdminLocked
+                                                                                        ? "SMS and WhatsApp messaging requires admin approval and credit purchase."
+                                                                                        : `You have 0 ${platform} credits. Please purchase a pack to use this channel.`}
                                                                         </p>
                                                                         <Button
                                                                             size="sm"
@@ -1352,7 +1435,7 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                                 e.preventDefault();
                                                                                 e.stopPropagation();
                                                                                 if (isSuspended) {
-                                                                                    window.location.href="mailto:surya@mandavconsultancy.com";
+                                                                                    window.location.href = "mailto:surya@mandavconsultancy.com";
                                                                                 } else {
                                                                                     router.push('/organisation/billing');
                                                                                 }
@@ -1377,39 +1460,40 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                 )}
                             </div>
 
+                            {/* Template Selection - Available for all platforms */}
+                            {selectedPlatform && !loadingTemplates && templates.length > 0 && (
+                                <div className="space-y-2 p-4 bg-muted/20 rounded-lg border border-dashed">
+                                    <Label htmlFor="template" className="text-xs font-semibold uppercase text-muted-foreground">Quick Start with Template</Label>
+                                    <Select value={selectedTemplateId || "none"} onValueChange={handleTemplateSelect}>
+                                        <SelectTrigger id="template" className="bg-background border border-2 border-gray-200">
+                                            <SelectValue placeholder="Select a template..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">None - Start from scratch</SelectItem>
+                                            {templates.map((template) => (
+                                                <SelectItem key={template.id} value={template.id.toString()}>
+                                                    <div className="flex items-center gap-2">
+                                                        <FileText className="size-4 text-primary" />
+                                                        <span>{template.name}</span>
+                                                        {template.category && (
+                                                            <span className="text-xs text-muted-foreground ml-2 px-1.5 py-0.5 rounded-full bg-muted">
+                                                                {template.category}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-[10px] text-muted-foreground">
+                                        Selecting a template will populate the fields below. You can still edit them.
+                                    </p>
+                                </div>
+                            )}
+
                             {/* Other Platforms Form */}
                             {selectedPlatform && selectedPlatform !== 'EMAIL' && (
                                 <div className="space-y-4">
-                                    {/* Template Selection */}
-                                    {!loadingTemplates && templates.length > 0 && (
-                                        <div className="space-y-2 p-4 bg-muted/20 rounded-lg border border-dashed">
-                                            <Label htmlFor="template" className="text-xs font-semibold uppercase text-muted-foreground">Quick Start with Template</Label>
-                                            <Select value={selectedTemplateId || "none"} onValueChange={handleTemplateSelect}>
-                                                <SelectTrigger id="template" className="bg-background border border-2 border-gray-200">
-                                                    <SelectValue placeholder="Select a template..." />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="none">None - Start from scratch</SelectItem>
-                                                    {templates.map((template) => (
-                                                        <SelectItem key={template.id} value={template.id.toString()}>
-                                                            <div className="flex items-center gap-2">
-                                                                <FileText className="size-4 text-primary" />
-                                                                <span>{template.name}</span>
-                                                                {template.category && (
-                                                                    <span className="text-xs text-muted-foreground ml-2 px-1.5 py-0.5 rounded-full bg-muted">
-                                                                        {template.category}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <p className="text-[10px] text-muted-foreground">
-                                                Selecting a template will populate the fields below. You can still edit them.
-                                            </p>
-                                        </div>
-                                    )}
                                     {/* Title Field for Social Media & WhatsApp */}
                                     {selectedPlatform !== 'SMS' && (
                                         <div className="space-y-2">
@@ -1634,10 +1718,21 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
 
                                             {mediaUrls.length < 10 && (
                                                 <label htmlFor="email-attachment-upload" className="flex flex-col items-center justify-center size-20 border-2 border-dashed rounded-md cursor-pointer hover:bg-muted/50 transition-colors">
-                                                    <div className="flex flex-col items-center">
-                                                        <Upload className="size-4 text-muted-foreground mb-0.5" />
-                                                        <span className="text-[10px] text-muted-foreground">Add</span>
-                                                    </div>
+                                                    {uploadingMedia ? (
+                                                        <div className="flex flex-col items-center">
+                                                            <Loader2 className="size-4 text-muted-foreground animate-spin mb-0.5" />
+                                                            <span className="text-[10px] text-muted-foreground text-center line-clamp-2 px-1">
+                                                                {totalUploadCount > 1
+                                                                    ? `File ${currentUploadIndex + 1}/${totalUploadCount}\n(${uploadProgress}%)`
+                                                                    : `${uploadProgress}%`}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-col items-center">
+                                                            <Upload className="size-4 text-muted-foreground mb-0.5" />
+                                                            <span className="text-[10px] text-muted-foreground">Add</span>
+                                                        </div>
+                                                    )}
                                                     <input
                                                         id="email-attachment-upload"
                                                         type="file"
@@ -1711,8 +1806,8 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                                 <div className="flex flex-col items-center">
                                                                     <Loader2 className="size-4 text-muted-foreground animate-spin mb-0.5" />
                                                                     <span className="text-[10px] text-muted-foreground text-center line-clamp-2 px-1">
-                                                                        {totalUploadCount > 1 
-                                                                            ? `File ${currentUploadIndex + 1}/${totalUploadCount}\n(${uploadProgress}%)` 
+                                                                        {totalUploadCount > 1
+                                                                            ? `File ${currentUploadIndex + 1}/${totalUploadCount}\n(${uploadProgress}%)`
                                                                             : `${uploadProgress}%`}
                                                                     </span>
                                                                 </div>
@@ -1935,10 +2030,11 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                                                             key={type}
                                                             type="button"
                                                             onClick={() => setYoutubeContentType(type)}
+                                                            disabled={isAutoDetected && (type === 'VIDEO' || type === 'SHORT')}
                                                             className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-all ${youtubeContentType === type
-                                                                ? 'border-primary bg-primary/10 text-primary cursor-pointer'
-                                                                : 'border-border bg-background hover:bg-muted cursor-pointer'
-                                                                }`}
+                                                                ? 'border-primary bg-primary/10 text-primary'
+                                                                : 'border-border bg-background hover:bg-muted'
+                                                                } ${isAutoDetected && (type === 'VIDEO' || type === 'SHORT') ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                                         >
                                                             {type === 'VIDEO' ? 'Standard Video' : type === 'SHORT' ? 'YouTube Short' : 'Playlist'}
                                                         </button>

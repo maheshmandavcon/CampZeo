@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { currentUser } from '@clerk/nextjs/server';
 import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
@@ -40,8 +40,8 @@ async function getPostsHandler(
 
     const { id } = await context.params;
     const campaignId = parseInt(id);
-console.log("ORG ID:", effectiveOrganisationId);
-console.log("CAMPAIGN ID:", campaignId);
+    console.log("ORG ID:", effectiveOrganisationId);
+    console.log("CAMPAIGN ID:", campaignId);
     // Verify campaign belongs to organisation
     const campaign = await prisma.campaign.findFirst({
         where: {
@@ -123,31 +123,32 @@ async function createPostHandler(
         return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
-        const body = await request.json();
-        const {
-            subject,
-            message,
-            type,
-            scheduledPostTime,
-            senderEmail,
-            mediaUrls,
-            youtubeTags,
-            youtubePrivacy,
-            youtubeContentType,
-            youtubePlaylistTitle,
-            youtubePlaylistId,
-            pinterestBoardId,
-            pinterestLink,
-            isReel,
-            contentType,
-            thumbnailUrl,
-            facebookPageId,
-            facebookPageName,
-            facebookPageAccessToken,
-            instagramBusinessId,
-            linkedInUrn,
-            metaBoost
-        } = body;
+    const body = await request.json();
+    const {
+        subject,
+        message,
+        type,
+        scheduledPostTime,
+        senderEmail,
+        mediaUrls,
+        youtubeTags,
+        youtubePrivacy,
+        youtubeContentType,
+        youtubePlaylistTitle,
+        youtubePlaylistId,
+        pinterestBoardId,
+        pinterestLink,
+        isReel,
+        contentType,
+        thumbnailUrl,
+        facebookPageId,
+        facebookPageName,
+        facebookPageAccessToken,
+        instagramBusinessId,
+        linkedInUrn,
+        metaBoost,
+        skipImmediateSend
+    } = body;
 
     // Validation
     if (!type) {
@@ -193,35 +194,35 @@ async function createPostHandler(
         );
     }
 
-        // Prepare metadata
-        let metadata: any = {};
-        if (type === 'YOUTUBE') {
-            metadata = {
-                tags: youtubeTags,
-                privacy: youtubePrivacy,
-                thumbnailUrl,
-                postType: youtubeContentType,
-                playlistTitle: youtubePlaylistTitle,
-                playlistId: youtubePlaylistId
-            };
-        } else if (type === 'PINTEREST') {
-            metadata = { boardId: pinterestBoardId, link: pinterestLink, thumbnailUrl };
-        } else if (type === 'FACEBOOK' || type === 'INSTAGRAM') {
-            metadata = {
-                isReel: !!isReel,
-                thumbnailUrl,
-                postType: contentType,
-                facebookPageId,
-                facebookPageName,
-                facebookPageAccessToken,
-                instagramBusinessId,
-                metaBoost: metaBoost || undefined
-            };
-        } else if (type === 'LINKEDIN') {
-            metadata = {
-                linkedInUrn
-            };
-        }
+    // Prepare metadata
+    let metadata: any = {};
+    if (type === 'YOUTUBE') {
+        metadata = {
+            tags: youtubeTags,
+            privacy: youtubePrivacy,
+            thumbnailUrl,
+            postType: youtubeContentType,
+            playlistTitle: youtubePlaylistTitle,
+            playlistId: youtubePlaylistId
+        };
+    } else if (type === 'PINTEREST') {
+        metadata = { boardId: pinterestBoardId, link: pinterestLink, thumbnailUrl };
+    } else if (type === 'FACEBOOK' || type === 'INSTAGRAM') {
+        metadata = {
+            isReel: !!isReel,
+            thumbnailUrl,
+            postType: contentType,
+            facebookPageId,
+            facebookPageName,
+            facebookPageAccessToken,
+            instagramBusinessId,
+            metaBoost: metaBoost || undefined
+        };
+    } else if (type === 'LINKEDIN') {
+        metadata = {
+            linkedInUrn
+        };
+    }
 
     if (scheduledPostTime) {
         const scheduledDate = new Date(scheduledPostTime);
@@ -271,7 +272,7 @@ async function createPostHandler(
 
             // 2. Identify all Google Drive files to move
             const filesToMove: string[] = [];
-            
+
             // Extract file IDs from proxy URLs
             const extractId = (url: string) => {
                 if (url.includes('id=')) {
@@ -301,7 +302,7 @@ async function createPostHandler(
                     console.error(`[Drive] Failed to move file ${fileId}:`, moveErr);
                 }
             }
-            
+
             console.log(`[Drive] Metadata organization complete for post ${post.id}`);
         } catch (orgErr) {
             console.error('[Drive] Folder organization failed:', orgErr);
@@ -310,12 +311,19 @@ async function createPostHandler(
     }
     // ----------------------------------------
 
-    
-    if (isSocialPlatform && !scheduledPostTime) {
-        const result = await sendCampaignPost(post);
-        if (!result.success) {
-            throw new ApiError(400, result.error || "Failed to share post immediately");
-        }
+
+    if (isSocialPlatform && !scheduledPostTime && !skipImmediateSend) {
+        // Use the official 'after' API from Next.js 15+ for background tasks.
+        // This allows the initial post creation to finish quickly.
+        after(async () => {
+            try {
+                console.log(`[BackgroundSend] Starting after creation for post ${post.id}...`);
+                await sendCampaignPost(post);
+            } catch (error) {
+                console.error(`[BackgroundSend] Error after creation for post ${post.id}:`, error);
+                // Status and notifications are handled inside sendCampaignPost
+            }
+        });
     }
 
     await logInfo("Campaign post created", { postId: post.id, campaignId, type, createdBy: user.id });

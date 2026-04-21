@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { getImpersonatedOrganisationId } from '@/lib/admin-impersonation';
@@ -7,7 +7,7 @@ import { logWarning } from '@/lib/audit-logger';
 import { withErrorHandling, ApiError } from '@/lib/api-handler';
 
 async function sendPostHandler(
-    req: Request,
+    req: Request,   
     { params }: { params: Promise<{ id: string; postId: string }> }
 ) {
     console.log("POST /api/campaigns/[id]/posts/[postId]/send hit");
@@ -79,26 +79,48 @@ async function sendPostHandler(
         return NextResponse.json({ error: 'No contacts selected' }, { status: 400 });
     }
 
-    // Use the shared sendCampaignPost function
-    // For manual publishing, we intend to publish immediately, so ignore scheduled time
-    const result = await sendCampaignPost(
-        post,
-        contactIds ? contactIds.map((id: string) => parseInt(id)) : undefined,
-        { publishNow: true }
-    );
+    // Use the official 'after' API from Next.js 15+ for background tasks.
+    // This allows the request to finish and release the client while the background task continues.
+    after(async () => {
+        try {
+            console.log(`[BackgroundSend] Starting for post ${postId}...`);
+            await sendCampaignPost(
+                post,
+                contactIds ? contactIds.map((id: string) => parseInt(id)) : undefined,
+                { publishNow: true }
+            );
+            // Notifications and status updates are handled inside sendCampaignPost
+        } catch (error) {
+            console.error(`[BackgroundSend] Critical error for post ${postId}:`, error);
+            const errorMsg = error instanceof Error ? error.message : 'Unknown critical error';
 
-    if (!result.success && result.error) {
-        // Explicitly throw ApiError so withErrorHandling shows it to the user
-        throw new ApiError(400, result.error);
-    }
+            await prisma.notification.create({
+                data: {
+                    message: `Critical failure publishing post: ${post.subject || post.type}. ${errorMsg}`,
+                    isSuccess: false,
+                    type: 'POST_PUBLISH_FAILURE',
+                    platform: post.type,
+                    organisationId: effectiveOrganisationId,
+                    referenceId: post.id,
+                    campaignId: post.campaignId
+                }
+            });
 
-    // Return the actual success state and accumulated errors (e.g. partial successes or individual SMS/WhatsApp failures)
-    return NextResponse.json({
-        success: result.success,
-        sent: result.sent,
-        failed: result.failed,
-        errors: result.errors
+            await prisma.campaignPost.update({
+                where: { id: post.id },
+                data: {
+                    status: 'FAILED',
+                    failureReason: errorMsg
+                }
+            });
+        }
     });
+
+    return NextResponse.json({
+        success: true,
+        message: 'Post sending has been queued in the background.',
+        queued: true
+    }, { status: 202 });
 }
 
 export const POST = withErrorHandling(sendPostHandler as any, "POST /api/campaigns/[id]/posts/[postId]/send");
