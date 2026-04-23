@@ -13,7 +13,7 @@ async function getHandler(request: NextRequest) {
 
         const dbUser = await prisma.user.findUnique({
             where: { clerkId: user.id },
-            select: { facebookAccessToken: true }
+            select: { facebookAccessToken: true, facebookPageId: true }
         });
 
         if (!dbUser?.facebookAccessToken) {
@@ -21,7 +21,7 @@ async function getHandler(request: NextRequest) {
         }
 
         const pages = await getFacebookPages(dbUser.facebookAccessToken);
-        return NextResponse.json({ pages });
+        return NextResponse.json({ pages, selectedPageId: dbUser.facebookPageId });
     
 }
 

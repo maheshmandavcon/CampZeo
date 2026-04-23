@@ -108,7 +108,9 @@ const nextConfig: NextConfig = {
         ]
       }
     ]
-  }
+  },
+  output: 'standalone',
+  serverExternalPackages: ['pg', '@prisma/client']
 };
 
 export default nextConfig;

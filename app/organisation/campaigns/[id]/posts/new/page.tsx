@@ -61,7 +61,7 @@ import { uploadToServer, deleteFromDriveImmediate } from '@/lib/upload-helper';
 import { useMediaCleanup } from '@/hooks/use-media-cleanup';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { isVideoUrl, getMediaPreviewUrl as getPreviewUrl, getVideoMetadata } from '@/lib/media-utils';
+import { isVideoUrl, getMediaPreviewUrl as getPreviewUrl, getVideoMetadata, validateVideoAspectMeta, MAX_IG_VIDEO_SIZE_MB } from '@/lib/media-utils';
 import {
     Tooltip,
     TooltipContent,
@@ -395,10 +395,22 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                         const data = await response.json();
                         setFacebookPages(data.pages || []);
 
-                        // If only one page, select it
-                        if (data.pages && data.pages.length === 1) {
-                            setSelectedFacebookPageId(data.pages[0].id);
-                            setSelectedFacebookPageAccessToken(data.pages[0].access_token);
+                        const defaultPageId = data.selectedPageId;
+                        let defaultPage = null;
+
+                        if (defaultPageId) {
+                            defaultPage = data.pages?.find((p: any) => p.id === defaultPageId);
+                        } else if (data.pages && data.pages.length === 1) {
+                            defaultPage = data.pages[0];
+                        }
+
+                        if (defaultPage) {
+                            setSelectedFacebookPageId(defaultPage.id);
+                            setSelectedFacebookPageAccessToken(defaultPage.access_token);
+                            setSelectedFacebookPageName(defaultPage.name);
+                            if (defaultPage.instagram_business_account?.id) {
+                                setSelectedInstagramBusinessId(defaultPage.instagram_business_account.id);
+                            }
                         }
                     } else {
                         console.error('Failed to fetch Facebook pages');
@@ -500,6 +512,27 @@ export default function NewPostPage({ params }: { params: Promise<{ id: string }
                 setCurrentUploadIndex(i);
 
                 const isVideo = file.type.startsWith('video/');
+
+                // --- INSTAGRAM VIDEO VALIDATION ---
+                if (selectedPlatform === 'INSTAGRAM' && isVideo) {
+                    // Check Aspect Ratio for Reels
+                    try {
+                        const metadata = await getVideoMetadata(file);
+                        const { width, height } = metadata;
+                        const validation = validateVideoAspectMeta(width, height);
+
+                        // If user has REEL selected or it's a single video (which defaults to Reel)
+                        const isLikelyReel = contentType === 'REEL' || (files.length === 1 && mediaUrls.length === 0);
+                        
+                        if (isLikelyReel && !validation.isVertical) {
+                            toast.error('Horizontal video detected. Instagram Reels MUST be Vertical (9:16). Please crop your video before uploading.');
+                            continue; // Skip this file
+                        }
+                    } catch (metaErr) {
+                        console.error('Failed to validate video dimensions:', metaErr);
+                    }
+                }
+                // ----------------------------------
 
                 if (selectedPlatform === 'LINKEDIN' && isVideo) {
                     if (currentVideos + newlyAddedVideos >= 1) {

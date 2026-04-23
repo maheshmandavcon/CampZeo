@@ -311,6 +311,30 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
       toast.error("Failed to link page");
     }
   };
+  const handleCancelSelection = async () => {
+    setShowFacebookPageDialog(false);
+    setLoadingFacebookPages(false);
+    
+    if (!userData.facebookPageId) {
+      toast.info("Connection cancelled. Removing partial connection...");
+      try {
+        const res = await fetch("/api/socialmedia/disconnect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ platform: "FACEBOOK" })
+        });
+        if (res.ok) {
+          window.location.reload();
+        } else {
+          toast.error("Failed to clean up connection");
+        }
+      } catch (error) {
+        console.error("Failed to cleanup partial connection", error);
+      }
+    } else {
+      toast.info("Page selection cancelled. Existing page remains linked.");
+    }
+  };
 
   const [socialStatus, setSocialStatus] = useState<any>(null);
 
@@ -902,7 +926,13 @@ export function SettingsClient({ userData, assignedPlatforms, isImpersonating = 
       </Dialog>
 
       {/* Facebook Page Selection Dialog */}
-      <Dialog open={showFacebookPageDialog} onOpenChange={setShowFacebookPageDialog}>
+      <Dialog open={showFacebookPageDialog} onOpenChange={(open) => {
+        if (!open) {
+          handleCancelSelection();
+        } else {
+          setShowFacebookPageDialog(true);
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Link Facebook Page</DialogTitle>

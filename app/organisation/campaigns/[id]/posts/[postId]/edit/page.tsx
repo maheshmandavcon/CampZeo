@@ -32,7 +32,7 @@ import { WYSIWYGPreview } from '../../_components/WYSIWYGPreview';
 import { useUser } from '@clerk/nextjs';
 import { uploadToServer, deleteFromDriveImmediate } from '@/lib/upload-helper';
 import { MetaBoostSection, MetaBoostOptions } from '../../_components/MetaBoostSection';
-import { isVideoUrl, getMediaPreviewUrl as getPreviewUrl, getVideoMetadata } from '@/lib/media-utils';
+import { isVideoUrl, getMediaPreviewUrl as getPreviewUrl, getVideoMetadata, validateVideoAspectMeta, MAX_IG_VIDEO_SIZE_MB } from '@/lib/media-utils';
 import { useMediaCleanup } from '@/hooks/use-media-cleanup';
 
 
@@ -509,6 +509,27 @@ export default function EditPostPage({ params }: { params: Promise<{ id: string,
                 setCurrentUploadIndex(i);
 
                 const isVideo = file.type.startsWith('video/');
+
+                // --- INSTAGRAM VIDEO VALIDATION ---
+                if (type === 'INSTAGRAM' && isVideo) {
+                    // Check Aspect Ratio for Reels
+                    try {
+                        const metadata = await getVideoMetadata(file);
+                        const { width, height } = metadata;
+                        const validation = validateVideoAspectMeta(width, height);
+
+                        // If user has REEL selected or it's a single video (which defaults to Reel)
+                        const isLikelyReel = contentType === 'REEL' || (files.length === 1 && mediaUrls.length === 0);
+                        
+                        if (isLikelyReel && !validation.isVertical) {
+                            toast.error('Horizontal video detected. Instagram Reels MUST be Vertical (9:16). Please crop your video before uploading.');
+                            continue; // Skip this file
+                        }
+                    } catch (metaErr) {
+                        console.error('Failed to validate video dimensions:', metaErr);
+                    }
+                }
+                // ----------------------------------
 
                 if (type === 'LINKEDIN' && isVideo) {
                     if (currentVideos + newlyAddedVideos >= 1) {

@@ -218,6 +218,45 @@ export function getSocialMediaUrl(url: string): string {
     // Otherwise, try to make it absolute using the configured base URL
     return getPublicMediaUrl(url);
 }
+export function getInstagramSocialMediaUrl(url: string): string {
+    if (!url) return '';
+
+    // Transform Google Drive links to optimized CDN links or internal proxies for social media
+    if (isGoogleDriveUrl(url)) {
+        try {
+            const id = extractGoogleDriveId(url);
+            const urlObj = new URL(url);
+            const file = urlObj.searchParams.get('file') ||
+                urlObj.searchParams.get('filename') ||
+                urlObj.searchParams.get('name') ||
+                (urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : 'media');
+
+            if (id) {
+                // Determine if it's definitely an image based on the file hint (if available)
+                const isDefinitelyImage = isImageUrl(file);
+
+                // For confirmed images, use the lh3 CDN (optimized, faster)
+                if (isDefinitelyImage) {
+                    return `https://lh3.googleusercontent.com/d/${id}=w1000`;
+                }
+                // For videos OR unknown types, use our internal proxy.
+                // This is safer because the proxy handles any file type via the Drive API 
+                // and bypasses the "virus scan" warning for large files (>100MB).
+                return `https://storage.campzeo.com/api/upload/google-drive/view?id=${id}`;
+            }
+        } catch (e) {
+            console.warn('[MediaUtils] Failed to transform Drive URL:', e);
+        }
+    }
+
+    // If it's already a public absolute URL (or our transformed one), return as is
+    if (isPublicUrl(url)) {
+        return url;
+    }
+
+    // Otherwise, try to make it absolute using the configured base URL
+    return getPublicMediaUrl(url);
+}
 
 /**
  * Validates if media URL is suitable for social media posting
@@ -230,6 +269,23 @@ export function validateMediaUrl(url: string): { valid: boolean; message?: strin
     }
 
     const publicUrl = getSocialMediaUrl(url);
+
+    if (!isPublicUrl(publicUrl)) {
+        return {
+            valid: false,
+            message: 'Media URL is not publicly accessible. Social media platforms cannot fetch localhost URLs.',
+            url: publicUrl
+        };
+    }
+
+    return { valid: true, url: publicUrl };
+}
+export function validateInstaMediaUrl(url: string): { valid: boolean; message?: string; url: string } {
+    if (!url) {
+        return { valid: false, message: 'No media URL provided', url: '' };
+    }
+
+    const publicUrl = getInstagramSocialMediaUrl(url);
 
     if (!isPublicUrl(publicUrl)) {
         return {
@@ -324,6 +380,32 @@ export function isDocumentUrl(url: string | null | undefined): boolean {
     const ext = getFileExtension(url);
     return ['pdf', 'csv', 'xlsx', 'xls', 'doc', 'docx', 'txt', 'ppt', 'pptx'].includes(ext);
 }
+
+/**
+ * Video validation constants
+ */
+export const MAX_IG_VIDEO_SIZE_MB = 200;
+export const MAX_IG_VIDEO_SIZE_BYTES = MAX_IG_VIDEO_SIZE_MB * 1024 * 1024;
+
+/**
+ * Checks if a video's dimensions are suitable for Reels (Vertical)
+ * @param width - Video width
+ * @param height - Video height
+ * @returns Object with valid status and recommendation
+ */
+export function validateVideoAspectMeta(width: number, height: number): { valid: boolean; isVertical: boolean; ratio: number } {
+    const ratio = width / height;
+    // Reel standard is 9:16 (0.5625). We allow a small tolerance.
+    // Most importantly, height MUST be greater than width for it to be vertical.
+    const isVertical = height > width;
+
+    return {
+        valid: isVertical,
+        isVertical,
+        ratio
+    };
+}
+
 /**
  * Gets video metadata (width, height, duration) from a File object
  * @param file - The video File object
@@ -338,7 +420,7 @@ export async function getVideoMetadata(file: File): Promise<{ width: number; hei
 
         const video = document.createElement('video');
         video.preload = 'metadata';
-        
+
         video.onloadedmetadata = () => {
             window.URL.revokeObjectURL(video.src);
             resolve({

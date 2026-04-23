@@ -546,9 +546,9 @@ export default function BillingPage() {
                       </p>
                       <Badge
                         variant={
-                          payment.status === "COMPLETED"
+                          payment.status === "Success"
                             ? "default"
-                            : payment.status === "PENDING"
+                            : payment.status === "Pending"
                               ? "secondary"
                               : "destructive"
                         }

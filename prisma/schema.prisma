@@ -534,6 +534,7 @@ enum TwilioAccessStatus {
 
 enum PostStatus {
   DRAFT
+  SENDING
   SCHEDULED
   PUBLISHED
   FAILED

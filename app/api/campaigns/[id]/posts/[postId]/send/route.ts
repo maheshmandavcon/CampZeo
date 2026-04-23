@@ -79,6 +79,12 @@ async function sendPostHandler(
         return NextResponse.json({ error: 'No contacts selected' }, { status: 400 });
     }
 
+    // Immediately mark as SENDING to disable UI buttons while processing
+    await prisma.campaignPost.update({
+        where: { id: post.id },
+        data: { status: 'SENDING' }
+    });
+
     // Use the official 'after' API from Next.js 15+ for background tasks.
     // This allows the request to finish and release the client while the background task continues.
     after(async () => {

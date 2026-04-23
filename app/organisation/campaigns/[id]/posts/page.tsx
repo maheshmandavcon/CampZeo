@@ -53,6 +53,7 @@ interface Post {
     mediaUrls: string[];
     metadata?: any;
     liveLink?: string | null;
+    status: 'DRAFT' | 'SENDING' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
 }
 
 interface Campaign {
@@ -265,33 +266,48 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
     };
 
     // Fetch campaign and posts
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                setLoading(true);
+    const fetchData = async (showLoading = true) => {
+        try {
+            if (showLoading) setLoading(true);
 
-                // Fetch campaign
-                const campaignResponse = await fetch(`/api/campaigns/${campaignId}`);
-                if (!campaignResponse.ok) throw new Error('Failed to fetch campaign');
-                const campaignData = await campaignResponse.json();
-                setCampaign(campaignData.campaign);
+            // Fetch campaign
+            const campaignResponse = await fetch(`/api/campaigns/${campaignId}`);
+            if (!campaignResponse.ok) throw new Error('Failed to fetch campaign');
+            const campaignData = await campaignResponse.json();
+            setCampaign(campaignData.campaign);
 
-                // Fetch posts
-                const postsResponse = await fetch(`/api/campaigns/${campaignId}/posts`);
-                if (!postsResponse.ok) throw new Error('Failed to fetch posts');
-                const postsData = await postsResponse.json();
-                setPosts(postsData.posts);
-            } catch (error) {
-                console.error('Error fetching data:', error);
+            // Fetch posts
+            const postsResponse = await fetch(`/api/campaigns/${campaignId}/posts`);
+            if (!postsResponse.ok) throw new Error('Failed to fetch posts');
+            const postsData = await postsResponse.json();
+            setPosts(postsData.posts);
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            if (showLoading) {
                 toast.error('Failed to load campaign posts');
                 router.push('/organisation/campaigns');
-            } finally {
-                setLoading(false);
             }
-        };
+        } finally {
+            if (showLoading) setLoading(false);
+        }
+    };
 
+    useEffect(() => {
         fetchData();
     }, [campaignId, router]);
+
+    // Auto-polling for SENDING status
+    useEffect(() => {
+        const hasSendingPost = posts.some(p => p.status === 'SENDING');
+        if (!hasSendingPost) return;
+
+        console.log('[Polling] SENDING post detected, starting auto-refresh...');
+        const interval = setInterval(() => {
+            fetchData(false); // Fetch without showing global loading spinner
+        }, 5000); // Check every 5 seconds
+
+        return () => clearInterval(interval);
+    }, [posts]);
 
     // Auto-open share dialog when returning from edit page after adding contacts
     useEffect(() => {
@@ -435,7 +451,7 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
                     toast.success('Post shared successfully!', { id: toastId });
                 }
             }
-           
+
             setSharePost(null);
             setSelectedContacts([]);
             // Refresh posts to update status
@@ -569,10 +585,21 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
 
     // Get status badge
     const getStatusBadge = (post: Post) => {
-        if (post.isPostSent) {
+        if (post.status === 'SENDING') {
+            return (
+                <Badge variant="secondary" className="bg-blue-100 text-blue-700 border-blue-200 animate-pulse">
+                    <Loader2 className="size-3 mr-1 animate-spin" />
+                    Sending...
+                </Badge>
+            );
+        }
+        if (post.status === 'PUBLISHED' || post.isPostSent) {
             return <Badge variant="default">Sent</Badge>;
         }
-        if (post.scheduledPostTime && new Date(post.scheduledPostTime) > new Date()) {
+        if (post.status === 'FAILED') {
+            return <Badge variant="destructive">Failed</Badge>;
+        }
+        if (post.status === 'SCHEDULED' || (post.scheduledPostTime && new Date(post.scheduledPostTime) > new Date())) {
             return <Badge variant="secondary">Scheduled</Badge>;
         }
         return <Badge variant="outline">Pending</Badge>;
@@ -832,9 +859,9 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
                                                             setSelectedContacts([]);
                                                         }}
                                                         title={isSocialPlatform ? "Publish Now" : "Share to Contacts"}
-                                                        disabled={post.isPostSent || campaignStatus?.label === 'Completed'}
+                                                        disabled={post.isPostSent || post.status === 'SENDING' || campaignStatus?.label === 'Completed'}
                                                     >
-                                                        {isSocialPlatform ? <Send className="size-4" /> : <Share2 className="size-4" />}
+                                                        {post.status === 'SENDING' ? <Loader2 className="size-4 animate-spin text-blue-600" /> : (isSocialPlatform ? <Send className="size-4" /> : <Share2 className="size-4" />)}
                                                     </Button>
                                                     {/* Duplicate button removed as per request */}
                                                     <Button
@@ -842,7 +869,7 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
                                                         size="sm"
                                                         variant="ghost"
                                                         onClick={() => router.push(`/organisation/campaigns/${campaignId}/posts/${post.id}/edit`)}
-                                                        disabled={post.isPostSent}
+                                                        disabled={post.isPostSent || post.status === 'SENDING'}
                                                         title="Edit"
                                                     >
                                                         <Edit className="size-4" />
@@ -867,7 +894,7 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
                                                             setDeletePostId(post.id);
                                                             setShowDeleteDialog(true);
                                                         }}
-                                                        disabled={post.isPostSent}
+                                                        disabled={post.isPostSent || post.status === 'SENDING'}
                                                         title="Delete"
                                                     >
                                                         <Trash2 className="size-4 text-destructive" />
@@ -1114,7 +1141,7 @@ export default function CampaignPostsPage({ params }: { params: Promise<{ id: st
                     setContactSearchQuery('');
                 }
             }}>
-                <DialogContent 
+                <DialogContent
                     className="max-w-3xl"
                     onPointerDownOutside={(e) => {
                         if (sendingShare) e.preventDefault();
